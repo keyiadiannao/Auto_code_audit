@@ -2,17 +2,39 @@
 
 [![CI](https://github.com/keyiadiannao/Auto_code_audit/actions/workflows/ci.yml/badge.svg)](https://github.com/keyiadiannao/Auto_code_audit/actions/workflows/ci.yml)
 
-A three-layer static audit toolkit for large Python projects after
-AI-assisted refactors or cleanup. It generates candidate lists for dead
-modules, duplicate implementations, hard-coded behavior drift, contract
-violations, and AI writing-style signals in TeX prose; forces semantic
-triage of every candidate; then runs package and provenance gates.
+Your AI assistant refactored a large Python codebase and the tests pass.
+Then the subtle bugs start: a hash-locked runner silently broken by a
+rename, an archive root hardcoded instead of honoring an env handoff, two
+copies of the same function drifting apart. Static checkers won't find
+these because nothing *looks* wrong — one implementation is just dead and
+the other is subtly different.
 
-This is the generic version of a skill that caught real bugs in its origin
-project (a hash-locked runner silently broken by a rename; an archive root
-hardcoded instead of honoring an orchestrator's env handoff). It ships with
-an empty suppression registry: every project builds its own `ignore.json`
-from its own semantic reviews.
+Auto Code Audit is a three-layer static audit toolkit for exactly this
+situation. It generates candidate lists for dead modules, duplicate
+implementations, hard-coded behavior drift, contract violations, and AI
+writing-style signals in TeX prose; forces semantic triage of every
+candidate; then runs package and provenance gates. It caught the two bugs
+above in its origin project — a 100%-test-passing codebase.
+
+```text
+$ python run_all.py --package src
+DEADCODE_SCAN package=src scanned=8 USED=0 ENTRYPOINT=0 PACKAGE=2 DEAD=4 ...
+SELF_AUDIT_RUN_ALL package=src dead=4 dup_clusters=1 cap_overlap=1 ...
+
+## Duplicate-implementation candidates
+### [high] `a52d3baa1512`: 2 members (edge similarity 0.909)
+Reason: shared lib member and an active non-lib implementation.
+- `experiments/e01.py:load_min_mask` (7 lines)
+- `lib/runner.py:load_min_mask` (9 lines)
+
+### Env-contract candidates
+- env `E02_MODE` written at `experiments/e02.py:2` but never read in-package
+```
+
+Nothing is deleted automatically. Every candidate gets a verdict (`false
+positive` writes a suppression entry; everything else requires a code
+action), and the toolkit ships with an empty suppression registry: each
+project builds its own `ignore.json` from its own semantic reviews.
 
 ## The three layers
 
