@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import sys
 from pathlib import Path
@@ -9,6 +10,7 @@ import pytest
 SKILL_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_DIR))
 
+import _audit_config
 import adjudicate
 import run_all
 import scan_capabilities
@@ -1270,6 +1272,8 @@ def test_adjudicate_flatten_injects_details() -> None:
 
 def test_adjudicate_ignore_entries_key_formats() -> None:
     """Suppression entries must match the keys each scanner reads."""
+    date, owner = "2026-08-12", "reviewer-a"
+    stamped = {"date": date, "owner": owner}
     cases = [
         ("experiment_as_library", {"path": "e/a.py"}, "e/a.py"),
         ("forwarding_wrappers", {"path": "e/a.py", "line": 2, "name": "fwd"}, "e/a.py:2:fwd"),
@@ -1282,53 +1286,73 @@ def test_adjudicate_ignore_entries_key_formats() -> None:
     ]
     for channel, detail, key in cases:
         entries = adjudicate._ignore_entries(
-            "contracts", {**detail, "_channel": channel}, "note"
+            "contracts", {**detail, "_channel": channel}, "note", date=date, owner=owner
         )
-        assert entries == [(f"contracts/{channel}", {"key": key, "reason": "note"})], channel
+        assert entries == [
+            (f"contracts/{channel}", {"key": key, "reason": "note", **stamped})
+        ], channel
 
     assert adjudicate._ignore_entries(
-        "deadcode", {"path": "x.py"}, "n"
-    ) == [("deadcode", {"path": "x.py", "reason": "n"})]
+        "deadcode", {"path": "x.py"}, "n", date=date, owner=owner
+    ) == [("deadcode", {"path": "x.py", "reason": "n", **stamped})]
     assert adjudicate._ignore_entries(
-        "duplicates", {"id": "abc123def456"}, "n"
-    ) == [("duplicates", {"id": "abc123def456", "reason": "n"})]
+        "duplicates", {"id": "abc123def456"}, "n", date=date, owner=owner
+    ) == [("duplicates", {"id": "abc123def456", "reason": "n", **stamped})]
     assert adjudicate._ignore_entries(
-        "forks", {"key": "a.py:f::b.py:g"}, "n"
-    ) == [("forks", {"key": "a.py:f::b.py:g", "reason": "n"})]
+        "forks", {"key": "a.py:f::b.py:g"}, "n", date=date, owner=owner
+    ) == [("forks", {"key": "a.py:f::b.py:g", "reason": "n", **stamped})]
     assert adjudicate._ignore_entries(
         "capabilities",
         {"local": {"path": "x.py", "qualname": "f"}, "lib": {"path": "y.py", "qualname": "g"}},
         "n",
-    ) == [("capabilities", {"key": "x.py:f", "reason": "n"})]
+        date=date,
+        owner=owner,
+    ) == [("capabilities", {"key": "x.py:f", "reason": "n", **stamped})]
     assert adjudicate._ignore_entries(
-        "hardcoded", {"path": "x.py", "_pattern": "hash"}, "n"
-    ) == [("hardcoded", {"path": "x.py", "pattern": "hash", "reason": "n"})]
+        "hardcoded", {"path": "x.py", "_pattern": "hash"}, "n", date=date, owner=owner
+    ) == [("hardcoded", {"path": "x.py", "pattern": "hash", "reason": "n", **stamped})]
     assert adjudicate._ignore_entries(
-        "style", {"path": "x.py", "_metric": "em_dash"}, "n"
-    ) == [("style", {"path": "x.py", "pattern": "em_dash", "reason": "n"})]
+        "style", {"path": "x.py", "_metric": "em_dash"}, "n", date=date, owner=owner
+    ) == [("style", {"path": "x.py", "pattern": "em_dash", "reason": "n", **stamped})]
+
+    # Default date is today; owner is omitted when unknown.
+    (section, entry), = adjudicate._ignore_entries(
+        "deadcode", {"path": "x.py"}, "n", owner=None
+    )
+    assert section == "deadcode"
+    assert entry["path"] == "x.py"
+    assert entry["date"] == dt.date.today().isoformat()
+    assert "owner" not in entry
 
 
 def test_adjudicate_merge_ignore_dedupes_and_preserves() -> None:
-    """_merge_ignore adds new entries only and keeps unrelated keys."""
+    """_merge_ignore adds new entries only and keeps unrelated keys.
+
+    The dedupe ignores the date/owner stamps: re-suppressing the same
+    candidate keeps the first suppression record with its original date.
+    """
     registry = {
         "schema_version": 1,
         "_notes": "keep me",
         "contracts": {"cli_without_bootstrap": [{"key": "a", "reason": "old"}]},
     }
     entries = [
-        ("deadcode", {"path": "p.py", "reason": "r"}),
-        ("deadcode", {"path": "p.py", "reason": "r"}),  # duplicate of the above
-        ("contracts/cli_without_bootstrap", {"key": "b", "reason": "new"}),
-        ("contracts/cli_without_bootstrap", {"key": "a", "reason": "old"}),  # already there
+        ("deadcode", {"path": "p.py", "reason": "r", "date": "2026-08-01", "owner": "a"}),
+        # Same candidate re-suppressed later: stamp differs, identity does not.
+        ("deadcode", {"path": "p.py", "reason": "r", "date": "2026-08-12", "owner": "b"}),
+        ("contracts/cli_without_bootstrap", {"key": "b", "reason": "new", "date": "2026-08-12"}),
+        # Already present (stamp-less); a stamped copy must not duplicate it.
+        ("contracts/cli_without_bootstrap", {"key": "a", "reason": "old", "date": "2026-08-12", "owner": "c"}),
     ]
     added = adjudicate._merge_ignore(registry, entries)
     assert added == 2
     assert registry["schema_version"] == 1
     assert registry["_notes"] == "keep me"
-    assert registry["deadcode"] == [{"path": "p.py", "reason": "r"}]
+    # First suppression (date and owner) is preserved.
+    assert registry["deadcode"] == [{"path": "p.py", "reason": "r", "date": "2026-08-01", "owner": "a"}]
     assert registry["contracts"]["cli_without_bootstrap"] == [
         {"key": "a", "reason": "old"},
-        {"key": "b", "reason": "new"},
+        {"key": "b", "reason": "new", "date": "2026-08-12"},
     ]
 
 
@@ -1383,6 +1407,7 @@ def test_adjudicate_false_positive_end_to_end(
             "--ignore", str(ignore),
             "--lessons", str(lessons),
             "--verdicts", str(verdicts),
+            "--owner", "reviewer-a",
         ]
     ) == 0
 
@@ -1391,6 +1416,8 @@ def test_adjudicate_false_positive_end_to_end(
         {
             "path": "pkg/lib/unused.py",
             "reason": "docstring-only helpers reached via introspection",
+            "date": dt.date.today().isoformat(),
+            "owner": "reviewer-a",
         }
     ]
     assert registry["schema_version"] == 1
@@ -1473,6 +1500,131 @@ def test_run_all_default_state_paths_follow_root(
     )
     assert (mini_repo / "reports" / "latest.json").is_file()
     assert (mini_repo / "reports" / "latest.md").is_file()
+
+
+def test_adjudicate_default_state_paths_follow_report_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = tmp_path / "audited-project"
+    report_path = project / "reports" / "latest.json"
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text(
+        json.dumps(
+            {
+                "state": {"project_root": str(project)},
+                "scanners": {
+                    "deadcode": {
+                        "candidates": [
+                            {
+                                "path": "pkg/dead.py",
+                                "status": "DEAD",
+                                "py_refs": [],
+                                "doc_refs": [],
+                            }
+                        ]
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    answers = iter(["fp", "intentional generated entrypoint"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+
+    assert adjudicate.main(["--report", str(report_path)]) == 0
+    assert (project / "ignore.json").is_file()
+    assert (project / "LESSONS.md").is_file()
+    assert (project / "reports" / "verdicts.json").is_file()
+
+
+def test_adjudicate_check_reports_pending_without_writing(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "audited-project"
+    report_path = project / "reports" / "latest.json"
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text(
+        json.dumps(
+            {
+                "state": {"project_root": str(project)},
+                "scanners": {
+                    "deadcode": {
+                        "candidates": [
+                            {
+                                "path": "pkg/dead.py",
+                                "status": "DEAD",
+                                "py_refs": [],
+                                "doc_refs": [],
+                            }
+                        ]
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert adjudicate.main(["--report", str(report_path), "--check"]) == 1
+    assert not (project / "ignore.json").exists()
+    assert not (project / "reports" / "verdicts.json").exists()
+
+    (project / "reports" / "verdicts.json").write_text(
+        json.dumps(
+            {
+                "verdicts": [
+                    {"scanner": "deadcode", "signature": "DEAD/pkg/dead.py"}
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert adjudicate.main(["--report", str(report_path), "--check"]) == 0
+
+
+def test_run_all_report_records_state_paths(
+    mini_repo: Path,
+) -> None:
+    assert (
+        run_all.main(
+            [
+                "--root",
+                str(mini_repo),
+                "--package",
+                "pkg",
+                "--no-doc-channel",
+            ]
+        )
+        == 0
+    )
+    report = json.loads(
+        (mini_repo / "reports" / "latest.json").read_text(encoding="utf-8")
+    )
+    assert report["state"]["project_root"] == str(mini_repo.resolve())
+    assert report["state"]["state_dir"] == str((mini_repo / "reports").resolve())
+    assert report["state"]["ignore_file"] == str((mini_repo / "ignore.json").resolve())
+
+
+def test_run_all_code_profile_disables_research_style_channel(
+    mini_repo: Path,
+) -> None:
+    assert (
+        run_all.main(
+            [
+                "--root",
+                str(mini_repo),
+                "--package",
+                "pkg",
+                "--profile",
+                "code",
+                "--no-doc-channel",
+            ]
+        )
+        == 0
+    )
+    report = json.loads(
+        (mini_repo / "reports" / "latest.json").read_text(encoding="utf-8")
+    )
+    assert report["configuration"]["profile"] == "code"
+    assert report["scanners"]["style"]["disabled"] is True
 
 
 def test_stale_ignore_entries_flags_gone_targets(
@@ -1578,3 +1730,42 @@ def test_audit_config_warns_once_on_invalid_json(
     missing = tmp_path / "missing"
     assert _audit_config.load_config(missing) == {}
     assert capsys.readouterr().err == ""
+
+
+def test_audit_config_warns_and_falls_back_on_semantic_errors(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    broken = tmp_path / "semantic-broken"
+    _write(
+        broken / _audit_config.CONFIG_FILENAME,
+        json.dumps(
+            {
+                "duplicates": {"threshold": "high", "min_chars": -1},
+                "unknown_section": {},
+            }
+        ),
+    )
+    assert _audit_config.load_config(broken) == {}
+    assert _audit_config.load_config(broken) == {}
+    warning = capsys.readouterr().err
+    assert warning.count("warning:") == 1
+    assert "duplicates.threshold" in warning
+    assert "unknown key 'unknown_section'" in warning
+
+
+def test_audit_config_keeps_valid_typed_values(tmp_path: Path) -> None:
+    valid = tmp_path / "valid"
+    _write(
+        valid / _audit_config.CONFIG_FILENAME,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "duplicates": {"threshold": 0.91, "min_chars": 80},
+                "forks": {"include_tests": True},
+            }
+        ),
+    )
+    assert _audit_config.load_config(valid)["duplicates"] == {
+        "threshold": 0.91,
+        "min_chars": 80,
+    }

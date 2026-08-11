@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -92,21 +93,38 @@ def _render_detail(scanner: str, detail: dict) -> str:
     return ""
 
 
-def _ignore_entries(scanner: str, detail: dict, note: str) -> list[tuple[str, dict]]:
+_META_FIELDS = ("date", "owner")
+
+
+def _suppression_meta(date: str | None, owner: str | None) -> dict:
+    """Stamp a suppression entry with review provenance (date always present)."""
+    meta = {"date": date or dt.date.today().isoformat()}
+    if owner:
+        meta["owner"] = owner
+    return meta
+
+
+def _ignore_entries(
+    scanner: str, detail: dict, note: str, date: str | None = None, owner: str | None = None
+) -> list[tuple[str, dict]]:
     """Build (registry section, entry) pairs for a false-positive suppression.
 
     Section names match the keys the scanners read from ``ignore.json``
-    (``contracts/<channel>`` nests under the ``contracts`` object).
+    (``contracts/<channel>`` nests under the ``contracts`` object).  Every
+    entry carries a ``date`` stamp and, when an owner is known, an ``owner``.
     """
+    def stamped(entry: dict) -> dict:
+        return {**entry, **_suppression_meta(date, owner)}
+
     if scanner == "deadcode":
-        return [("deadcode", {"path": detail["path"], "reason": note})]
+        return [("deadcode", stamped({"path": detail["path"], "reason": note}))]
     if scanner == "duplicates":
-        return [("duplicates", {"id": detail["id"], "reason": note})]
+        return [("duplicates", stamped({"id": detail["id"], "reason": note}))]
     if scanner == "forks":
-        return [("forks", {"key": detail["key"], "reason": note})]
+        return [("forks", stamped({"key": detail["key"], "reason": note}))]
     if scanner == "capabilities":
         key = f"{detail['local']['path']}:{detail['local']['qualname']}"
-        return [("capabilities", {"key": key, "reason": note})]
+        return [("capabilities", stamped({"key": key, "reason": note}))]
     if scanner == "contracts":
         channel = detail["_channel"]
         if channel == "forwarding_wrappers":
@@ -121,20 +139,25 @@ def _ignore_entries(scanner: str, detail: dict, note: str) -> list[tuple[str, di
             key = f"{detail['path']}:{detail['var']}"
         else:  # experiment_as_library / cli_without_bootstrap / generation_path_without_env
             key = detail["path"]
-        return [(f"contracts/{channel}", {"key": key, "reason": note})]
+        return [(f"contracts/{channel}", stamped({"key": key, "reason": note}))]
     if scanner == "hardcoded":
         return [
-            ("hardcoded", {"path": detail["path"], "pattern": detail["_pattern"], "reason": note})
+            ("hardcoded", stamped({"path": detail["path"], "pattern": detail["_pattern"], "reason": note}))
         ]
     if scanner == "style":
         return [
-            ("style", {"path": detail["path"], "pattern": detail["_metric"], "reason": note})
+            ("style", stamped({"path": detail["path"], "pattern": detail["_metric"], "reason": note}))
         ]
     return []
 
 
 def _merge_ignore(registry: dict, entries: list[tuple[str, dict]]) -> int:
-    """Merge entries into the registry; return the number of new entries."""
+    """Merge entries into the registry; return the number of new entries.
+
+    Two entries collide when everything except their ``date``/``owner``
+    stamps matches, so re-suppressing an already-suppressed candidate keeps
+    the first suppression record (with its original review date).
+    """
     added = 0
     for section, entry in entries:
         if section.startswith("contracts/"):
@@ -142,9 +165,15 @@ def _merge_ignore(registry: dict, entries: list[tuple[str, dict]]) -> int:
             channel_list = registry.setdefault("contracts", {}).setdefault(channel, [])
         else:
             channel_list = registry.setdefault(section, [])
-        if entry not in channel_list:
-            channel_list.append(entry)
-            added += 1
+        identity = {key: value for key, value in entry.items() if key not in _META_FIELDS}
+        if any(
+            {key: value for key, value in existing.items() if key not in _META_FIELDS}
+            == identity
+            for existing in channel_list
+        ):
+            continue
+        channel_list.append(entry)
+        added += 1
     return added
 
 
@@ -162,6 +191,7 @@ def _append_lesson(lessons: Path, scanner: str, display: str, note: str) -> None
         f"- **Lesson**: {note}\n"
         f"- **Implementation**: suppressed in ignore.json after semantic review.\n"
     )
+    lessons.parent.mkdir(parents=True, exist_ok=True)
     with lessons.open("a", encoding="utf-8") as handle:
         handle.write(section)
 
@@ -183,53 +213,151 @@ def _save_verdicts(path: Path, verdicts: dict) -> None:
     )
 
 
+def _path_from_state(value: str | None, root: Path, fallback: Path) -> Path:
+    if not value:
+        return fallback.resolve()
+    path = Path(value)
+    return (path if path.is_absolute() else root / path).resolve()
+
+
+def _resolve_path(
+    explicit: Path | None,
+    state_value: str | None,
+    root: Path,
+    fallback: Path,
+) -> Path:
+    if explicit is not None:
+        return explicit.resolve()
+    return _path_from_state(state_value, root, fallback)
+
+
+def _git_owner(root: Path) -> str | None:
+    """Read the repository user name for suppression ownership, when available."""
+    try:
+        proc = subprocess.run(
+            ["git", "config", "user.name"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    name = proc.stdout.strip()
+    return name or None
+
+
+def _project_root(
+    report_path: Path, report: dict, explicit_root: Path | None
+) -> Path:
+    if explicit_root is not None:
+        return explicit_root.resolve()
+    state = report.get("state")
+    if isinstance(state, dict) and state.get("project_root"):
+        return Path(state["project_root"]).resolve()
+    if report_path.parent.name == "reports":
+        return report_path.parent.parent.resolve()
+    return report_path.parent.resolve()
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
+        "--root",
+        type=Path,
+        default=None,
+        help="audited project root (default: report state or current directory)",
+    )
+    ap.add_argument(
         "--report",
         type=Path,
-        default=SKILL_DIR / "reports" / "latest.json",
+        default=None,
         help="run_all report JSON to adjudicate",
     )
     ap.add_argument(
         "--ignore",
         type=Path,
-        default=SKILL_DIR / "ignore.json",
-        help="suppression registry to extend on false positives",
+        default=None,
+        help="suppression registry (default: report project state)",
     )
     ap.add_argument(
         "--lessons",
         type=Path,
-        default=SKILL_DIR / "LESSONS.md",
-        help="lesson archive to append false-positive rationales to",
+        default=None,
+        help="lesson archive (default: <project-root>/LESSONS.md)",
     )
     ap.add_argument(
         "--verdicts",
         type=Path,
-        default=SKILL_DIR / "reports" / "verdicts.json",
-        help="decision log; existing decisions are resumed from",
+        default=None,
+        help="decision log (default: report directory/verdicts.json)",
+    )
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="check for pending candidates without prompting or writing files",
+    )
+    ap.add_argument(
+        "--owner",
+        default=None,
+        help="suppression owner stamped into ignore.json (default: git user.name)",
     )
     args = ap.parse_args(argv)
 
-    if not args.report.is_file():
-        print(f"error: report not found: {args.report}", file=sys.stderr)
+    root = args.root.resolve() if args.root is not None else Path.cwd().resolve()
+    report_path = (
+        args.report.resolve()
+        if args.report is not None
+        else root / "reports" / "latest.json"
+    )
+    if not report_path.is_file():
+        print(f"error: report not found: {report_path}", file=sys.stderr)
         return 2
     try:
-        report = json.loads(args.report.read_text(encoding="utf-8"))
+        report = json.loads(report_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         print(f"error: cannot read report: {exc}", file=sys.stderr)
         return 2
+
+    root = _project_root(report_path, report, args.root)
+    owner = args.owner or _git_owner(root)
+    state = report.get("state") if isinstance(report.get("state"), dict) else {}
+    args.report = report_path
+    args.ignore = _resolve_path(
+        args.ignore,
+        state.get("ignore_file"),
+        root,
+        root / "ignore.json",
+    )
+    args.lessons = _resolve_path(
+        args.lessons,
+        state.get("lessons_file"),
+        root,
+        root / "LESSONS.md",
+    )
+    args.verdicts = _resolve_path(
+        args.verdicts,
+        state.get("verdicts_file"),
+        root,
+        report_path.parent / "verdicts.json",
+    )
 
     candidates = _flatten(report)
     if not candidates:
         print("ADJUDICATE ok candidates=0")
         return 0
 
-    registry = (
-        json.loads(args.ignore.read_text(encoding="utf-8"))
-        if args.ignore.is_file()
-        else {}
-    )
+    if args.ignore.is_file():
+        try:
+            registry = json.loads(args.ignore.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: cannot read suppression registry: {exc}", file=sys.stderr)
+            return 2
+        if not isinstance(registry, dict):
+            print("error: suppression registry must be a JSON object", file=sys.stderr)
+            return 2
+    else:
+        registry = {}
     verdicts = _load_verdicts(args.verdicts) or {
         "scanner": "self-audit-adjudicate",
         "report": str(args.report.resolve()),
@@ -244,6 +372,13 @@ def main(argv: list[str] | None = None) -> int:
         item for item in candidates
         if (item["scanner"], item["signature"]) not in decided
     ]
+    if args.check:
+        if pending:
+            print(f"ADJUDICATE CHECK_FAIL pending={len(pending)}", file=sys.stderr)
+            return 1
+        print(f"ADJUDICATE CHECK_PASS candidates={len(candidates)}")
+        return 0
+
     for index, item in enumerate(pending, start=1):
         print("=" * 72)
         print(
@@ -281,8 +416,9 @@ def main(argv: list[str] | None = None) -> int:
                         note = input("reason (appends to LESSONS.md; required): ").strip()
                         if note:
                             break
-                    entries = _ignore_entries(item["scanner"], item["detail"], note)
+                    entries = _ignore_entries(item["scanner"], item["detail"], note, owner=owner)
                     added = _merge_ignore(registry, entries)
+                    args.ignore.parent.mkdir(parents=True, exist_ok=True)
                     args.ignore.write_text(
                         json.dumps(registry, indent=2, ensure_ascii=False) + "\n",
                         encoding="utf-8",

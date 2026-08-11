@@ -39,6 +39,18 @@ _SCANNER_NAMES = {
     "style": "writing-style candidates",
 }
 
+PROFILE_SCANNERS = {
+    "code": (
+        "deadcode",
+        "duplicates",
+        "forks",
+        "contracts",
+        "capabilities",
+        "hardcoded",
+    ),
+    "research": tuple(_SCANNER_NAMES),
+}
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -332,7 +344,7 @@ def _stale_ignore_entries(
 
 
 def _diff_previous(
-    previous: dict | None, payloads: dict, package: str
+    previous: dict | None, payloads: dict, package: str, profile: str
 ) -> dict | None:
     """Compare current payloads against a previous report; None when absent.
 
@@ -349,6 +361,8 @@ def _diff_previous(
         )
     elif previous.get("package") != package:
         reason = f"package {previous.get('package')!r} != {package!r}"
+    elif (previous.get("configuration") or {}).get("profile", "research") != profile:
+        reason = "profile changed; candidate reports are not comparable"
     if reason is not None:
         return {
             "comparable": False,
@@ -824,6 +838,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--package", default="src")
     ap.add_argument(
+        "--profile",
+        choices=sorted(PROFILE_SCANNERS),
+        default="research",
+        help="scanner profile: code excludes TeX style signals; research runs all scanners",
+    )
+    ap.add_argument(
         "--json", type=Path, default=None,
         help="report JSON path (default: <root>/reports/latest.json)",
     )
@@ -894,17 +914,13 @@ def main(argv: list[str] | None = None) -> int:
             prefix="self-audit-", dir=str(args.json.parent)
         ) as temporary:
             tempdir = Path(temporary)
-            payloads = {
-                "deadcode": _run_scanner(
+            scanner_specs = {
+                "deadcode": (
                     scan_deadcode,
-                    args,
-                    tempdir / "deadcode.json",
                     ["--no-doc-channel"] if args.no_doc_channel else [],
                 ),
-                "duplicates": _run_scanner(
+                "duplicates": (
                     scan_duplicates,
-                    args,
-                    tempdir / "duplicates.json",
                     [
                         "--threshold",
                         str(duplicate_threshold),
@@ -912,20 +928,22 @@ def main(argv: list[str] | None = None) -> int:
                         str(duplicate_min_chars),
                     ],
                 ),
-                "contracts": _run_scanner(
-                    scan_contracts, args, tempdir / "contracts.json", []
-                ),
-                "forks": _run_scanner(
-                    scan_forks, args, tempdir / "forks.json", []
-                ),
-                "capabilities": _run_scanner(
-                    scan_capabilities, args, tempdir / "capabilities.json", []
-                ),
-                "hardcoded": _run_scanner(
-                    scan_hardcoded, args, tempdir / "hardcoded.json", []
-                ),
-                "style": _run_scanner(scan_style, args, tempdir / "style.json", []),
+                "contracts": (scan_contracts, []),
+                "forks": (scan_forks, []),
+                "capabilities": (scan_capabilities, []),
+                "hardcoded": (scan_hardcoded, []),
+                "style": (scan_style, []),
             }
+            selected = set(PROFILE_SCANNERS[args.profile])
+            payloads = {}
+            for name in _SCANNER_NAMES:
+                if name in selected:
+                    module, extra = scanner_specs[name]
+                    payloads[name] = _run_scanner(
+                        module, args, tempdir / f"{name}.json", extra
+                    )
+                else:
+                    payloads[name] = {"scanner": name, "disabled": True}
     except (OSError, RuntimeError, json.JSONDecodeError) as exc:
         print(f"error: self-audit failed: {exc}", file=sys.stderr)
         return 2
@@ -948,11 +966,21 @@ def main(argv: list[str] | None = None) -> int:
         "elapsed_seconds": round(time.perf_counter() - started, 3),
         "configuration": {
             "document_channel": not args.no_doc_channel,
+            "profile": args.profile,
             "duplicate_threshold": duplicate_threshold,
             "duplicate_min_chars": duplicate_min_chars,
             "ignore_file": str(args.ignore.resolve()) if args.ignore else None,
             "config_file": str(config_path) if config_path.is_file() else None,
             "cli_smoke": bool(args.cli_smoke),
+        },
+        "state": {
+            "project_root": str(args.root),
+            "state_dir": str(args.json.parent),
+            "report_json": str(args.json),
+            "report_markdown": str(args.markdown),
+            "ignore_file": str(args.ignore),
+            "lessons_file": str(args.root / "LESSONS.md"),
+            "verdicts_file": str(args.json.parent / "verdicts.json"),
         },
         "provenance": {
             "git": _git_provenance(args.root, args.package),
@@ -960,7 +988,9 @@ def main(argv: list[str] | None = None) -> int:
                 path.name: _sha256(path) for path in scanner_files
             },
         },
-        "previous_run": _diff_previous(previous, payloads, args.package),
+        "previous_run": _diff_previous(
+            previous, payloads, args.package, args.profile
+        ),
         "scanners": payloads,
     }
     args.json.write_text(
@@ -977,7 +1007,9 @@ def main(argv: list[str] | None = None) -> int:
     hardcoded_count = sum(
         len(items) for items in payloads["hardcoded"]["hits"].values()
     )
-    style_count = sum(len(items) for items in payloads["style"]["hits"].values())
+    style_count = sum(
+        len(items) for items in payloads["style"].get("hits", {}).values()
+    )
     print(
         f"SELF_AUDIT_RUN_ALL package={args.package} dead={dead_count} "
         f"dup_clusters={duplicate_count} cap_overlap={capability_count} "

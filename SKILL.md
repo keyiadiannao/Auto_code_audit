@@ -23,6 +23,10 @@ Read `LESSONS.md` before Layer 2. It records project-specific false-positive
 patterns. Treat `ignore.json` as an approved suppression registry, not a list
 that scanners update automatically.
 
+An optional `<root>/audit.config.json` is validated before scanner execution.
+Missing configuration is normal; invalid JSON or semantic values emit one
+warning per path and fall back to compiled-in defaults.
+
 ## Run Layer 1
 
 From the repository root (or with `--root <repo>`):
@@ -41,6 +45,8 @@ reports/latest.md
 Useful options:
 
 - Add `--no-doc-channel` for a faster code-only dead-module pass.
+- Use `--profile code` for software-only audits or `--profile research` (the
+  default) to include TeX writing-style signals.
 - Adjust duplicate sensitivity with `--duplicate-threshold` and
   `--duplicate-min-chars`.
 - Run any scanner directly for a scoped investigation.
@@ -86,6 +92,26 @@ for `*.tex` files, skipping archive/frozen/legacy directories, or the explicit
 carry no `line` field.
 
 ## Perform Layer 2
+
+After Layer 1, run the resumable adjudicator against the report written for
+the audited project:
+
+```text
+<python> adjudicate.py --report <root>/reports/latest.json
+```
+
+CI can enforce a completed Layer-2 session without opening an interactive
+prompt:
+
+```text
+<python> adjudicate.py --report <root>/reports/latest.json --check
+```
+
+When the report contains state metadata, the adjudicator resolves the project
+`ignore.json`, `LESSONS.md`, and `reports/verdicts.json` from that ownership
+record. Explicit `--root`, `--ignore`, `--lessons`, and `--verdicts` paths take
+precedence. This prevents a toolkit checkout from receiving state belonging to
+the project under audit.
 
 Before assigning a verdict, write a contract card for each caller or caller
 family. It must state:

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auto-code-audit"
+version = "0.1.0"
+description = "Three-layer static audit toolkit: dead modules, duplicate implementations, hard-coded drift, contract violations, and AI-style TeX prose"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["static-analysis", "code-audit", "dead-code", "duplicates", "linting"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+auto-code-audit = "run_all:main"
+auto-code-adjudicate = "adjudicate:main"
+
+[tool.setuptools]
+py-modules = [
+    "run_all",
+    "adjudicate",
+    "_audit_config",
+    "scan_deadcode",
+    "scan_duplicates",
+    "scan_forks",
+    "scan_contracts",
+    "scan_hardcoded",
+    "scan_capabilities",
+    "scan_style",
+    "scan_cli_smoke",
+]

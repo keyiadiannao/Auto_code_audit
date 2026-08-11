@@ -53,10 +53,28 @@ functional contract.
 - Python 3.10+ (stdlib only for the scanners)
 - `pytest` for the test suite (optional)
 
+## Installation (optional)
+
+The toolkit runs straight from a checkout with stdlib only. `pip install -e .`
+additionally installs two console commands wrapping the same entrypoints:
+
+```text
+auto-code-audit --root /work/foo --package src
+auto-code-adjudicate --report /work/foo/reports/latest.json
+```
+
 ## Quick start
 
 ```text
-python run_all.py --package src
+# Layer 1: generate candidates for the audited project
+python run_all.py --root /work/foo --package src
+
+# Layer 2: adjudicate candidates; state defaults follow the report's project
+# root, not the toolkit checkout
+python adjudicate.py --report /work/foo/reports/latest.json
+
+# Layer 3: run the audited project's tests and provenance gates
+python -m pytest /work/foo/tests -q
 ```
 
 Runs all scanners against the package under the current directory (override
@@ -72,6 +90,8 @@ the project being audited:
 Useful options:
 
 - `--no-doc-channel` — faster code-only dead-module pass
+- `--profile code|research` — run code-focused scanners only, or include the
+  research TeX style channel (default: `research`)
 - `--duplicate-threshold` / `--duplicate-min-chars` — duplicate sensitivity
 - `--ignore ignore.json` — approved suppression registry (Layer-2 output)
 - `--cli-smoke` — run `--help` on every scanner entrypoint first; abort the
@@ -79,6 +99,20 @@ Useful options:
 - `--stale-check` — report `ignore.json` entries that no longer target live
   code (file, line, or symbol gone); read-only, never edits the registry
 - run any scanner directly for a scoped investigation
+
+`adjudicate.py` resumes from `reports/verdicts.json`. Use
+`python adjudicate.py --report <report> --check` in CI to fail when candidates
+remain undecided. False positives update
+the audited project's `ignore.json` and `LESSONS.md`; other dispositions stay
+in the verdict log because they require code changes or parity evidence.
+Suppression entries carry a `date` stamp and an `owner` (from `--owner`,
+defaulting to `git user.name`); re-suppressing an already-registered candidate
+keeps the original record. Pass `--ignore`, `--lessons`, or `--verdicts`
+explicitly when a project uses a non-default state layout.
+
+An optional `<root>/audit.config.json` tunes scanner thresholds and exclusions.
+The config is checked for supported keys, types, ranges, and schema version;
+invalid values produce one warning and use compiled-in defaults.
 
 Consecutive runs against the same `--json` path diff against the previous
 report: `latest.json` gains a `previous_run` block (per-scanner new/gone
@@ -156,8 +190,10 @@ and a whitespace check.
 
 ```text
 run_all.py              one-command orchestration + summary report + report diff
+adjudicate.py           resumable Layer-2 semantic candidate review
 scan_*.py               the seven deterministic scanners
 scan_cli_smoke.py       entrypoint --help regression gate (run_all --cli-smoke)
+pyproject.toml          packaging metadata; console scripts auto-code-audit/-adjudicate
 SKILL.md                the full three-layer protocol
 LESSONS.md              false-positive lesson archive (read before Layer 2)
 ignore.json             approved suppression registry (ships empty)
