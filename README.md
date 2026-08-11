@@ -1,0 +1,125 @@
+# Auto Code Audit
+
+A three-layer static audit toolkit for large Python projects after
+AI-assisted refactors or cleanup. It generates candidate lists for dead
+modules, duplicate implementations, hard-coded behavior drift, contract
+violations, and AI writing-style signals in TeX prose; forces semantic
+triage of every candidate; then runs package and provenance gates.
+
+This is the generic version of a skill that caught real bugs in its origin
+project (a hash-locked runner silently broken by a rename; an archive root
+hardcoded instead of honoring an orchestrator's env handoff). It ships with
+an empty suppression registry: every project builds its own `ignore.json`
+from its own semantic reviews.
+
+## The three layers
+
+Never promote a static hit directly into a deletion or refactor. Similarity
+is only candidate generation; the unit of adjudication is the caller's
+functional contract.
+
+1. **Layer 1 — generate candidates** with deterministic scanners.
+2. **Layer 2 — review every candidate** against its call sites and its role,
+   writing a contract card per caller family.
+3. **Layer 3 — verify accepted edits** with tests, package gates, and
+   evidence checks.
+
+## Requirements
+
+- Python 3.10+ (stdlib only for the scanners)
+- `pytest` for the test suite (optional)
+
+## Quick start
+
+```text
+python run_all.py --package src
+```
+
+Runs all scanners against the package under the current directory (override
+with `--root <repo>` / `--package <name>`) and writes:
+
+```text
+reports/latest.json
+reports/latest.md
+```
+
+Useful options:
+
+- `--no-doc-channel` — faster code-only dead-module pass
+- `--duplicate-threshold` / `--duplicate-min-chars` — duplicate sensitivity
+- `--ignore ignore.json` — approved suppression registry (Layer-2 output)
+- run any scanner directly for a scoped investigation
+
+## Scanners
+
+| scanner | candidate signal | common false positive |
+|---|---|---|
+| `scan_deadcode.py` | no visible import or documentation reference | dynamic dispatch, manually invoked runner, provenance-only tool |
+| `scan_duplicates.py` | structurally similar function component | symmetric experiment arms, intentionally separate intervention boundaries |
+| `scan_forks.py` | cross-file callables sharing a large common skeleton with diverged bodies (>= 40 lines, >= 75% token similarity) | deliberate specialization forks with distinct contracts, same-file symmetric helpers |
+| `scan_contracts.py` | modules used as libraries, forwarding wrappers, repeated contract-sensitive names, unreferenced top-level functions, env-handoff and load-strictness violations | a valuable adapter, dynamic entrypoint, or intentionally independent audit implementation |
+| `scan_hardcoded.py` | syntax known to drift from shared behavior | a distinct hash contract or an intentional frozen-forward implementation |
+| `scan_capabilities.py` | script-local reimplementations of library functions | thin role-specific wrappers with real contracts |
+| `scan_style.py` | AI-typical writing signals in TeX prose (semicolon chains, template openers, em-dash rate, burstiness, excess vocabulary, bare `\pm`) | technical enumeration, section-map lists, statistics-context "robust/significant" |
+
+Highlights worth knowing before you interpret a report:
+
+- **`scan_deadcode.py`** marks `__main__`-guarded scripts as `ENTRYPOINT` and
+  package initializers as `PACKAGE`, never `DEAD`. Its dependency graph covers
+  three channels: static imports, bare imports under a `sys.path`-pinned
+  subdirectory, and importlib file loads (including thin wrapper calls).
+- **`scan_contracts.py`** runs four runtime-blind-spot channels that plain
+  AST fingerprints cannot see: `env_written_not_read`,
+  `generation_path_without_env`, `cli_without_bootstrap`, and
+  `defensive_param_loosening`.
+- **`scan_style.py`** strips TeX to prose span-preservingly, so reported line
+  numbers match the source exactly; it scans `--tex-dir` (default `docs`)
+  recursively, skipping archive/frozen/legacy directories.
+
+## Semantic review (Layer 2)
+
+Before assigning a verdict, write a contract card for each caller or caller
+family: scientific role, accepted inputs/contracts, outputs, randomness and
+provenance behavior, the existing canonical implementation, the exact
+semantic delta preventing direct reuse, and the parity or evidence gate
+needed before a change.
+
+Assign one disposition per candidate:
+
+| disposition | action |
+|---|---|
+| necessary specialization | retain locally |
+| valuable adapter | retain and name by its role |
+| independent audit | retain separately and parity-test |
+| compatibility debt | migrate active callers, then remove/deprecate |
+| true duplicate | consolidate |
+| false positive | suppress only after review |
+
+Record the rationale in `LESSONS.md` **before** editing `ignore.json`.
+`ignore.json` is an approved suppression registry — never let a scanner
+mutate it. A clean static report cannot override a failed behavior or
+provenance gate.
+
+## Verification gates (Layer 3)
+
+```text
+python -m pytest tests -q          # this toolkit's fixtures
+python -m pytest <package>/tests -q   # the target package
+python <package>/verify/... --quick   # the package verifier, if one exists
+git diff --check
+```
+
+## Project layout
+
+```text
+run_all.py              one-command orchestration + summary report
+scan_*.py               the seven deterministic scanners
+SKILL.md                the full three-layer protocol
+LESSONS.md              false-positive lesson archive (read before Layer 2)
+ignore.json             approved suppression registry (ships empty)
+tests/                  fixture tests for every scanner
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

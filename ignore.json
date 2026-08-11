@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "_notes": "Layer-1 suppression registry. Add an entry only after semantic review (Layer 2) and a rationale in LESSONS.md. deadcode uses exact relative paths; duplicates prefers stable cluster id and accepts a legacy path only when every cluster member matches it; hardcoded prefers candidate id and accepts exact (path, pattern) pairs; capabilities keys are 'path:qualname'; forks keys are 'path:qualname::path:qualname' with both sides sorted; contracts keys are file paths or 'path:lineno'. This registry ships empty: every project must build its own suppression list from its own semantic reviews.",
+  "forks": [],
+  "deadcode": [],
+  "duplicates": [],
+  "hardcoded": [],
+  "capabilities": [],
+  "contracts": {
+    "cli_without_bootstrap": [],
+    "defensive_param_loosening": [],
+    "env_written_not_read": [],
+    "generation_path_without_env": []
+  },
+  "style": []
+}
