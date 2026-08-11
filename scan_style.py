@@ -35,6 +35,8 @@ import re
 import sys
 from pathlib import Path
 
+import _audit_config
+
 EXCESS_VOCAB = [
     "additionally",
     "moreover",
@@ -65,11 +67,6 @@ TEMPLATE_OPENERS = [
     "Overall",
     "In conclusion",
 ]
-TEMPLATE_OPENERS_RE = re.compile(
-    r"^(?:"
-    + r"|".join(re.escape(word) for word in TEMPLATE_OPENERS)
-    + r")\b[,\s]"
-)
 
 ENV_RE = re.compile(
     r"\\begin\{(\*?[a-zA-Z]+\*?)\}"
@@ -254,8 +251,19 @@ def _load_ignore(path: Path | None) -> dict:
     return {}
 
 
-def analyze_prose(path: Path, rel: str, src: str) -> dict:
+def analyze_prose(
+    path: Path,
+    rel: str,
+    src: str,
+    excess_vocab: list[str] = EXCESS_VOCAB,
+    template_openers: list[str] = TEMPLATE_OPENERS,
+    threshold_emdash: float = DEFAULT_EMDASH_THRESHOLD,
+    threshold_burstiness: float = DEFAULT_BURSTINESS_THRESHOLD,
+) -> dict:
     """Run all prose-level metrics on one TeX file."""
+    template_openers_re = re.compile(
+        r"^(?:" + r"|".join(re.escape(word) for word in template_openers) + r")\b[,\s]"
+    )
     preamble_match = re.search(r"\\begin\{document\}", src)
     # Newlines in the raw source up to the body start, plus any newlines the
     # final .strip() removed from the front of the stripped text (positions
@@ -326,7 +334,7 @@ def analyze_prose(path: Path, rel: str, src: str) -> dict:
 
     # --- template openers -----------------------------------------------------
     for sent, pos in sentences:
-        if TEMPLATE_OPENERS_RE.match(sent):
+        if template_openers_re.match(sent):
             hits["template_openers"].append({
                 "id": _candidate_id("template_openers", rel, sent),
                 "path": rel,
@@ -349,7 +357,7 @@ def analyze_prose(path: Path, rel: str, src: str) -> dict:
             })
 
     # --- excess vocabulary ------------------------------------------------------
-    for token in EXCESS_VOCAB:
+    for token in excess_vocab:
         pattern = re.compile(rf"\b{re.escape(token)}\b", re.I)
         for match in pattern.finditer(prose):
             window = prose[max(0, match.start() - 40):match.end() + 60]
@@ -376,7 +384,7 @@ def analyze_prose(path: Path, rel: str, src: str) -> dict:
             })
 
     # --- aggregate rate metrics ---------------------------------------------------
-    if em_dash_per_100w >= DEFAULT_EMDASH_THRESHOLD:
+    if em_dash_per_100w >= threshold_emdash:
         hits["em_dash_rate"].append({
             "id": _candidate_id("em_dash_rate", rel, prose[:80]),
             "path": rel,
@@ -388,7 +396,7 @@ def analyze_prose(path: Path, rel: str, src: str) -> dict:
                 "signature); consider hyphen or restructure."
             ),
         })
-    if burstiness < DEFAULT_BURSTINESS_THRESHOLD:
+    if burstiness < threshold_burstiness:
         hits["burstiness"].append({
             "id": _candidate_id("burstiness", rel, prose[:80]),
             "path": rel,
@@ -423,7 +431,7 @@ def main(argv: list[str] | None = None) -> int:
                          "is root-scoped, not package-scoped")
     ap.add_argument(
         "--tex-dir",
-        default=DEFAULT_TEX_DIR,
+        default=None,
         help="TeX directory relative to root (default: %(default)s)",
     )
     ap.add_argument(
@@ -433,14 +441,37 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--ignore", type=Path, default=None)
-    ap.add_argument("--threshold-emdash", type=float, default=DEFAULT_EMDASH_THRESHOLD)
+    ap.add_argument("--threshold-emdash", type=float, default=None)
     ap.add_argument(
-        "--threshold-burstiness", type=float, default=DEFAULT_BURSTINESS_THRESHOLD
+        "--threshold-burstiness", type=float, default=None
     )
     args = ap.parse_args(argv)
 
     repo = args.root.resolve()
-    tex_dir = (repo / args.tex_dir).resolve()
+    cfg = _audit_config.load_config(repo)
+    style_cfg = cfg.get("style", {})
+    tex_dir_name = _audit_config.pick(args.tex_dir, style_cfg, "tex_dir", DEFAULT_TEX_DIR)
+    threshold_emdash = _audit_config.pick(
+        args.threshold_emdash, style_cfg, "threshold_emdash", DEFAULT_EMDASH_THRESHOLD
+    )
+    threshold_burstiness = _audit_config.pick(
+        args.threshold_burstiness,
+        style_cfg,
+        "threshold_burstiness",
+        DEFAULT_BURSTINESS_THRESHOLD,
+    )
+    excess_vocab = _audit_config.as_string_list(
+        style_cfg.get("excess_vocab"), EXCESS_VOCAB
+    )
+    template_openers = _audit_config.as_string_list(
+        style_cfg.get("template_openers"), TEMPLATE_OPENERS
+    )
+    exclude_parts = set(
+        _audit_config.as_string_list(
+            style_cfg.get("exclude_parts"), sorted(DEFAULT_EXCLUDE_PARTS)
+        )
+    )
+    tex_dir = (repo / tex_dir_name).resolve()
     try:
         tex_dir.relative_to(repo)
     except ValueError:
@@ -463,9 +494,7 @@ def main(argv: list[str] | None = None) -> int:
                 files.append(path)
     else:
         for path in tex_dir.rglob("*.tex"):
-            if path.is_file() and not any(
-                part in DEFAULT_EXCLUDE_PARTS for part in path.parts
-            ):
+            if path.is_file() and not any(part in exclude_parts for part in path.parts):
                 files.append(path)
 
     per_file: dict[str, dict] = {}
@@ -481,7 +510,15 @@ def main(argv: list[str] | None = None) -> int:
     for path in sorted(files):
         rel = path.relative_to(repo).as_posix()
         src = path.read_text(encoding="utf-8", errors="replace")
-        result = analyze_prose(path, rel, src)
+        result = analyze_prose(
+            path,
+            rel,
+            src,
+            excess_vocab=excess_vocab,
+            template_openers=template_openers,
+            threshold_emdash=threshold_emdash,
+            threshold_burstiness=threshold_burstiness,
+        )
         per_file[rel] = result["stats"]
         for metric, items in result["hits"].items():
             for item in items:
@@ -537,9 +574,10 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = {
         "scanner": "style",
+        "schema_version": 1,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "package": args.package,
-        "tex_dir": args.tex_dir,
+        "tex_dir": tex_dir_name,
         "files_scanned": [path.relative_to(repo).as_posix() for path in files],
         "prose_stats": {"per_file": per_file, "aggregate": aggregated},
         "hits": {name: values for name, values in hits.items() if values},
@@ -552,7 +590,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     hit_count = sum(len(values) for values in hits.values())
-    print(f"STYLE_SCAN tex_dir={args.tex_dir} files={len(files)} "
+    print(f"STYLE_SCAN tex_dir={tex_dir_name} files={len(files)} "
           f"hits={hit_count} ignored={len(ignored_hits)}")
     for metric, values in hits.items():
         if values:

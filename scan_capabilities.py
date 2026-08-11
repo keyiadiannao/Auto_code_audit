@@ -41,6 +41,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import _audit_config
+
 PY_SUBDIRS = (
     "lib",
     "experiments",
@@ -180,10 +182,12 @@ def tag_similarity(left: str, right: str) -> float:
     return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
 
 
-def _usage_counts(root: Path, package: str, names: list[str]) -> dict[str, int]:
+def _usage_counts(
+    root: Path, package: str, names: list[str], subdirs: list[str]
+) -> dict[str, int]:
     """Rough text-occurrence count of each name across package .py files."""
     counts: dict[str, int] = {name: 0 for name in names}
-    for sub in PY_SUBDIRS:
+    for sub in subdirs:
         subdir = root / package / sub
         if not subdir.is_dir():
             continue
@@ -255,6 +259,7 @@ def _run_file_check(
     index: list[Capability],
     usage: dict[str, int],
     by_name: dict[str, list[Capability]],
+    doc_threshold: float,
 ) -> int:
     """Single-file checklist: every def in one script vs the lib index."""
     rel = Path(args.file).as_posix()
@@ -275,7 +280,7 @@ def _run_file_check(
     for local in extracted:
         if local.name in BOILERPLATE:
             continue
-        candidates, channel = _match_candidates(local, index, by_name, args.doc_threshold)
+        candidates, channel = _match_candidates(local, index, by_name, doc_threshold)
         records.append(
             {
                 "local": _local_dict(local),
@@ -303,6 +308,7 @@ def _run_file_check(
 
     payload = {
         "scanner": "capabilities-file-check",
+        "schema_version": 1,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "package": args.package,
         "file": rel,
@@ -351,8 +357,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--index", type=Path, default=None, help="write capability index JSON")
     ap.add_argument("--json", type=Path, default=None, help="write overlap report JSON")
-    ap.add_argument("--doc-threshold", type=float, default=0.55)
-    ap.add_argument("--top", type=int, default=40, help="max overlap candidates to print")
+    ap.add_argument("--doc-threshold", type=float, default=None)
+    ap.add_argument("--top", type=int, default=None, help="max overlap candidates to print")
     ap.add_argument(
         "--ignore",
         type=Path,
@@ -366,6 +372,12 @@ def main(argv: list[str] | None = None) -> int:
     if not pkg.is_dir() or pkg != repo / args.package:
         print(f"error: package dir not found or escapes root: {pkg}", file=sys.stderr)
         return 2
+
+    cfg = _audit_config.load_config(repo)
+    cap_cfg = cfg.get("capabilities", {})
+    doc_threshold = _audit_config.pick(args.doc_threshold, cap_cfg, "doc_threshold", 0.55)
+    top = _audit_config.pick(args.top, cap_cfg, "top", 40)
+    subdirs = _audit_config.as_string_list(cfg.get("subdirs"), list(PY_SUBDIRS))
 
     lib_dir = pkg / "lib"
     index: list[Capability] = []
@@ -381,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Reference count of each lib capability across the package.
     lib_names = sorted({item.name for item in index})
-    usage = _usage_counts(repo, args.package, lib_names)
+    usage = _usage_counts(repo, args.package, lib_names, subdirs)
     index_records = [
         {
             **dict(_lib_dict(item, usage)),
@@ -395,10 +407,10 @@ def main(argv: list[str] | None = None) -> int:
         by_name.setdefault(item.name, []).append(item)
 
     if args.file is not None:
-        return _run_file_check(args, repo, pkg, index, usage, by_name)
+        return _run_file_check(args, repo, pkg, index, usage, by_name, doc_threshold)
 
     local_defs: list[Capability] = []
-    for sub in PY_SUBDIRS:
+    for sub in subdirs:
         if sub == "lib":
             continue
         subdir = pkg / sub
@@ -437,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
         if local.path.startswith("tests/"):
             continue
         candidates, channel = _match_candidates(
-            local, index, by_name, args.doc_threshold
+            local, index, by_name, doc_threshold
         )
         if channel == "none":
             continue
@@ -481,6 +493,7 @@ def main(argv: list[str] | None = None) -> int:
     untagged = [f"{item.path}:{item.qualname}" for item in index if not item.tag]
     payload = {
         "scanner": "capabilities",
+        "schema_version": 1,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "package": args.package,
         "lib_capabilities": len(index),
@@ -502,7 +515,7 @@ def main(argv: list[str] | None = None) -> int:
         f"(name={match_modes['name']} doc={match_modes['doc']}) "
         f"sig_match={sig_matches} untagged={len(untagged)}"
     )
-    for item in overlap[: args.top]:
+    for item in overlap[:top]:
         local = item["local"]
         lib = item["lib"]
         marker = " SIG-MATCH" if item["signature_match"] else ""

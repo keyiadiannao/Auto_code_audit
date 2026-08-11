@@ -1,5 +1,7 @@
 # Auto Code Audit
 
+[![CI](https://github.com/keyiadiannao/Auto_code_audit/actions/workflows/ci.yml/badge.svg)](https://github.com/keyiadiannao/Auto_code_audit/actions/workflows/ci.yml)
+
 A three-layer static audit toolkit for large Python projects after
 AI-assisted refactors or cleanup. It generates candidate lists for dead
 modules, duplicate implementations, hard-coded behavior drift, contract
@@ -48,7 +50,15 @@ Useful options:
 - `--no-doc-channel` — faster code-only dead-module pass
 - `--duplicate-threshold` / `--duplicate-min-chars` — duplicate sensitivity
 - `--ignore ignore.json` — approved suppression registry (Layer-2 output)
+- `--cli-smoke` — run `--help` on every scanner entrypoint first; abort the
+  audit with a non-zero exit if any regressed
 - run any scanner directly for a scoped investigation
+
+Consecutive runs against the same `--json` path diff against the previous
+report: `latest.json` gains a `previous_run` block (per-scanner new/gone
+signatures) and `latest.md` gains a "Changes since last run" section, so a
+review session starts from what changed instead of re-reading the whole
+worksheet.
 
 ## Scanners
 
@@ -109,11 +119,18 @@ python <package>/verify/... --quick   # the package verifier, if one exists
 git diff --check
 ```
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request across Python
+3.10–3.13: the test suite, an entrypoint `--help` smoke, an end-to-end
+dogfood self-audit (including the report-diff path), and a whitespace check.
+
 ## Project layout
 
 ```text
-run_all.py              one-command orchestration + summary report
+run_all.py              one-command orchestration + summary report + report diff
 scan_*.py               the seven deterministic scanners
+scan_cli_smoke.py       entrypoint --help regression gate (run_all --cli-smoke)
 SKILL.md                the full three-layer protocol
 LESSONS.md              false-positive lesson archive (read before Layer 2)
 ignore.json             approved suppression registry (ships empty)

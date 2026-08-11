@@ -11,10 +11,13 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import _audit_config
 import scan_capabilities
+import scan_cli_smoke
 import scan_deadcode
 import scan_contracts
 import scan_duplicates
@@ -23,6 +26,18 @@ import scan_hardcoded
 import scan_style
 
 SKILL_DIR = Path(__file__).resolve().parent
+
+SCHEMA_VERSION = 5
+
+_SCANNER_NAMES = {
+    "deadcode": "dead code",
+    "duplicates": "duplicate clusters",
+    "forks": "script-to-script forks",
+    "contracts": "contract-boundary candidates",
+    "capabilities": "capability overlap",
+    "hardcoded": "hard-coded patterns",
+    "style": "writing-style candidates",
+}
 
 
 def _sha256(path: Path) -> str:
@@ -81,6 +96,267 @@ def _run_scanner(
     return payload
 
 
+def _candidate_signatures(
+    payloads: dict,
+) -> dict[str, list[tuple[str, str, dict]]]:
+    """Map scanner payloads to per-scanner [(signature, display, detail)].
+
+    Signatures are stable identifiers so consecutive runs can be diffed;
+    displays are the human-readable one-liners used in the markdown worksheet;
+    details are the original candidate records (with ``_channel`` /
+    ``_pattern`` / ``_metric`` injected on copies) used by the adjudication
+    tool to rebuild suppression entries.
+    """
+    sigs: dict[str, list[tuple[str, str, dict]]] = {}
+
+    dead = payloads.get("deadcode", {})
+    sigs["deadcode"] = [
+        (
+            f"DEAD/{item['path']}",
+            f"`{item['path']}` ({item.get('status', '?')})",
+            item,
+        )
+        for item in dead.get("candidates", [])
+    ]
+
+    duplicates = payloads.get("duplicates", {})
+    sigs["duplicates"] = [
+        (
+            f"cluster/{item['id']}",
+            f"`{item['id']}` [{item.get('priority', '?')}]",
+            item,
+        )
+        for item in duplicates.get("clusters", [])
+    ]
+
+    def fork_sigs(pairs: list[dict]) -> list[tuple[str, str, dict]]:
+        out = []
+        for item in pairs:
+            left, right = item["left"], item["right"]
+            a = f"{left['path']}:{left['qualname']}"
+            b = f"{right['path']}:{right['qualname']}"
+            out.append(
+                (
+                    "fork/" + "|".join(sorted((a, b))),
+                    f"`{a}` <-> `{b}` ({item.get('kind', '?')})",
+                    item,
+                )
+            )
+        return out
+
+    forks = payloads.get("forks", {})
+    sigs["forks"] = fork_sigs(forks.get("pairs", [])) + fork_sigs(
+        forks.get("small_function_pairs", [])
+    )
+
+    contracts = payloads.get("contracts", {})
+    con: list[tuple[str, str, dict]] = []
+
+    def contract_sigs(
+        channel: str,
+        items: list[dict],
+        sig: Callable[[dict], str],
+        display: Callable[[dict], str],
+    ) -> None:
+        for item in items:
+            detail = dict(item)
+            detail["_channel"] = channel
+            con.append((sig(item), display(item), detail))
+
+    contract_sigs(
+        "experiment_as_library",
+        contracts.get("experiment_as_library", []),
+        lambda i: f"experiment_as_library/{i['path']}:{i['line']}:{i['module']}",
+        lambda i: f"`{i['path']}:{i['line']}` imports `{i['module']}`",
+    )
+    contract_sigs(
+        "forwarding_wrappers",
+        contracts.get("forwarding_wrappers", []),
+        lambda i: f"forwarding/{i['path']}:{i['line']}:{i['name']}",
+        lambda i: f"`{i['path']}:{i['line']}` `{i['name']}{i['signature']}`",
+    )
+    contract_sigs(
+        "unreferenced_top_level_functions",
+        contracts.get("unreferenced_top_level_functions", []),
+        lambda i: f"unreferenced/{i['path']}:{i['line']}:{i['name']}",
+        lambda i: f"`{i['path']}:{i['line']}` `{i['name']}{i['signature']}`",
+    )
+    contract_sigs(
+        "cli_without_bootstrap",
+        contracts.get("cli_without_bootstrap", []),
+        lambda i: f"cli_noboot/{i['path']}:{i['line']}:{i['module']}",
+        lambda i: f"`{i['path']}:{i['line']}` imports `{i['module']}`",
+    )
+    contract_sigs(
+        "defensive_param_loosening",
+        contracts.get("defensive_param_loosening", []),
+        lambda i: f"defensive/{i['path']}:{i['line']}",
+        lambda i: f"`{i['path']}:{i['line']}` `{i['code']}`",
+    )
+    contract_sigs(
+        "env_written_not_read",
+        contracts.get("env_written_not_read", []),
+        lambda i: f"env/{i['var']}:{i['path']}:{i['line']}",
+        lambda i: f"env `{i['var']}` at `{i['path']}:{i['line']}`",
+    )
+    contract_sigs(
+        "generation_path_without_env",
+        contracts.get("generation_path_without_env", []),
+        lambda i: f"genpath/{i['path']}",
+        lambda i: f"`{i['path']}` ({len(i['constants'])} const(s))",
+    )
+    for group in contracts.get("same_name_contracts", []):
+        for item in group["definitions"]:
+            detail = dict(item)
+            detail["_channel"] = "same_name_contracts"
+            detail["_name"] = group["name"]
+            con.append(
+                (
+                    f"same_name/{item['path']}:{item['line']}:{group['name']}",
+                    f"`{item['path']}:{item['line']}` "
+                    f"`{group['name']}{item['signature']}`",
+                    detail,
+                )
+            )
+    sigs["contracts"] = con
+
+    capabilities = payloads.get("capabilities", {})
+    sigs["capabilities"] = [
+        (
+            f"cap/{item['local']['path']}:{item['local']['qualname']}"
+            f"|{item['lib']['path']}:{item['lib']['qualname']}",
+            f"`{item['local']['path']}:{item['local']['qualname']}` <-> "
+            f"`{item['lib']['path']}:{item['lib']['qualname']}` "
+            f"({item.get('match', '?')})",
+            item,
+        )
+        for item in capabilities.get("overlap", [])
+    ]
+
+    hardcoded = payloads.get("hardcoded", {})
+    sigs["hardcoded"] = [
+        (
+            f"hard/{pattern}/{item['path']}:{item['line']}",
+            f"`{item['path']}:{item['line']}` [{pattern}]",
+            {**item, "_pattern": pattern},
+        )
+        for pattern, items in hardcoded.get("hits", {}).items()
+        for item in items
+    ]
+
+    style = payloads.get("style", {})
+    sigs["style"] = [
+        (
+            f"style/{metric}/{item['path']}:{item.get('line', '-')}",
+            f"`{item['path']}:{item.get('line', '-')}` [{metric}]",
+            {**item, "_metric": metric},
+        )
+        for metric, items in style.get("hits", {}).items()
+        for item in items
+    ]
+    return sigs
+
+
+def _diff_previous(
+    previous: dict | None, payloads: dict, package: str
+) -> dict | None:
+    """Compare current payloads against a previous report; None when absent.
+
+    Returns a ``previous_run`` block: comparable plus per-scanner new/gone
+    candidate lists (each item is {"signature", "display"}).
+    """
+    if previous is None:
+        return None
+    reason = None
+    if previous.get("schema_version") != SCHEMA_VERSION:
+        reason = (
+            f"schema_version {previous.get('schema_version')} != "
+            f"{SCHEMA_VERSION}"
+        )
+    elif previous.get("package") != package:
+        reason = f"package {previous.get('package')!r} != {package!r}"
+    if reason is not None:
+        return {
+            "comparable": False,
+            "reason": reason,
+            "generated_at": previous.get("generated_at"),
+        }
+
+    prev_sigs = _candidate_signatures(previous.get("scanners", {}))
+    cur_sigs = _candidate_signatures(payloads)
+    per_scanner: dict[str, dict] = {}
+    for scanner in cur_sigs:
+        prev_pairs = {
+            (sig, display) for sig, display, _ in prev_sigs.get(scanner, [])
+        }
+        cur_pairs = {
+            (sig, display) for sig, display, _ in cur_sigs[scanner]
+        }
+        per_scanner[scanner] = {
+            "previous": len(prev_pairs),
+            "current": len(cur_pairs),
+            "new": [
+                {"signature": sig, "display": display}
+                for sig, display in sorted(cur_pairs - prev_pairs)
+            ],
+            "gone": [
+                {"signature": sig, "display": display}
+                for sig, display in sorted(prev_pairs - cur_pairs)
+            ],
+        }
+    provenance = previous.get("provenance") or {}
+    return {
+        "comparable": True,
+        "generated_at": previous.get("generated_at"),
+        "head": (provenance.get("git") or {}).get("head"),
+        "per_scanner": per_scanner,
+    }
+
+
+def _changes_markdown(block: dict | None) -> list[str]:
+    """Render the ``previous_run`` block as a markdown delta section."""
+    if block is None:
+        return []
+    lines = ["", "## Changes since last run", ""]
+    if not block.get("comparable"):
+        lines.extend(
+            [
+                f"The previous report at this path was not comparable: "
+                f"{block.get('reason', 'unknown')}.",
+                "Verify the report path or schema before treating this run as a delta.",
+                "",
+            ]
+        )
+        return lines
+    lines.append(
+        "Compared against the previous report (generated "
+        f"{block.get('generated_at') or 'unknown time'}, "
+        f"Git HEAD `{block.get('head') or 'unavailable'}`)."
+    )
+    lines.append("")
+    lines.append("| scanner | previous | current | new | gone |")
+    lines.append("|---|---:|---:|---:|---:|")
+    for scanner in _SCANNER_NAMES:
+        stats = block["per_scanner"][scanner]
+        lines.append(
+            f"| {_SCANNER_NAMES[scanner]} | {stats['previous']} | "
+            f"{stats['current']} | {len(stats['new'])} | {len(stats['gone'])} |"
+        )
+    lines.append("")
+    for scanner in _SCANNER_NAMES:
+        stats = block["per_scanner"][scanner]
+        for label, items in (("New", stats["new"]), ("Gone", stats["gone"])):
+            if not items:
+                continue
+            lines.extend([f"### {label} {_SCANNER_NAMES[scanner]} ({len(items)})", ""])
+            for item in items[:15]:
+                lines.append(f"- {item['display']}")
+            if len(items) > 15:
+                lines.append(f"- ... and {len(items) - 15} more")
+            lines.append("")
+    return lines
+
+
 def _markdown(payloads: dict[str, dict], summary: dict) -> str:
     dead = payloads["deadcode"]
     duplicates = payloads["duplicates"]
@@ -116,6 +392,7 @@ def _markdown(payloads: dict[str, dict], summary: dict) -> str:
                 "",
             ]
         )
+    lines.extend(_changes_markdown(summary.get("previous_run")))
     lines.extend(
         [
             "This is a candidate list, not a deletion or refactor decision.",
@@ -197,19 +474,24 @@ def _markdown(payloads: dict[str, dict], summary: dict) -> str:
                 "bodies. Each pair needs a verdict: deliberate fork, parameterizable ",
                 "merge candidate, or true duplicate.",
                 "",
-                "| sim | kind | left | right | sig | verdict |",
-                "|---|---|---|---|---|---|",
+                "| sim | kind | left | right | sig | imports | verdict |",
+                "|---|---|---|---|---|---|---|",
             ]
         )
         for item in forks["pairs"]:
             left, right = item["left"], item["right"]
             sig = "yes" if item["signature_match"] else "no"
+            imp = (
+                "left->right"
+                if item.get("a_imports_b")
+                else ("right->left" if item.get("b_imports_a") else "-")
+            )
             lines.append(
                 f"| {item['similarity']:.3f} | {item['kind']} | "
                 f"`{left['path']}:{left['qualname']}` "
                 f"(L{left['lineno']}, {left['nlines']} lines) | "
                 f"`{right['path']}:{right['qualname']}` "
-                f"(L{right['lineno']}, {right['nlines']} lines) | {sig} | |"
+                f"(L{right['lineno']}, {right['nlines']} lines) | {sig} | {imp} | |"
             )
     else:
         lines.extend(["No fork pairs.", ""])
@@ -223,19 +505,24 @@ def _markdown(payloads: dict[str, dict], summary: dict) -> str:
                 "above the small-channel threshold). Small helpers duplicate easily "
                 "and evade the main size floor; each pair still needs a verdict.",
                 "",
-                "| sim | kind | left | right | sig | verdict |",
-                "|---|---|---|---|---|---|",
+                "| sim | kind | left | right | sig | imports | verdict |",
+                "|---|---|---|---|---|---|---|",
             ]
         )
         for item in small_pairs:
             left, right = item["left"], item["right"]
             sig = "yes" if item["signature_match"] else "no"
+            imp = (
+                "left->right"
+                if item.get("a_imports_b")
+                else ("right->left" if item.get("b_imports_a") else "-")
+            )
             lines.append(
                 f"| {item['similarity']:.3f} | {item['kind']} | "
                 f"`{left['path']}:{left['qualname']}` "
                 f"(L{left['lineno']}, {left['nlines']} lines) | "
                 f"`{right['path']}:{right['qualname']}` "
-                f"(L{right['lineno']}, {right['nlines']} lines) | {sig} | |"
+                f"(L{right['lineno']}, {right['nlines']} lines) | {sig} | {imp} | |"
             )
     else:
         lines.extend(["No small-function pairs.", ""])
@@ -470,15 +757,45 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--ignore", type=Path, default=SKILL_DIR / "ignore.json")
     ap.add_argument("--no-doc-channel", action="store_true")
-    ap.add_argument("--duplicate-threshold", type=float, default=0.82)
-    ap.add_argument("--duplicate-min-chars", type=int, default=120)
+    ap.add_argument("--duplicate-threshold", type=float, default=None)
+    ap.add_argument("--duplicate-min-chars", type=int, default=None)
+    ap.add_argument(
+        "--cli-smoke",
+        action="store_true",
+        help="run --help smoke on every scanner entrypoint first; abort "
+             "with rc=2 when any fails",
+    )
     args = ap.parse_args(argv)
 
+    if args.cli_smoke:
+        smoke_failures = scan_cli_smoke.smoke(("run_all",))
+        if smoke_failures:
+            for name, rc in smoke_failures:
+                print(f"error: CLI smoke failed {name} --help exited {rc}", file=sys.stderr)
+            return 2
+
     args.root = args.root.resolve()
+
+    cfg = _audit_config.load_config(args.root)
+    dup_cfg = cfg.get("duplicates", {})
+    duplicate_threshold = _audit_config.pick(
+        args.duplicate_threshold, dup_cfg, "threshold", 0.82
+    )
+    duplicate_min_chars = _audit_config.pick(
+        args.duplicate_min_chars, dup_cfg, "min_chars", 120
+    )
+    config_path = args.root / _audit_config.CONFIG_FILENAME
     args.json = args.json.resolve()
     args.markdown = args.markdown.resolve()
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.markdown.parent.mkdir(parents=True, exist_ok=True)
+
+    previous = None
+    if args.json.is_file():
+        try:
+            previous = json.loads(args.json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            previous = None
 
     started = time.perf_counter()
     try:
@@ -499,9 +816,9 @@ def main(argv: list[str] | None = None) -> int:
                     tempdir / "duplicates.json",
                     [
                         "--threshold",
-                        str(args.duplicate_threshold),
+                        str(duplicate_threshold),
                         "--min-chars",
-                        str(args.duplicate_min_chars),
+                        str(duplicate_min_chars),
                     ],
                 ),
                 "contracts": _run_scanner(
@@ -516,12 +833,7 @@ def main(argv: list[str] | None = None) -> int:
                 "hardcoded": _run_scanner(
                     scan_hardcoded, args, tempdir / "hardcoded.json", []
                 ),
-                "style": _run_scanner(
-                    scan_style,
-                    args,
-                    tempdir / "style.json",
-                    ["--tex-dir", scan_style.DEFAULT_TEX_DIR],
-                ),
+                "style": _run_scanner(scan_style, args, tempdir / "style.json", []),
             }
     except (OSError, RuntimeError, json.JSONDecodeError) as exc:
         print(f"error: self-audit failed: {exc}", file=sys.stderr)
@@ -539,15 +851,17 @@ def main(argv: list[str] | None = None) -> int:
     ]
     summary = {
         "scanner": "self-audit-run-all",
-        "schema_version": 4,
+        "schema_version": SCHEMA_VERSION,
         "package": args.package,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "elapsed_seconds": round(time.perf_counter() - started, 3),
         "configuration": {
             "document_channel": not args.no_doc_channel,
-            "duplicate_threshold": args.duplicate_threshold,
-            "duplicate_min_chars": args.duplicate_min_chars,
+            "duplicate_threshold": duplicate_threshold,
+            "duplicate_min_chars": duplicate_min_chars,
             "ignore_file": str(args.ignore.resolve()) if args.ignore else None,
+            "config_file": str(config_path) if config_path.is_file() else None,
+            "cli_smoke": bool(args.cli_smoke),
         },
         "provenance": {
             "git": _git_provenance(args.root, args.package),
@@ -555,6 +869,7 @@ def main(argv: list[str] | None = None) -> int:
                 path.name: _sha256(path) for path in scanner_files
             },
         },
+        "previous_run": _diff_previous(previous, payloads, args.package),
         "scanners": payloads,
     }
     args.json.write_text(

@@ -9,8 +9,10 @@ import pytest
 SKILL_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SKILL_DIR))
 
+import adjudicate
 import run_all
 import scan_capabilities
+import scan_cli_smoke
 import scan_contracts
 import scan_deadcode
 import scan_duplicates
@@ -645,6 +647,10 @@ def test_contract_scan_ignore_registry_suppresses_channels(
         "defensive_param_loosening": 1,
         "env_written_not_read": 1,
         "generation_path_without_env": 1,
+        "experiment_as_library": 0,
+        "forwarding_wrappers": 0,
+        "same_name_contracts": 0,
+        "unreferenced_top_level_functions": 0,
     }
 
 
@@ -776,7 +782,7 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
         == 0
     )
     payload = json.loads(output_json.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 4
+    assert payload["schema_version"] == 5
     assert set(payload["provenance"]["scanner_sha256"]) == {
         "run_all.py",
         "scan_capabilities.py",
@@ -789,6 +795,83 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
     }
     assert "candidate list" in output_md.read_text(encoding="utf-8")
     assert not list(output_json.parent.glob("self-audit-*"))
+
+
+def test_run_all_reports_changes_since_last_run(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    report = tmp_path / "audit.json"
+    markdown = tmp_path / "audit.md"
+    argv = [
+        "--root",
+        str(mini_repo),
+        "--package",
+        "pkg",
+        "--json",
+        str(report),
+        "--markdown",
+        str(markdown),
+        "--no-doc-channel",
+    ]
+    _write(mini_repo / "pkg" / "lib" / "unused.py", "def dead_a():\n    return 1\n")
+
+    assert run_all.main(argv) == 0
+    first = json.loads(report.read_text(encoding="utf-8"))
+    assert first["previous_run"] is None  # first run has nothing to diff against
+
+    # Replace the candidate: drop unused.py, add unused2.py.
+    (mini_repo / "pkg" / "lib" / "unused.py").unlink()
+    _write(mini_repo / "pkg" / "lib" / "unused2.py", "def dead_b():\n    return 1\n")
+    assert run_all.main(argv) == 0
+    second = json.loads(report.read_text(encoding="utf-8"))
+    previous_run = second["previous_run"]
+    assert previous_run["comparable"] is True
+    deadcode_new = {
+        item["signature"] for item in previous_run["per_scanner"]["deadcode"]["new"]
+    }
+    assert any("unused2" in sig for sig in deadcode_new)
+    deadcode_gone = {
+        item["signature"] for item in previous_run["per_scanner"]["deadcode"]["gone"]
+    }
+    assert any("unused.py" in sig for sig in deadcode_gone)
+
+    md_text = markdown.read_text(encoding="utf-8")
+    assert "## Changes since last run" in md_text
+    assert "unused2" in md_text
+    assert "| dead code |" in md_text
+
+
+def test_run_all_previous_schema_mismatch_is_not_comparable(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    report = tmp_path / "audit.json"
+    markdown = tmp_path / "audit.md"
+    _write(mini_repo / "pkg" / "lib" / "unused.py", "def dead_a():\n    return 1\n")
+    argv = [
+        "--root",
+        str(mini_repo),
+        "--package",
+        "pkg",
+        "--json",
+        str(report),
+        "--markdown",
+        str(markdown),
+        "--no-doc-channel",
+    ]
+    assert run_all.main(argv) == 0
+
+    # Tamper with the previous report's schema so the next run must refuse.
+    summary = json.loads(report.read_text(encoding="utf-8"))
+    summary["schema_version"] = summary["schema_version"] - 1
+    report.write_text(json.dumps(summary), encoding="utf-8")
+
+    assert run_all.main(argv) == 0
+    second = json.loads(report.read_text(encoding="utf-8"))
+    previous_run = second["previous_run"]
+    assert previous_run["comparable"] is False
+    assert "schema_version" in previous_run["reason"]
+    md_text = markdown.read_text(encoding="utf-8")
+    assert "was not comparable" in md_text
 
 
 def _run_style_scan(mini_repo: Path, tmp_path: Path, name: str):
@@ -1041,3 +1124,331 @@ def test_fork_scan_respects_min_lines_floor(
     assert payload["functions_over_min_lines"] == 0
     assert payload["fork_pairs"] == 0
     assert payload["pairs"] == []
+
+
+def test_cli_smoke_all_entrypoints_pass_help() -> None:
+    """Every scanner entrypoint must accept --help and exit 0."""
+    failures = scan_cli_smoke.smoke()
+    assert failures == []
+
+
+def test_cli_smoke_catches_failing_entrypoint(tmp_path: Path) -> None:
+    """A module whose main() exits non-zero on --help must be reported."""
+    broken = tmp_path / "broken_scan.py"
+    broken.write_text(
+        "import sys\n"
+        "def main(argv=None):\n"
+        "    return 2\n",
+        encoding="utf-8",
+    )
+    sys.path.insert(0, str(tmp_path))
+    try:
+        failures = scan_cli_smoke.smoke(("broken_scan",))
+        assert failures == [("broken_scan", 2)]
+    finally:
+        sys.path.remove(str(tmp_path))
+
+
+def test_contract_scan_ignores_remaining_four_channels(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """Suppression keys for experiment/forwarding/same_name/unreferenced."""
+    package = mini_repo / "pkg"
+    _write(
+        package / "lib" / "math.py",
+        "def compute(x):\n"
+        "    return x * 2\n",
+    )
+    _write(
+        package / "experiments" / "worker.py",
+        "def run_task(items):\n"
+        "    return items\n"
+        "\n"
+        "def pass_through(x):\n"
+        "    return helper(x)\n",
+    )
+    _write(
+        package / "experiments" / "a.py",
+        "import sys\n"
+        "sys.path.insert(0, '.')\n"
+        "\n"
+        "from pkg.experiments import worker\n"
+        "\n"
+        "def compute(x):\n"
+        "    return x + 1\n",
+    )
+    ignore = tmp_path / "ignore.json"
+    ignore.write_text(
+        json.dumps(
+            {
+                "contracts": {
+                    "experiment_as_library": [{"key": "experiments/a.py"}],
+                    "forwarding_wrappers": [
+                        {"key": "experiments/worker.py:4:pass_through"}
+                    ],
+                    "same_name_contracts": [
+                        {"key": "lib/math.py:1:compute"}
+                    ],
+                    "unreferenced_top_level_functions": [
+                        {"key": "experiments/worker.py:1"},
+                        {"key": "experiments/worker.py:4"},
+                        {"key": "experiments/a.py:6"},
+                    ],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "contracts-ignore4.json"
+    assert scan_contracts.main(
+        [
+            "--root",
+            str(mini_repo),
+            "--package",
+            "pkg",
+            "--ignore",
+            str(ignore),
+            "--json",
+            str(output),
+        ]
+    ) == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["experiment_as_library"] == []
+    assert payload["forwarding_wrappers"] == []
+    # Suppressing one definition dissolves the two-path same-name group.
+    assert payload["same_name_contracts"] == []
+    # Only the lib-side compute definition survives suppression.
+    assert [item["path"] for item in payload["unreferenced_top_level_functions"]] == [
+        "lib/math.py"
+    ]
+    assert payload["ignored_counts"] == {
+        "cli_without_bootstrap": 0,
+        "defensive_param_loosening": 0,
+        "env_written_not_read": 0,
+        "generation_path_without_env": 0,
+        "experiment_as_library": 1,
+        "forwarding_wrappers": 1,
+        "same_name_contracts": 1,
+        "unreferenced_top_level_functions": 3,
+    }
+
+
+def test_adjudicate_flatten_injects_details() -> None:
+    """_flatten expands report payloads into (scanner, signature, detail)."""
+    report = {
+        "scanners": {
+            "deadcode": {
+                "candidates": [
+                    {"path": "a.py", "status": "DEAD", "py_refs": [], "doc_refs": []}
+                ]
+            },
+            "hardcoded": {
+                "hits": {
+                    "archive": [
+                        {"path": "b.py", "line": 7, "code": "c", "suggestion": "s"}
+                    ]
+                }
+            },
+        }
+    }
+    items = adjudicate._flatten(report)
+    assert len(items) == 2
+    dead = next(item for item in items if item["scanner"] == "deadcode")
+    assert dead["signature"] == "DEAD/a.py"
+    assert dead["detail"] == {
+        "path": "a.py",
+        "status": "DEAD",
+        "py_refs": [],
+        "doc_refs": [],
+    }
+    hard = next(item for item in items if item["scanner"] == "hardcoded")
+    assert hard["signature"] == "hard/archive/b.py:7"
+    assert hard["detail"]["_pattern"] == "archive"
+    # The injected marker lives on the copy, not the payload record.
+    assert "hits" not in hard["detail"]
+
+
+def test_adjudicate_ignore_entries_key_formats() -> None:
+    """Suppression entries must match the keys each scanner reads."""
+    cases = [
+        ("experiment_as_library", {"path": "e/a.py"}, "e/a.py"),
+        ("forwarding_wrappers", {"path": "e/a.py", "line": 2, "name": "fwd"}, "e/a.py:2:fwd"),
+        ("same_name_contracts", {"path": "e/a.py", "line": 3, "_name": "compute"}, "e/a.py:3:compute"),
+        ("unreferenced_top_level_functions", {"path": "e/a.py", "line": 4}, "e/a.py:4"),
+        ("cli_without_bootstrap", {"path": "e/b.py"}, "e/b.py"),
+        ("defensive_param_loosening", {"path": "e/b.py", "line": 2}, "e/b.py:2"),
+        ("env_written_not_read", {"path": "e/b.py", "var": "VAR"}, "e/b.py:VAR"),
+        ("generation_path_without_env", {"path": "e/b.py"}, "e/b.py"),
+    ]
+    for channel, detail, key in cases:
+        entries = adjudicate._ignore_entries(
+            "contracts", {**detail, "_channel": channel}, "note"
+        )
+        assert entries == [(f"contracts/{channel}", {"key": key, "reason": "note"})], channel
+
+    assert adjudicate._ignore_entries(
+        "deadcode", {"path": "x.py"}, "n"
+    ) == [("deadcode", {"path": "x.py", "reason": "n"})]
+    assert adjudicate._ignore_entries(
+        "duplicates", {"id": "abc123def456"}, "n"
+    ) == [("duplicates", {"id": "abc123def456", "reason": "n"})]
+    assert adjudicate._ignore_entries(
+        "forks", {"key": "a.py:f::b.py:g"}, "n"
+    ) == [("forks", {"key": "a.py:f::b.py:g", "reason": "n"})]
+    assert adjudicate._ignore_entries(
+        "capabilities",
+        {"local": {"path": "x.py", "qualname": "f"}, "lib": {"path": "y.py", "qualname": "g"}},
+        "n",
+    ) == [("capabilities", {"key": "x.py:f", "reason": "n"})]
+    assert adjudicate._ignore_entries(
+        "hardcoded", {"path": "x.py", "_pattern": "hash"}, "n"
+    ) == [("hardcoded", {"path": "x.py", "pattern": "hash", "reason": "n"})]
+    assert adjudicate._ignore_entries(
+        "style", {"path": "x.py", "_metric": "em_dash"}, "n"
+    ) == [("style", {"path": "x.py", "pattern": "em_dash", "reason": "n"})]
+
+
+def test_adjudicate_merge_ignore_dedupes_and_preserves() -> None:
+    """_merge_ignore adds new entries only and keeps unrelated keys."""
+    registry = {
+        "schema_version": 1,
+        "_notes": "keep me",
+        "contracts": {"cli_without_bootstrap": [{"key": "a", "reason": "old"}]},
+    }
+    entries = [
+        ("deadcode", {"path": "p.py", "reason": "r"}),
+        ("deadcode", {"path": "p.py", "reason": "r"}),  # duplicate of the above
+        ("contracts/cli_without_bootstrap", {"key": "b", "reason": "new"}),
+        ("contracts/cli_without_bootstrap", {"key": "a", "reason": "old"}),  # already there
+    ]
+    added = adjudicate._merge_ignore(registry, entries)
+    assert added == 2
+    assert registry["schema_version"] == 1
+    assert registry["_notes"] == "keep me"
+    assert registry["deadcode"] == [{"path": "p.py", "reason": "r"}]
+    assert registry["contracts"]["cli_without_bootstrap"] == [
+        {"key": "a", "reason": "old"},
+        {"key": "b", "reason": "new"},
+    ]
+
+
+def test_adjudicate_append_lesson_numbers_blocks(tmp_path: Path) -> None:
+    """Lesson blocks continue numbering and follow the Case/Lesson format."""
+    lessons = tmp_path / "LESSONS.md"
+    lessons.write_text("## 7. dead code: suppressed something\n\n- **Case**: old\n", encoding="utf-8")
+    adjudicate._append_lesson(lessons, "deadcode", "`x.py` (DEAD)", "unused by design")
+    text = lessons.read_text(encoding="utf-8")
+    assert "## 8. dead code: suppressed `x.py` (DEAD)" in text
+    assert "- **Case**: `x.py` (DEAD)" in text
+    assert "- **Lesson**: unused by design" in text
+    assert "- **Implementation**: suppressed in ignore.json after semantic review." in text
+
+
+def test_adjudicate_false_positive_end_to_end(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An fp decision extends ignore.json, appends LESSONS.md, persists the verdict."""
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "scanner": "self-audit-run-all",
+                "schema_version": 5,
+                "scanners": {
+                    "deadcode": {
+                        "candidates": [
+                            {
+                                "path": "pkg/lib/unused.py",
+                                "status": "DEAD",
+                                "py_refs": [],
+                                "doc_refs": [],
+                            }
+                        ]
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    ignore = tmp_path / "ignore.json"
+    ignore.write_text(json.dumps({"schema_version": 1}), encoding="utf-8")
+    lessons = tmp_path / "LESSONS.md"
+    verdicts = tmp_path / "verdicts.json"
+
+    answers = iter(["fp", "docstring-only helpers reached via introspection"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    assert adjudicate.main(
+        [
+            "--report", str(report),
+            "--ignore", str(ignore),
+            "--lessons", str(lessons),
+            "--verdicts", str(verdicts),
+        ]
+    ) == 0
+
+    registry = json.loads(ignore.read_text(encoding="utf-8"))
+    assert registry["deadcode"] == [
+        {
+            "path": "pkg/lib/unused.py",
+            "reason": "docstring-only helpers reached via introspection",
+        }
+    ]
+    assert registry["schema_version"] == 1
+    lesson_text = lessons.read_text(encoding="utf-8")
+    assert "## 1. dead code: suppressed `pkg/lib/unused.py` (DEAD)" in lesson_text
+    assert "- **Lesson**: docstring-only helpers reached via introspection" in lesson_text
+    verdict_log = json.loads(verdicts.read_text(encoding="utf-8"))
+    assert len(verdict_log["verdicts"]) == 1
+    assert verdict_log["verdicts"][0]["disposition"] == "false positive"
+    assert verdict_log["verdicts"][0]["suppressed"] is True
+
+    # A second run resumes from the verdict log: no pending candidates.
+    monkeypatch.setattr("builtins.input", lambda _prompt: (_ for _ in ()).throw(AssertionError("no input expected")))
+    assert adjudicate.main(
+        [
+            "--report", str(report),
+            "--ignore", str(ignore),
+            "--lessons", str(lessons),
+            "--verdicts", str(verdicts),
+        ]
+    ) == 0
+
+
+def test_adjudicate_quit_early_writes_nothing_extra(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "scanner": "self-audit-run-all",
+                "schema_version": 5,
+                "scanners": {
+                    "style": {
+                        "hits": {
+                            "em_dash": [
+                                {"path": "docs/main.tex", "line": 12, "text": "x"}
+                            ]
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    ignore = tmp_path / "ignore.json"
+    lessons = tmp_path / "LESSONS.md"
+    verdicts = tmp_path / "verdicts.json"
+    monkeypatch.setattr("builtins.input", lambda _prompt: "q")
+    assert adjudicate.main(
+        [
+            "--report", str(report),
+            "--ignore", str(ignore),
+            "--lessons", str(lessons),
+            "--verdicts", str(verdicts),
+        ]
+    ) == 0
+    # Quitting early suppresses nothing and writes no session state.
+    assert not verdicts.exists()
+    assert not ignore.exists()
+    assert not lessons.exists()

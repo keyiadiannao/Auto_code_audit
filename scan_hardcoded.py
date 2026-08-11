@@ -14,6 +14,8 @@ import re
 import sys
 from pathlib import Path
 
+import _audit_config
+
 # Pattern list: tune per project. `exclude_paths` ships empty — canonical
 # implementations that legitimately own the pattern belong there (or in
 # ignore.json under `hardcoded`).
@@ -82,11 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         help="repo root (default: script's repo)",
     )
     ap.add_argument("--package", default="src")
-    ap.add_argument(
-        "--subdirs",
-        nargs="*",
-        default=["lib", "experiments", "mechanism", "audit", "verify", "figures"],
-    )
+    ap.add_argument("--subdirs", nargs="*", default=None)
     ap.add_argument("--pattern", default=None)
     ap.add_argument("--all-patterns", action="store_true")
     ap.add_argument("--json", type=Path, default=None)
@@ -99,7 +97,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: package dir not found or escapes root: {pkg}", file=sys.stderr)
         return 2
 
+    cfg = _audit_config.load_config(repo)
+    hard_cfg = cfg.get("hardcoded", {})
+    subdirs = _audit_config.pick(
+        args.subdirs,
+        cfg,
+        "subdirs",
+        ["lib", "experiments", "mechanism", "audit", "verify", "figures"],
+    )
+    exclude_parts = set(
+        _audit_config.as_string_list(
+            hard_cfg.get("exclude_parts"), sorted(DEFAULT_EXCLUDE_PARTS)
+        )
+    )
+
     patterns = PATTERNS
+    config_patterns = hard_cfg.get("patterns")
+    if isinstance(config_patterns, list):
+        patterns = config_patterns  # config replaces module defaults wholesale
+        for item in patterns:
+            if isinstance(item.get("exclude_paths"), list):
+                item["exclude_paths"] = set(item["exclude_paths"])
     if args.pattern:
         patterns = [item for item in patterns if item["name"] == args.pattern]
         if not patterns:
@@ -119,12 +137,12 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     files: set[Path] = set()
-    for subdir_name in args.subdirs:
+    for subdir_name in subdirs:
         subdir = pkg / subdir_name
         if not subdir.is_dir():
             continue
         for path in subdir.rglob("*.py"):
-            if any(part in DEFAULT_EXCLUDE_PARTS for part in path.relative_to(pkg).parts):
+            if any(part in exclude_parts for part in path.relative_to(pkg).parts):
                 continue
             files.add(path)
 
@@ -159,6 +177,7 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = {
         "scanner": "hardcoded",
+        "schema_version": 1,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "package": args.package,
         "files_scanned": len(files),

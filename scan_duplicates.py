@@ -19,6 +19,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+import _audit_config
+
 COMMON_NAMES = {"require", "parse_args", "main", "close", "count"}
 PY_SUBDIRS = (
     "lib",
@@ -217,20 +219,13 @@ def main(argv: list[str] | None = None) -> int:
         help="repo root (default: script's repo)",
     )
     ap.add_argument("--package", default="src")
-    ap.add_argument("--subdirs", nargs="*", default=list(PY_SUBDIRS))
-    ap.add_argument("--threshold", type=float, default=0.82)
-    ap.add_argument("--min-chars", type=int, default=120)
-    ap.add_argument("--skip-names", nargs="*", default=sorted(COMMON_NAMES))
+    ap.add_argument("--subdirs", nargs="*", default=None)
+    ap.add_argument("--threshold", type=float, default=None)
+    ap.add_argument("--min-chars", type=int, default=None)
+    ap.add_argument("--skip-names", nargs="*", default=None)
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--ignore", type=Path, default=None)
     args = ap.parse_args(argv)
-
-    if not 0.0 <= args.threshold <= 1.0:
-        print("error: --threshold must be in [0, 1]", file=sys.stderr)
-        return 2
-    if args.min_chars < 0:
-        print("error: --min-chars must be non-negative", file=sys.stderr)
-        return 2
 
     repo = args.root.resolve()
     pkg = (repo / args.package).resolve()
@@ -238,9 +233,25 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: package dir not found or escapes root: {pkg}", file=sys.stderr)
         return 2
 
+    cfg = _audit_config.load_config(repo)
+    dup_cfg = cfg.get("duplicates", {})
+    subdirs = _audit_config.pick(args.subdirs, cfg, "subdirs", list(PY_SUBDIRS))
+    threshold = _audit_config.pick(args.threshold, dup_cfg, "threshold", 0.82)
+    min_chars = _audit_config.pick(args.min_chars, dup_cfg, "min_chars", 120)
+    skip_names = _audit_config.pick(
+        args.skip_names, dup_cfg, "skip_names", sorted(COMMON_NAMES)
+    )
+
+    if not 0.0 <= threshold <= 1.0:
+        print("error: --threshold must be in [0, 1]", file=sys.stderr)
+        return 2
+    if min_chars < 0:
+        print("error: --min-chars must be non-negative", file=sys.stderr)
+        return 2
+
     records: list[FunctionRecord] = []
     parse_failures: list[str] = []
-    for sub in args.subdirs:
+    for sub in subdirs:
         subdir = pkg / sub
         if not subdir.is_dir():
             continue
@@ -249,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
             if any(part in EXCLUDE_PARTS for part in rel_parts):
                 continue
             try:
-                extracted = extract_functions(path, args.min_chars)
+                extracted = extract_functions(path, min_chars)
             except (OSError, UnicodeError, SyntaxError) as exc:
                 parse_failures.append(
                     {
@@ -292,9 +303,9 @@ def main(argv: list[str] | None = None) -> int:
         if records[left].normalized == records[right].normalized:
             continue
         similarity = _similarity(
-            records[left].tokens, records[right].tokens, args.threshold
+            records[left].tokens, records[right].tokens, threshold
         )
-        if similarity >= args.threshold:
+        if similarity >= threshold:
             union_find.union(left, right)
             edge_similarity[(left, right)] = similarity
 
@@ -319,7 +330,7 @@ def main(argv: list[str] | None = None) -> int:
         if len(indices) < 2:
             continue
         members = [records[i] for i in indices]
-        if all(member.name in args.skip_names for member in members):
+        if all(member.name in skip_names for member in members):
             boilerplate_skipped += 1
             continue
         cluster_id = _cluster_id(members)
@@ -422,10 +433,11 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = {
         "scanner": "duplicates",
+        "schema_version": 1,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "package": args.package,
-        "threshold": args.threshold,
-        "min_chars": args.min_chars,
+        "threshold": threshold,
+        "min_chars": min_chars,
         "functions_scanned": len(records),
         "candidate_pairs": len(candidate_pairs),
         "clusters_reported": len(reports),

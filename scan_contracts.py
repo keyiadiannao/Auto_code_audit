@@ -37,6 +37,8 @@ from pathlib import Path
 
 from scan_duplicates import load_ignore
 
+import _audit_config
+
 
 PY_SUBDIRS = (
     "lib",
@@ -147,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         help="repository root",
     )
     parser.add_argument("--package", default="src")
-    parser.add_argument("--subdirs", nargs="*", default=list(PY_SUBDIRS))
+    parser.add_argument("--subdirs", nargs="*", default=None)
     parser.add_argument("--json", type=Path)
     parser.add_argument("--ignore", type=Path, default=None)
     args = parser.parse_args(argv)
@@ -157,6 +159,23 @@ def main(argv: list[str] | None = None) -> int:
     if not pkg.is_dir() or pkg != repo / args.package:
         print(f"error: package dir not found or escapes root: {pkg}", file=sys.stderr)
         return 2
+
+    cfg = _audit_config.load_config(repo)
+    contracts_cfg = cfg.get("contracts", {})
+    subdirs = _audit_config.pick(args.subdirs, cfg, "subdirs", list(PY_SUBDIRS))
+    sensitive_names = set(
+        _audit_config.as_string_list(
+            contracts_cfg.get("contract_sensitive_names"),
+            sorted(CONTRACT_SENSITIVE_NAMES),
+        )
+    )
+    source_locked = SOURCE_LOCKED_ACTIVE_PATHS
+    config_source_locked = contracts_cfg.get("source_locked_active_paths")
+    if isinstance(config_source_locked, dict) and all(
+        isinstance(key, str) and isinstance(value, str)
+        for key, value in config_source_locked.items()
+    ):
+        source_locked = config_source_locked
 
     experiment_prefix = f"{args.package}.experiments"
     pkg_prefix = args.package + "."
@@ -175,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
     env_read = []
     generation_consts: dict[str, list[dict]] = defaultdict(list)
 
-    for path, rel in _iter_python(pkg, list(args.subdirs)):
+    for path, rel in _iter_python(pkg, list(subdirs)):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8-sig", errors="replace"))
         except (OSError, UnicodeError, SyntaxError) as exc:
@@ -443,7 +462,7 @@ def main(argv: list[str] | None = None) -> int:
                 "signature": _signature(node),
                 "return_contract": _return_contract(node),
                 "layer": rel.split("/", 1)[0],
-                "source_lock": SOURCE_LOCKED_ACTIVE_PATHS.get(rel),
+                "source_lock": source_locked.get(rel),
             }
             functions_by_name[node.name].append(record)
             body = _without_docstring(node)
@@ -504,6 +523,65 @@ def main(argv: list[str] | None = None) -> int:
         for entry in contracts_ignore.get("generation_path_without_env", [])
         if entry.get("key")
     }
+    experiment_import_ignored = {
+        entry.get("key", "")
+        for entry in contracts_ignore.get("experiment_as_library", [])
+        if entry.get("key")
+    }
+    forwarding_ignored = {
+        entry.get("key", "")
+        for entry in contracts_ignore.get("forwarding_wrappers", [])
+        if entry.get("key")
+    }
+    same_name_ignored = {
+        entry.get("key", "")
+        for entry in contracts_ignore.get("same_name_contracts", [])
+        if entry.get("key")
+    }
+    unreferenced_ignored = {
+        entry.get("key", "")
+        for entry in contracts_ignore.get("unreferenced_top_level_functions", [])
+        if entry.get("key")
+    }
+
+    same_name_contracts = []
+    same_name_removed = 0
+    for name, records in sorted(functions_by_name.items()):
+        paths = {record["path"] for record in records}
+        if len(paths) < 2 or name in COMMON_NAMES:
+            continue
+        if name not in sensitive_names and not any(
+            record["layer"] == "lib" for record in records
+        ):
+            continue
+        definitions = [
+            record
+            for record in records
+            if f"{record['path']}:{record['line']}:{name}" not in same_name_ignored
+        ]
+        same_name_removed += len(records) - len(definitions)
+        if len({record["path"] for record in definitions}) < 2:
+            continue
+        same_name_contracts.append({"name": name, "definitions": definitions})
+
+    unreferenced_functions = []
+    unreferenced_removed = 0
+    for name, records in sorted(functions_by_name.items()):
+        if name.startswith("__") or name.startswith("test_"):
+            continue
+        references = symbol_references.get(name, 0)
+        if references:
+            continue
+        for record in records:
+            if record["layer"] == "tests":
+                continue
+            if f"{record['path']}:{record['line']}" in unreferenced_ignored:
+                unreferenced_removed += 1
+                continue
+            unreferenced_functions.append(
+                {**record, "coarse_symbol_references": references}
+            )
+
     ignored_counts = {
         "cli_without_bootstrap": sum(
             item["path"] in cli_ignored for item in cli_without_bootstrap
@@ -519,6 +597,15 @@ def main(argv: list[str] | None = None) -> int:
         "generation_path_without_env": sum(
             item["path"] in generation_ignored for item in generation_path_without_env
         ),
+        "experiment_as_library": sum(
+            item["path"] in experiment_import_ignored for item in experiment_imports
+        ),
+        "forwarding_wrappers": sum(
+            f"{item['path']}:{item['line']}:{item['name']}" in forwarding_ignored
+            for item in forwarding_wrappers
+        ),
+        "same_name_contracts": same_name_removed,
+        "unreferenced_top_level_functions": unreferenced_removed,
     }
     cli_without_bootstrap = [
         item for item in cli_without_bootstrap if item["path"] not in cli_ignored
@@ -538,31 +625,14 @@ def main(argv: list[str] | None = None) -> int:
         for item in generation_path_without_env
         if item["path"] not in generation_ignored
     ]
-
-    same_name_contracts = []
-    for name, records in sorted(functions_by_name.items()):
-        paths = {record["path"] for record in records}
-        if len(paths) < 2 or name in COMMON_NAMES:
-            continue
-        if name not in CONTRACT_SENSITIVE_NAMES and not any(
-            record["layer"] == "lib" for record in records
-        ):
-            continue
-        same_name_contracts.append({"name": name, "definitions": records})
-
-    unreferenced_functions = []
-    for name, records in sorted(functions_by_name.items()):
-        if name.startswith("__") or name.startswith("test_"):
-            continue
-        references = symbol_references.get(name, 0)
-        if references:
-            continue
-        for record in records:
-            if record["layer"] == "tests":
-                continue
-            unreferenced_functions.append(
-                {**record, "coarse_symbol_references": references}
-            )
+    experiment_imports = [
+        item for item in experiment_imports if item["path"] not in experiment_import_ignored
+    ]
+    forwarding_wrappers = [
+        item
+        for item in forwarding_wrappers
+        if f"{item['path']}:{item['line']}:{item['name']}" not in forwarding_ignored
+    ]
 
     experiment_imports.sort(key=lambda item: (item["path"], item["line"], item["module"]))
     forwarding_wrappers.sort(key=lambda item: (item["path"], item["line"], item["name"]))

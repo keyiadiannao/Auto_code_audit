@@ -23,6 +23,8 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import _audit_config
+
 DEFAULT_DOC_DIRS = [
     "{pkg}",
     "docs",
@@ -336,8 +338,8 @@ def main(argv: list[str] | None = None) -> int:
         help="repo root (default: script's repo)",
     )
     ap.add_argument("--package", default="src")
-    ap.add_argument("--doc-dirs", nargs="*", default=[])
-    ap.add_argument("--exclude", nargs="*", default=sorted(DEFAULT_EXCLUDE))
+    ap.add_argument("--doc-dirs", nargs="*", default=None)
+    ap.add_argument("--exclude", nargs="*", default=None)
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--ignore", type=Path, default=None)
     ap.add_argument("--no-doc-channel", action="store_true")
@@ -349,7 +351,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: package dir not found or escapes root: {pkg}", file=sys.stderr)
         return 2
 
-    exclude = set(args.exclude)
+    cfg = _audit_config.load_config(repo)
+    dead_cfg = cfg.get("deadcode", {})
+    exclude = set(
+        _audit_config.pick(args.exclude, dead_cfg, "exclude", sorted(DEFAULT_EXCLUDE))
+    )
+    doc_dir_templates = _audit_config.as_string_list(
+        dead_cfg.get("doc_dirs"), DEFAULT_DOC_DIRS
+    )
+    extra_doc_dirs = args.doc_dirs or []
     py_files = [
         path
         for path in pkg.rglob("*.py")
@@ -434,11 +444,11 @@ def main(argv: list[str] | None = None) -> int:
     docs: set[Path] = set()
     if not args.no_doc_channel:
         doc_dirs = []
-        for template in DEFAULT_DOC_DIRS:
+        for template in doc_dir_templates:
             candidate = (repo / template.format(pkg=args.package)).resolve()
             if candidate.is_dir():
                 doc_dirs.append(candidate)
-        for extra in args.doc_dirs:
+        for extra in extra_doc_dirs:
             candidate = (repo / extra).resolve()
             if candidate.is_dir():
                 doc_dirs.append(candidate)
@@ -521,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     payload = {
         "scanner": "deadcode",
+        "schema_version": 1,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "package": args.package,
         "document_channel": not args.no_doc_channel,

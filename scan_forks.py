@@ -45,7 +45,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from scan_capabilities import _signature_shape
+from scan_deadcode import _analyze_source, _matches_module, _module_name
 from scan_duplicates import _Normalize, load_ignore, _without_docstring
+
+import _audit_config
 
 PY_SUBDIRS = (
     "lib",
@@ -244,6 +247,29 @@ def _record_dict(record: CallableRecord) -> dict:
     }
 
 
+def _import_evidence(
+    a_path: str,
+    b_path: str,
+    imports_by_file: dict[str, set[str]],
+    module_by_file: dict[str, str],
+) -> dict:
+    """Whether each side statically imports the other's module.
+
+    A fork whose sides already import each other is a live coupling, not an
+    inert copy: consolidation would touch both call graphs.  Reverse-imports
+    (neither side imports the other) flag copies that diverged in isolation.
+    """
+    a_imports_b = any(
+        _matches_module(imp, module_by_file[b_path])
+        for imp in imports_by_file.get(a_path, ())
+    )
+    b_imports_a = any(
+        _matches_module(imp, module_by_file[a_path])
+        for imp in imports_by_file.get(b_path, ())
+    )
+    return {"a_imports_b": a_imports_b, "b_imports_a": b_imports_a}
+
+
 def _write_json(path: Path | None, payload: dict) -> None:
     if path is None:
         return
@@ -263,23 +289,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--subdirs",
         nargs="*",
-        default=list(PY_SUBDIRS),
+        default=None,
         help="package subdirs to index (default: all except tests)",
     )
     ap.add_argument("--include-tests", action="store_true")
-    ap.add_argument("--threshold", type=float, default=0.75)
-    ap.add_argument("--min-lines", type=int, default=40)
+    ap.add_argument("--threshold", type=float, default=None)
+    ap.add_argument("--min-lines", type=int, default=None)
     ap.add_argument(
         "--small-floor",
         type=int,
-        default=8,
+        default=None,
         help="small-function channel lower bound on callable lines "
         "(blind spot C: sub-min-lines helpers with near-identical bodies)",
     )
     ap.add_argument(
         "--small-threshold",
         type=float,
-        default=0.9,
+        default=None,
         help="similarity threshold for the small-function channel (stricter "
         "than the main channel: short token sequences match easily)",
     )
@@ -294,26 +320,37 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--top", type=int, default=40, help="max fork pairs to print")
     args = ap.parse_args(argv)
 
-    if not 0.0 <= args.threshold <= 1.0:
+    repo = args.root.resolve()
+    pkg = (repo / args.package).resolve()
+    if not pkg.is_dir() or pkg != repo / args.package:
+        print(f"error: package dir not found or escapes root: {pkg}", file=sys.stderr)
+        return 2
+
+    cfg = _audit_config.load_config(repo)
+    forks_cfg = cfg.get("forks", {})
+    subdirs = _audit_config.pick(args.subdirs, cfg, "subdirs", list(PY_SUBDIRS))
+    threshold = _audit_config.pick(args.threshold, forks_cfg, "threshold", 0.75)
+    min_lines = _audit_config.pick(args.min_lines, forks_cfg, "min_lines", 40)
+    small_floor = _audit_config.pick(args.small_floor, forks_cfg, "small_floor", 8)
+    small_threshold = _audit_config.pick(
+        args.small_threshold, forks_cfg, "small_threshold", 0.9
+    )
+    include_tests = args.include_tests or bool(forks_cfg.get("include_tests", False))
+
+    if not 0.0 <= threshold <= 1.0:
         print("error: --threshold must be in [0, 1]", file=sys.stderr)
         return 2
-    if args.min_lines < 1:
+    if min_lines < 1:
         print("error: --min-lines must be positive", file=sys.stderr)
         return 2
-    if not (1 <= args.small_floor < args.min_lines):
+    if not (1 <= small_floor < min_lines):
         print(
             "error: --small-floor must satisfy 1 <= small-floor < min-lines",
             file=sys.stderr,
         )
         return 2
-    if not 0.0 <= args.small_threshold <= 1.0:
+    if not 0.0 <= small_threshold <= 1.0:
         print("error: --small-threshold must be in [0, 1]", file=sys.stderr)
-        return 2
-
-    repo = args.root.resolve()
-    pkg = (repo / args.package).resolve()
-    if not pkg.is_dir() or pkg != repo / args.package:
-        print(f"error: package dir not found or escapes root: {pkg}", file=sys.stderr)
         return 2
 
     rel = None
@@ -327,12 +364,14 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-    subdirs = list(args.subdirs)
-    if args.include_tests and "tests" not in subdirs:
+    subdirs = list(subdirs)
+    if include_tests and "tests" not in subdirs:
         subdirs.append("tests")
 
     records: list[CallableRecord] = []
     parse_failures: list[dict] = []
+    imports_by_file: dict[str, set[str]] = {}
+    module_by_file: dict[str, str] = {}
     for sub in subdirs:
         subdir = pkg / sub
         if not subdir.is_dir():
@@ -349,6 +388,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 continue
             rel_path = path.relative_to(pkg).as_posix()
+            module_by_file[rel_path] = _module_name(path, pkg)
+            imports_by_file[rel_path] = _analyze_source(path, pkg)[0]
             records.extend(
                 CallableRecord(
                     path=rel_path,
@@ -367,7 +408,7 @@ def main(argv: list[str] | None = None) -> int:
                 for item in extracted
             )
 
-    candidate_pairs = _candidate_pairs(records, args.min_lines)
+    candidate_pairs = _candidate_pairs(records, min_lines)
 
     ignore = load_ignore(args.ignore)
     ignored_keys = {
@@ -380,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     ignored_pairs: list[dict] = []
     for left, right in sorted(candidate_pairs):
         a, b = records[left], records[right]
-        analysis = _analyze_pair(a, b, args.threshold)
+        analysis = _analyze_pair(a, b, threshold)
         if analysis is None:
             continue
         left_ids = _unique_identifiers(a)
@@ -405,18 +446,19 @@ def main(argv: list[str] | None = None) -> int:
             "right_only_identifiers": right_only,
             "left": _record_dict(a),
             "right": _record_dict(b),
+            **_import_evidence(a.path, b.path, imports_by_file, module_by_file),
         }
         if rel is not None and a.path != rel and b.path != rel:
             continue
         pairs.append(record)
     pairs.sort(key=lambda item: (-item["similarity"], item["key"]))
 
-    small_candidates = _candidate_pairs_small(records, args.small_floor, args.min_lines)
+    small_candidates = _candidate_pairs_small(records, small_floor, min_lines)
     small_pairs: list[dict] = []
     small_ignored: list[dict] = []
     for left, right in sorted(small_candidates):
         a, b = records[left], records[right]
-        analysis = _analyze_pair(a, b, args.small_threshold)
+        analysis = _analyze_pair(a, b, small_threshold)
         if analysis is None:
             continue
         pair_key = "::".join(sorted((a.key, b.key)))
@@ -442,6 +484,7 @@ def main(argv: list[str] | None = None) -> int:
             "right_only_identifiers": sorted(set(right_ids) - set(left_ids))[:12],
             "left": _record_dict(a),
             "right": _record_dict(b),
+            **_import_evidence(a.path, b.path, imports_by_file, module_by_file),
         }
         if rel is not None and a.path != rel and b.path != rel:
             continue
@@ -458,14 +501,15 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = {
         "scanner": "forks",
+        "schema_version": 1,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "package": args.package,
-        "threshold": args.threshold,
-        "min_lines": args.min_lines,
+        "threshold": threshold,
+        "min_lines": min_lines,
         "file": rel,
         "functions_indexed": len(records),
         "functions_over_min_lines": sum(
-            1 for record in records if record.nlines >= args.min_lines
+            1 for record in records if record.nlines >= min_lines
         ),
         "tagged": tagged,
         "untagged": len(records) - tagged,
@@ -476,8 +520,8 @@ def main(argv: list[str] | None = None) -> int:
         "ignored_pairs": ignored_pairs,
         "pairs": pairs,
         "small_channel": {
-            "floor": args.small_floor,
-            "threshold": args.small_threshold,
+            "floor": small_floor,
+            "threshold": small_threshold,
             "candidate_pairs": len(small_candidates),
             "pairs": len(small_pairs),
         },
@@ -497,11 +541,18 @@ def main(argv: list[str] | None = None) -> int:
         f"small={len(small_pairs)} "
         f"({small_kind_counts['fork']} fork, {small_kind_counts['near_duplicate']} near_dup)"
     )
+    def _import_mark(item: dict) -> str:
+        if item.get("a_imports_b"):
+            return " imports->right"
+        if item.get("b_imports_a"):
+            return " imports->left"
+        return " no-imports"
+
     for item in pairs[: args.top]:
         a, b = item["left"], item["right"]
         sig = "sig=yes" if item["signature_match"] else "sig=no"
         print(
-            f"=== [{item['similarity']:.3f} {item['kind']}] "
+            f"=== [{item['similarity']:.3f} {item['kind']}{_import_mark(item)}] "
             f"{a['path']}:{a['qualname']} ({a['nlines']} lines, L{a['lineno']}) <-> "
             f"{b['path']}:{b['qualname']} ({b['nlines']} lines, L{b['lineno']}) {sig}"
         )
@@ -516,7 +567,7 @@ def main(argv: list[str] | None = None) -> int:
         a, b = item["left"], item["right"]
         sig = "sig=yes" if item["signature_match"] else "sig=no"
         print(
-            f"=== [SMALL {item['similarity']:.3f} {item['kind']}] "
+            f"=== [SMALL {item['similarity']:.3f} {item['kind']}{_import_mark(item)}] "
             f"{a['path']}:{a['qualname']} ({a['nlines']} lines, L{a['lineno']}) <-> "
             f"{b['path']}:{b['qualname']} ({b['nlines']} lines, L{b['lineno']}) {sig}"
         )

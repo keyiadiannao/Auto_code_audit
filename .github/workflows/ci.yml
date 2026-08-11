@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pytest
+        run: python -m pip install --quiet pytest
+      - name: Run test suite
+        run: python -m pytest tests -q
+      - name: Entrypoint --help smoke
+        run: python scan_cli_smoke.py
+      - name: End-to-end self-audit (dogfood)
+        run: |
+          rm -rf dogfood
+          mkdir -p dogfood/pkg/lib
+          touch dogfood/pkg/lib/__init__.py
+          printf 'def dead_a():\n    return 1\n' > dogfood/pkg/lib/unused.py
+          python run_all.py --root dogfood --package pkg \
+            --json dogfood/audit.json --markdown dogfood/audit.md --no-doc-channel
+          printf 'def dead_b():\n    return 1\n' > dogfood/pkg/lib/unused2.py
+          python run_all.py --root dogfood --package pkg \
+            --json dogfood/audit.json --markdown dogfood/audit.md --no-doc-channel
+          grep -q "## Changes since last run" dogfood/audit.md
+      - name: Whitespace hygiene
+        run: git diff --check
