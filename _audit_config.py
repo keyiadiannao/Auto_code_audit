@@ -31,18 +31,44 @@ Supported schema (all keys optional):
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 CONFIG_FILENAME = "audit.config.json"
 
+_warned_invalid: set[Path] = set()
+
+
+def _warn_once(path: Path, message: str) -> None:
+    if path in _warned_invalid:
+        return
+    _warned_invalid.add(path)
+    print(f"warning: {message}", file=sys.stderr)
+
 
 def load_config(root: Path) -> dict:
-    """Return project tuning for ``root``; {} when absent or broken."""
+    """Return project tuning for ``root``; {} when absent or broken.
+
+    A missing file is normal (the config is optional).  A file that exists
+    but cannot be parsed warns once on stderr per path, then falls back to
+    module defaults — so a typo does not silently change scanner behavior.
+    """
+    path = root / CONFIG_FILENAME
     try:
-        data = json.loads((root / CONFIG_FILENAME).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
         return {}
-    return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError) as exc:
+        _warn_once(
+            path,
+            f"{path} is unreadable or invalid JSON "
+            f"({type(exc).__name__}); using module defaults",
+        )
+        return {}
+    if not isinstance(data, dict):
+        _warn_once(path, f"{path} is not a JSON object; using module defaults")
+        return {}
+    return data
 
 
 def pick(explicit, config_section, key, default):

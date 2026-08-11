@@ -1452,3 +1452,129 @@ def test_adjudicate_quit_early_writes_nothing_extra(
     assert not verdicts.exists()
     assert not ignore.exists()
     assert not lessons.exists()
+
+
+def test_run_all_default_state_paths_follow_root(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """State defaults derive from --root, not from the toolkit directory."""
+    _write(mini_repo / "pkg" / "lib" / "helper.py", "def helper(x):\n    return x\n")
+    assert (
+        run_all.main(
+            [
+                "--root",
+                str(mini_repo),
+                "--package",
+                "pkg",
+                "--no-doc-channel",
+            ]
+        )
+        == 0
+    )
+    assert (mini_repo / "reports" / "latest.json").is_file()
+    assert (mini_repo / "reports" / "latest.md").is_file()
+
+
+def test_stale_ignore_entries_flags_gone_targets(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    _write(mini_repo / "pkg" / "a.py", "MY_FLAG = 1\ndef compute():\n    pass\n")
+    registry = {
+        "deadcode": [
+            {"path": "pkg/a.py", "reason": "ok"},
+            {"path": "pkg/gone.py", "reason": "deleted"},
+        ],
+        "contracts": {
+            "forwarding_wrappers": [
+                {"key": "pkg/a.py:2:compute", "reason": "ok"},
+                {"key": "pkg/a.py:2:missing", "reason": "renamed"},
+                {"key": "pkg/gone.py:1:compute", "reason": "gone file"},
+            ],
+            "env_written_not_read": [
+                {"key": "pkg/a.py:OTHER_VAR", "reason": "never read"},
+            ],
+            "unreferenced_top_level_functions": [
+                {"key": "pkg/a.py:9", "reason": "line past EOF"},
+            ],
+        },
+        "capabilities": [
+            {"key": "pkg/a.py:compute", "reason": "ok"},
+            {"key": "pkg/a.py:nope", "reason": "renamed"},
+        ],
+        "forks": [
+            {"key": "pkg/a.py:compute::pkg/gone.py:other", "reason": "pair"},
+        ],
+        "hardcoded": [
+            {"path": "pkg/a.py", "pattern": "x", "reason": "ok"},
+            {"path": "pkg/x.py", "pattern": "x", "reason": "gone"},
+        ],
+    }
+    stale = run_all._stale_ignore_entries(registry, mini_repo)
+    flagged = {(section, key) for section, key, _ in stale}
+    assert flagged == {
+        ("deadcode", "pkg/gone.py"),
+        ("contracts/forwarding_wrappers", "pkg/a.py:2:missing"),
+        ("contracts/forwarding_wrappers", "pkg/gone.py:1:compute"),
+        ("contracts/env_written_not_read", "pkg/a.py:OTHER_VAR"),
+        ("contracts/unreferenced_top_level_functions", "pkg/a.py:9"),
+        ("capabilities", "pkg/a.py:nope"),
+        ("forks", "pkg/a.py:compute::pkg/gone.py:other"),
+        ("hardcoded", "pkg/x.py"),
+    }
+    # Live targets are not flagged.
+    assert all(section != "deadcode" for section, key, _ in stale if key == "pkg/a.py")
+    assert not any(
+        section == "capabilities" and key == "pkg/a.py:compute"
+        for section, key, _ in stale
+    )
+
+
+def test_run_all_stale_check_end_to_end(
+    mini_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    _write(mini_repo / "pkg" / "lib" / "helper.py", "def helper(x):\n    return x\n")
+    ignore = tmp_path / "ignore.json"
+    ignore.write_text(
+        json.dumps({"deadcode": [{"path": "pkg/gone.py", "reason": "deleted"}]}),
+        encoding="utf-8",
+    )
+    assert (
+        run_all.main(
+            [
+                "--root",
+                str(mini_repo),
+                "--package",
+                "pkg",
+                "--ignore",
+                str(ignore),
+                "--stale-check",
+                "--no-doc-channel",
+            ]
+        )
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert "STALE_CHECK" in out
+    assert "file missing: pkg/gone.py" in out
+
+
+def test_audit_config_warns_once_on_invalid_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    import _audit_config
+
+    broken = tmp_path / "broken"
+    _write(broken / _audit_config.CONFIG_FILENAME, "{not json")
+    assert _audit_config.load_config(broken) == {}
+    assert _audit_config.load_config(broken) == {}
+    warnings = capsys.readouterr().err
+    assert warnings.count("warning:") == 1
+
+    not_object = tmp_path / "list"
+    _write(not_object / _audit_config.CONFIG_FILENAME, "[1, 2]")
+    assert _audit_config.load_config(not_object) == {}
+    assert "not a JSON object" in capsys.readouterr().err
+
+    missing = tmp_path / "missing"
+    assert _audit_config.load_config(missing) == {}
+    assert capsys.readouterr().err == ""

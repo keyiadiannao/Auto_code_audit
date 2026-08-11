@@ -257,6 +257,80 @@ def _candidate_signatures(
     return sigs
 
 
+def _stale_ignore_entries(
+    registry: dict, root: Path
+) -> list[tuple[str, str, str]]:
+    """Best-effort check that suppression entries still target live code.
+
+    Returns (section, key, reason) for entries whose referenced file is gone,
+    whose referenced line is gone, or whose expected symbol no longer appears
+    where the entry points.  Entry shapes without a path (duplicate cluster
+    ids) are skipped as unverifiable.  Relative paths resolve against ``root``.
+    """
+    stale: list[tuple[str, str, str]] = []
+
+    def key_of(entry: dict) -> str:
+        return str(entry.get("key") or entry.get("path") or entry.get("id") or "")
+
+    def check(section: str, entry: dict, path: str | None, line: int | None,
+              symbol: str | None) -> None:
+        if path is None:
+            return
+        target = root / path
+        if not target.is_file():
+            stale.append((section, key_of(entry), f"file missing: {path}"))
+            return
+        if line is not None:
+            lines = target.read_text(encoding="utf-8", errors="replace").splitlines()
+            if line > len(lines):
+                stale.append((section, key_of(entry), f"line {line} gone"))
+            elif symbol is not None and symbol not in lines[line - 1]:
+                stale.append(
+                    (section, key_of(entry),
+                     f"line {line} no longer defines `{symbol}`")
+                )
+        elif symbol is not None:
+            text = target.read_text(encoding="utf-8", errors="replace")
+            if symbol not in text:
+                stale.append((section, key_of(entry), f"symbol `{symbol}` gone"))
+
+    def from_key(key: str) -> tuple[str | None, int | None, str | None]:
+        parts = key.split(":")
+        path = parts[0]
+        if len(parts) >= 2 and parts[1].isdigit():
+            line = int(parts[1])
+            symbol = parts[2] if len(parts) >= 3 else None
+        elif len(parts) >= 2:
+            line = None
+            symbol = parts[1]  # env var or capability qualname
+        else:
+            line = None
+            symbol = None
+        return path, line, symbol
+
+    for entry in registry.get("deadcode", []):
+        check("deadcode", entry, entry.get("path"), None, None)
+    # duplicates: cluster ids are not path-addressable, skipped
+    for entry in registry.get("forks", []):
+        key = entry.get("key", "")
+        for half in key.split("::"):
+            if half:
+                path, _, _ = from_key(half)
+                check("forks", entry, path, None, None)
+    for channel, entries in registry.get("contracts", {}).items():
+        for entry in entries:
+            path, line, symbol = from_key(entry.get("key", ""))
+            check(f"contracts/{channel}", entry, path, line, symbol)
+    for entry in registry.get("capabilities", []):
+        path, _, symbol = from_key(entry.get("key", ""))
+        check("capabilities", entry, path, None, symbol)
+    for entry in registry.get("hardcoded", []):
+        check("hardcoded", entry, entry.get("path"), None, None)
+    for entry in registry.get("style", []):
+        check("style", entry, entry.get("path"), None, None)
+    return stale
+
+
 def _diff_previous(
     previous: dict | None, payloads: dict, package: str
 ) -> dict | None:
@@ -746,16 +820,21 @@ def main(argv: list[str] | None = None) -> int:
         "--root",
         type=Path,
         default=Path.cwd(),
-        help="repo root (default: script's repo)",
+        help="repo root (default: current directory)",
     )
     ap.add_argument("--package", default="src")
     ap.add_argument(
-        "--json", type=Path, default=SKILL_DIR / "reports" / "latest.json"
+        "--json", type=Path, default=None,
+        help="report JSON path (default: <root>/reports/latest.json)",
     )
     ap.add_argument(
-        "--markdown", type=Path, default=SKILL_DIR / "reports" / "latest.md"
+        "--markdown", type=Path, default=None,
+        help="report markdown path (default: <root>/reports/latest.md)",
     )
-    ap.add_argument("--ignore", type=Path, default=SKILL_DIR / "ignore.json")
+    ap.add_argument(
+        "--ignore", type=Path, default=None,
+        help="suppression registry (default: <root>/ignore.json)",
+    )
     ap.add_argument("--no-doc-channel", action="store_true")
     ap.add_argument("--duplicate-threshold", type=float, default=None)
     ap.add_argument("--duplicate-min-chars", type=int, default=None)
@@ -764,6 +843,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="run --help smoke on every scanner entrypoint first; abort "
              "with rc=2 when any fails",
+    )
+    ap.add_argument(
+        "--stale-check",
+        action="store_true",
+        help="report ignore.json entries that no longer target live code "
+             "(file, line, or symbol gone); does not modify the registry",
     )
     args = ap.parse_args(argv)
 
@@ -775,6 +860,12 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     args.root = args.root.resolve()
+    if args.json is None:
+        args.json = args.root / "reports" / "latest.json"
+    if args.markdown is None:
+        args.markdown = args.root / "reports" / "latest.md"
+    if args.ignore is None:
+        args.ignore = args.root / "ignore.json"
 
     cfg = _audit_config.load_config(args.root)
     dup_cfg = cfg.get("duplicates", {})
@@ -896,6 +987,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(f"  json: {args.json}")
     print(f"  markdown: {args.markdown}")
+    if args.stale_check:
+        registry: dict = {}
+        if args.ignore.is_file():
+            try:
+                registry = json.loads(args.ignore.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                registry = {}
+        stale = _stale_ignore_entries(registry, args.root)
+        if stale:
+            print(f"STALE_CHECK ignore={args.ignore} stale={len(stale)}")
+            for section, key, reason in stale:
+                print(f"  [{section}] `{key}`: {reason}")
+        else:
+            print(f"STALE_CHECK ignore={args.ignore} stale=0")
     return 0
 
 

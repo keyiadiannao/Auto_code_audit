@@ -60,11 +60,13 @@ python run_all.py --package src
 ```
 
 Runs all scanners against the package under the current directory (override
-with `--root <repo>` / `--package <name>`) and writes:
+with `--root <repo>` / `--package <name>`). State paths default under the
+repo root — not the toolkit directory — so every artifact of a run lands in
+the project being audited:
 
 ```text
-reports/latest.json
-reports/latest.md
+<root>/reports/latest.json
+<root>/reports/latest.md
 ```
 
 Useful options:
@@ -74,6 +76,8 @@ Useful options:
 - `--ignore ignore.json` — approved suppression registry (Layer-2 output)
 - `--cli-smoke` — run `--help` on every scanner entrypoint first; abort the
   audit with a non-zero exit if any regressed
+- `--stale-check` — report `ignore.json` entries that no longer target live
+  code (file, line, or symbol gone); read-only, never edits the registry
 - run any scanner directly for a scoped investigation
 
 Consecutive runs against the same `--json` path diff against the previous
@@ -144,8 +148,9 @@ git diff --check
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request across Python
-3.10–3.13: the test suite, an entrypoint `--help` smoke, an end-to-end
-dogfood self-audit (including the report-diff path), and a whitespace check.
+3.10–3.13 on Ubuntu and Windows: the test suite, an entrypoint `--help`
+smoke, an end-to-end dogfood self-audit (including the report-diff path),
+and a whitespace check.
 
 ## Project layout
 

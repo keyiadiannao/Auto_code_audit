@@ -7,10 +7,11 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +25,7 @@ jobs:
       - name: Entrypoint --help smoke
         run: python scan_cli_smoke.py
       - name: End-to-end self-audit (dogfood)
+        shell: bash
         run: |
           rm -rf dogfood
           mkdir -p dogfood/pkg/lib
