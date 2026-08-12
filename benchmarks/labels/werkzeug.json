@@ -470,6 +470,42 @@
       "target_id": "region/d27c69508655",
       "label": "false_positive",
       "reason": "self-pair artifact: checking_start_response matched against itself"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a99108ae2f5c",
+      "label": "false_positive",
+      "reason": "cache_control/content_security_policy/report_only are the pervasive header-property idiom (on_update closure + from_header); deliberate pattern, not accidental copy"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/e379a918c44f",
+      "label": "false_positive",
+      "reason": "_parse_etags/_parse_if_range_header/_parse_range_header are the parallel deprecation-shim family (warn + delegate to X.from_header); deliberate release pattern"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/106e6dae78a6",
+      "label": "true_finding",
+      "reason": "mimetype_params is a verbatim copy from Response into EnvironBuilder (on_update + parse_options_header + CallbackDict), versionadded 0.5 vs 0.14; already a duplicates true_finding"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/33ded048685c",
+      "label": "true_finding",
+      "reason": "Request/Response content_md5 are a verbatim deprecation-wrapper pair; already a duplicates true_finding"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a40881fa3733",
+      "label": "false_positive",
+      "reason": "Headers.__or__ re-implements the inherited MultiDict.__or__ body with type-narrowed signature; deliberate typing override, not copy-paste drift"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c1139d4e335e",
+      "label": "false_positive",
+      "reason": "Headers.__ior__ re-implements the inherited MultiDict.__ior__ body with type-narrowed signature; deliberate typing override, not copy-paste drift"
     }
   ]
 }

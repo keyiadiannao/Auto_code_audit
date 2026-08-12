@@ -19,16 +19,25 @@ when:
    (e.g. a CI result file), or ``--no-tests`` to declare that behavioral
    verification is delegated outside this gate (never machine-checked);
 5. ``--test-command`` exits non-zero or ``--test-result`` reports a failure;
-6. ``--test-result`` is unreadable or not a valid artifact.
+6. ``--test-result`` is unreadable, not a valid artifact, or its ``git_head``
+   does not bind to the post-fix report's git head (provenance.git.head);
+7. a verdict artifact is protocol-invalid — a file the Layer 2 validator
+   would reject cannot be skipped out of the gate's input, it rejects the
+   gate (fail closed, not fail open);
+8. ``--previous`` was given but the pre-fix report is not comparable to the
+   post-fix report (schema / package / profile / scanner-set mismatch) —
+   the new-risk check would be meaningless.
 
 Test-gate vocabulary in the stats: ``passed`` (internal run), ``failed``
 (internal run rejected), ``external_passed`` / ``external_failed`` /
 ``external_invalid`` (artifact consumed), ``external_unverified``
 (``--no-tests``: delegated, not machine-checked), ``skipped`` (declared via
 ``--no-tests`` in older callers), ``not_run``.  ``fully_verified`` is true
-only when the gate passes and the test evidence is machine-checked
-(``passed`` or ``external_passed``); a ``--no-tests`` acceptance is never
-``fully_verified``.
+only when the gate passes, the test evidence is machine-checked (``passed``
+or ``external_passed``), **and** a comparable pre-patch report was provided
+(``--previous``) so the gate can prove the patch introduced no new blocking
+candidate; a ``--no-tests`` acceptance is never ``fully_verified``, and
+neither is an acceptance without a comparable baseline.
 
 Verdict vocabulary: the gate speaks the skill-first protocol
 (``disposition: true_finding`` + ``recommended_action``) *and* the legacy
@@ -37,11 +46,11 @@ accepted as the legacy importer).  ``--verdicts`` accepts either an
 aggregated ``verdicts.json`` or a directory of per-case protocol verdict
 files (SKILL Phase 2); per-case files run the shared full protocol
 validator (``_verdict_files.load_protocol_verdict``) — a verdict the Layer 2
-validator would reject cannot enter this gate.  Stale-evidence binding uses
-the canonical ``finding_evidence_hash`` (run_all.finding_evidence_hash);
-per-case protocol files additionally carry ``case_hash`` (the protocol case
-digest), which binds commit and snippets and is *not* used for stale
-detection.
+validator would reject *rejects this gate* (see check 7).  Stale-evidence
+binding uses the canonical ``finding_evidence_hash``
+(run_all.finding_evidence_hash); per-case protocol files additionally carry
+``case_hash`` (the protocol case digest), which binds commit and snippets
+and is *not* used for stale detection.
 
 Exit code 0 means acceptance, 1 means rejection with the failing checks on
 stderr, 2 means usage or I/O error.
@@ -74,13 +83,18 @@ RISK_PRIORITIES = {"high", "medium"}
 ARTIFACT_STATUSES = {"passed", "failed"}
 
 
-def _external_test_gate(path: Path) -> tuple[str, str]:
+def _external_test_gate(path: Path, report_head: str | None) -> tuple[str, str]:
     """Read a machine-readable external test artifact and map it to a
     test-gate value.
 
-    The artifact is a JSON object with a required ``status`` of ``passed`` or
-    ``failed`` and optional provenance fields (``tool``, ``summary``,
-    ``exit_code``, ``duration_seconds``).  Returns ``(gate, reason)`` where
+    The artifact is a JSON object with strong provenance requirements, so a
+    hand-written ``{"status": "passed"}`` cannot be full verification
+    evidence.  Required fields: ``status`` (``passed`` or ``failed``),
+    ``exit_code`` (int, consistent with ``status``), ``git_head`` (40-char
+    hex commit), and a runner identity via ``tool`` or ``command`` (non-empty
+    string).  The artifact's ``git_head`` must equal the post-fix report's
+    ``provenance.git.head`` — the test evidence must come from the same
+    commit the report was scanned at.  Returns ``(gate, reason)`` where
     ``gate`` is ``external_passed``, ``external_failed``, or
     ``external_invalid``; ``reason`` is a short diagnostic for the invalid
     case.
@@ -97,6 +111,39 @@ def _external_test_gate(path: Path) -> tuple[str, str]:
             "external_invalid",
             f"artifact status must be one of {sorted(ARTIFACT_STATUSES)}: "
             f"{status!r}",
+        )
+    exit_code = payload.get("exit_code")
+    if not isinstance(exit_code, int) or isinstance(exit_code, bool):
+        return "external_invalid", "artifact exit_code must be an integer"
+    if (status == "passed") != (exit_code == 0):
+        return (
+            "external_invalid",
+            f"artifact status {status!r} contradicts exit_code {exit_code}",
+        )
+    git_head = payload.get("git_head")
+    if not isinstance(git_head, str) or len(git_head) != 40 or any(
+        char not in "0123456789abcdef" for char in git_head
+    ):
+        return "external_invalid", "artifact git_head must be a 40-char hex commit"
+    if report_head is None:
+        return (
+            "external_invalid",
+            "artifact git_head cannot be bound: the report carries no git "
+            "provenance (not a git checkout)",
+        )
+    if git_head != report_head:
+        return (
+            "external_invalid",
+            f"artifact git_head {git_head[:12]} != report git head "
+            f"{report_head[:12]}",
+        )
+    if not any(
+        isinstance(payload.get(key), str) and payload[key]
+        for key in ("tool", "command")
+    ):
+        return (
+            "external_invalid",
+            "artifact must name the runner via 'tool' or 'command'",
         )
     return f"external_{status}", ""
 
@@ -135,12 +182,13 @@ def _load_verdicts(path: Path) -> tuple[list[dict], list[str]]:
     ``_verdict_files.load_protocol_verdict``: schema-version check, the
     filename -> evidence_hash -> case_hash binding, the bridge fields, and
     ``validate_verdict`` with its cross-field rules.  A file that fails any
-    step is skipped with a warning, so a verdict the Layer 2 validator would
-    reject can never reach the acceptance gate.  Returns ``(entries,
-    warnings)``.
+    step is *reported*, not skipped: the acceptance gate fails closed, so a
+    verdict artifact the Layer 2 validator would reject can never silently
+    disappear from the gate's input.  Returns ``(entries, invalid)`` where
+    ``invalid`` lists the per-file diagnostics that must reject the gate.
     """
     entries: list[dict] = []
-    warnings: list[str] = []
+    invalid: list[str] = []
     if path.is_dir():
         from _verdict_files import load_protocol_verdict
 
@@ -148,19 +196,21 @@ def _load_verdicts(path: Path) -> tuple[list[dict], list[str]]:
             try:
                 entries.append(load_protocol_verdict(verdict_path))
             except (OSError, ValueError) as exc:
-                warnings.append(f"{verdict_path.name}: {exc}")
+                invalid.append(f"{verdict_path.name}: {exc}")
                 continue
-        return entries, warnings
+        return entries, invalid
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("verdicts file must contain a JSON object")
     verdicts_list = payload.get("verdicts")
     if not isinstance(verdicts_list, list):
         raise ValueError("verdicts file must contain a 'verdicts' list")
-    for verdict in verdicts_list:
+    for index, verdict in enumerate(verdicts_list):
         if isinstance(verdict, dict):
             entries.append(verdict)
-    return entries, warnings
+        else:
+            invalid.append(f"verdict entry #{index} is not a JSON object")
+    return entries, invalid
 
 
 def _candidates(report: dict) -> dict[tuple[str, str], dict]:
@@ -225,7 +275,14 @@ def _check_report(
     previous: dict | None,
     scope: str | None,
     test_gate: str = "not_run",
+    previous_comparable: bool | None = None,
+    verdict_invalid: list[str] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
+    """Evaluate the gate; ``previous_comparable`` is the run_all comparator's
+    verdict (None when no ``--previous`` was given; an incompatible baseline
+    rejects the gate because its new-risk check would be meaningless) and
+    ``verdict_invalid`` are protocol-invalid verdict artifacts, which reject
+    the gate fail-closed instead of being dropped from the input."""
     failures: list[str] = []
     stats: dict[str, Any] = {
         "code_action_verdicts": 0,
@@ -233,6 +290,13 @@ def _check_report(
         "test_gate": test_gate,
         "fully_verified": False,
     }
+    for message in verdict_invalid or []:
+        failures.append(f"invalid verdict artifact: {message}")
+    if previous is not None and previous_comparable is not True:
+        failures.append(
+            "previous report is not comparable to the post-fix report; "
+            "the new-risk check cannot be trusted"
+        )
     candidates = _candidates(report)
     previous_candidates: set[tuple[str, str]] = (
         set(_candidates(previous)) if previous is not None else set()
@@ -274,7 +338,7 @@ def _check_report(
             "pass --test-command, --test-result, or --no-tests"
         )
 
-    if previous is not None:
+    if previous is not None and previous_comparable is not False:
         for key, detail in candidates.items():
             if key in previous_candidates:
                 continue
@@ -287,7 +351,9 @@ def _check_report(
                     f"{key[0]} {key[1]} (not in previous report)"
                 )
     stats["fully_verified"] = (
-        not failures and test_gate in ("passed", "external_passed")
+        not failures
+        and test_gate in ("passed", "external_passed")
+        and previous_comparable is True
     )
     return failures, stats
 
@@ -325,8 +391,10 @@ def main(argv: list[str] | None = None) -> int:
         "--test-result",
         type=Path,
         default=None,
-        help="machine-readable external test artifact (JSON with a required "
-        "'status' of 'passed' or 'failed'); machine-checked, unlike --no-tests",
+        help="machine-readable external test artifact (JSON with required "
+        "'status', 'exit_code', 'git_head', and 'tool'/'command'; the "
+        "artifact's git_head must equal the report's provenance.git.head); "
+        "machine-checked, unlike --no-tests",
     )
     ap.add_argument(
         "--no-tests",
@@ -357,23 +425,50 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"error: cannot read inputs: {exc}", file=sys.stderr)
         return 2
-    verdict_entries, warnings = verdicts
-    for warning in warnings:
-        print(f"warning: {warning}", file=sys.stderr)
+    verdict_entries, invalid_verdicts = verdicts
+    for message in invalid_verdicts:
+        print(f"warning: invalid verdict artifact: {message}", file=sys.stderr)
+
+    previous_comparable: bool | None = None
+    if previous is not None:
+        from run_all import DEFAULT_PROFILE, _diff_previous
+
+        comparison = _diff_previous(
+            previous,
+            report.get("scanners", {}),
+            report.get("package"),
+            (report.get("configuration") or {}).get("profile", DEFAULT_PROFILE),
+        )
+        previous_comparable = bool(comparison and comparison.get("comparable"))
+        if not previous_comparable:
+            print(
+                f"warning: previous report not comparable: "
+                f"{(comparison or {}).get('reason', 'unknown')}",
+                file=sys.stderr,
+            )
 
     artifact_reason = ""
     if args.test_command:
         result = subprocess.run(args.test_command, shell=True)
         test_gate = "passed" if result.returncode == 0 else "failed"
     elif args.test_result:
-        test_gate, artifact_reason = _external_test_gate(args.test_result)
+        report_head = (
+            (report.get("provenance") or {}).get("git") or {}
+        ).get("head")
+        test_gate, artifact_reason = _external_test_gate(args.test_result, report_head)
     elif args.no_tests:
         test_gate = "external_unverified"
     else:
         test_gate = "not_run"
 
     failures, stats = _check_report(
-        report, {"verdicts": verdict_entries}, previous, args.scope, test_gate
+        report,
+        {"verdicts": verdict_entries},
+        previous,
+        args.scope,
+        test_gate,
+        previous_comparable,
+        invalid_verdicts,
     )
     if artifact_reason:
         print(f"test artifact: {artifact_reason}", file=sys.stderr)
@@ -383,7 +478,7 @@ def main(argv: list[str] | None = None) -> int:
         args.json.write_text(
             json.dumps(
                 {
-                    "schema_version": 3,
+                    "schema_version": 4,
                     "passed": passed,
                     "failures": failures,
                     "stats": stats,

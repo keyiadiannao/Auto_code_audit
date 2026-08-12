@@ -981,9 +981,12 @@ def main(argv: list[str] | None = None) -> int:
     #     token-matches any other __init__ body (14/50 labelled FPs);
     #   - the region's parent function already references the canonical by
     #     name (3/50 labelled FPs): the inline block is not an orphaned copy,
-    #     the caller knows the helper exists.  Member records keep the
-    #     `canonical_referenced_in_parent` flag (now only emitted as False)
-    #     so the schema is stable if the filter is ever relaxed.
+    #     the caller knows the helper exists.  That filter is now span-aware:
+    #     only a region that *itself* calls the canonical is a call-site /
+    #     wrapper region and is suppressed.  A parent that calls the
+    #     canonical in one place and re-implements it inline elsewhere is a
+    #     partial-reuse drift signal and is reported — the member record's
+    #     `canonical_referenced_in_parent` flag is True for those matches.
     helper_reports: list[dict[str, Any]] = []
     helper_matches: list[tuple[int, int, float, bool]] = []
     helper_indices = [i for i, record in enumerate(records) if "helper" in record.channel]
@@ -1008,9 +1011,11 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             coverage = _coverage(region.tokens, fn.tokens, len(fn.tokens))
             if coverage >= helper_reuse_threshold:
-                if fn.name in region.parent_tokens:
+                if fn.name in region.calls:
                     continue
-                helper_matches.append((qi, fi, coverage, False))
+                helper_matches.append(
+                    (qi, fi, coverage, fn.name in region.parent_tokens)
+                )
     by_function: dict[int, list[tuple[int, float, bool]]] = defaultdict(list)
     for qi, fi, coverage, referenced in helper_matches:
         by_function[fi].append((qi, coverage, referenced))

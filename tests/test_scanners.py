@@ -2653,11 +2653,13 @@ def test_region_scan_helper_skips_constructor_boilerplate(
     assert helper == [], "constructor boilerplate must not match a helper"
 
 
-def test_region_scan_helper_skips_parent_referencing_canonical(
+def test_region_scan_helper_skips_region_containing_canonical_call(
     mini_repo: Path, tmp_path: Path
 ) -> None:
-    """A region whose parent already references the canonical by name is not
-    an orphaned copy (3/50 labelled FPs)."""
+    """A region that itself calls the canonical (``check(...)`` directly
+    adjacent to its validation statements) is a wrapper/supplementary check,
+    not an orphaned copy (3/50 labelled FPs) — the suppression is
+    span-aware, so it must not swallow the partial-reuse drift case either."""
     _write(
         mini_repo / "pkg" / "lib" / "helper.py",
         "def check(model, tensor):\n" + INLINE_VALIDATION,
@@ -2667,7 +2669,49 @@ def test_region_scan_helper_skips_parent_referencing_canonical(
         "def run(model, tensor, scale):\n"
         "    check(model, tensor)\n"
         + INLINE_VALIDATION
-        + "    return tensor.mul(scale)\n",
+        + "    if scale <= 0:\n"
+        '        raise ValueError("scale must be positive")\n'
+        "    if tuple(tensor.shape) != (2, 2):\n"
+        '        raise ValueError("unexpected shape")\n'
+        "    return tensor.mul(scale)\n",
+    )
+    output = tmp_path / "regions.json"
+    rc = scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    )
+    assert rc == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    # The api-free run (call + validation, 6 stmts) is a helper-channel
+    # region, so this suppresses at match time, not extraction time.
+    assert payload["regions_scanned"] >= 1
+    helper = [
+        item for item in payload["clusters"] if item["kind"] == "helper_not_reused"
+    ]
+    assert helper == [], "a region that calls the canonical is a wrapper, not a match"
+
+
+def test_region_scan_reports_partial_reuse_drift(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """A parent that calls the canonical helper in one place and then
+    re-implements the same contract inline elsewhere is the drift an
+    AI-maintained codebase produces — the inline region is reported and
+    flagged with ``canonical_referenced_in_parent``."""
+    _write(
+        mini_repo / "pkg" / "lib" / "helper.py",
+        "def check(model, tensor):\n" + INLINE_VALIDATION,
+    )
+    _write(
+        mini_repo / "pkg" / "experiments" / "a.py",
+        "def run(model, tensor, scale):\n"
+        "    check(model, tensor)\n"
+        "    model.eval()\n"
+        + INLINE_VALIDATION
+        + "    if scale <= 0:\n"
+        '        raise ValueError("scale must be positive")\n'
+        "    if tuple(tensor.shape) != (2, 2):\n"
+        '        raise ValueError("unexpected shape")\n'
+        "    return tensor.mul(scale)\n",
     )
     output = tmp_path / "regions.json"
     rc = scan_regions.main(
@@ -2678,7 +2722,13 @@ def test_region_scan_helper_skips_parent_referencing_canonical(
     helper = [
         item for item in payload["clusters"] if item["kind"] == "helper_not_reused"
     ]
-    assert helper == [], "a caller that references the canonical is not a match"
+    assert helper, "the inline drift copy must be reported"
+    cluster = helper[0]
+    assert cluster["canonical_symbol"] == "lib/helper.py:check"
+    member = cluster["members"][0]
+    assert member["path"] == "experiments/a.py"
+    assert member["qualname"] == "run"
+    assert member["canonical_referenced_in_parent"] is True
 
 
 def test_region_external_effects_parameter_mutation() -> None:

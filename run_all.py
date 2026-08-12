@@ -446,6 +446,8 @@ def _diff_previous(
         reason = f"package {previous.get('package')!r} != {package!r}"
     elif (previous.get("configuration") or {}).get("profile", DEFAULT_PROFILE) != profile:
         reason = "profile changed; candidate reports are not comparable"
+    elif set(previous.get("scanners", {})) != set(payloads):
+        reason = "scanner set changed; candidate reports are not comparable"
     if reason is not None:
         return {
             "comparable": False,

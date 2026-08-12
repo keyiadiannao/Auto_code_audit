@@ -734,6 +734,36 @@
       "target_id": "region/f906c244f1a0",
       "label": "false_positive",
       "reason": "xunit_setup_module_fixture family with unrelated token-coincident members"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/f910f60c590c",
+      "label": "false_positive",
+      "reason": "capfd/capfdbinary/capsys/capsysbinary/capteesys are the public @fixture API family; bodies are identical except the Capture class and tee flag, a deliberate parallel surface"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/e9d6d6192ad3",
+      "label": "false_positive",
+      "reason": "FDCapture/SysCapture snap are the deliberate text/bytes mirror pair in a structured inheritance hierarchy; the binary twins are verbatim but design-parallel, no drift bug"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/963ac0f1c4e8",
+      "label": "false_positive",
+      "reason": "xunit setup fixture registration family (class/function/module); same shape differing only in scope and name lookup, the corpus's canonical deliberate-parallel family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/4d40293005af",
+      "label": "true_finding",
+      "reason": "pytest_configure is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (excepthook vs unraisablehook wiring)"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/dfab0110b285",
+      "label": "true_finding",
+      "reason": "collect hook is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (collect_thread_exception vs collect_unraisable)"
     }
   ]
 }

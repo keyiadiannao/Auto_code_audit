@@ -188,33 +188,53 @@ packages: dead-`public`-`API` candidates, forwarding wrappers, unreferenced
 public functions, fork pairs that are intentional convenience wrappers,
 non-security digest hashes, every `duplicates` cluster emitted at the pinned
 commits, and the first region batch (all 21 shared/short clusters plus the 50
-highest-coverage `helper_not_reused` clusters). 407 of 602 candidates carry
-labels (the 195 unlabelled remainder are lower-coverage `regions` helper
-clusters and the unlabelled `twin_match` clusters awaiting a later batch).
-Twelve clusters are `true_finding` — ten
+highest-coverage `helper_not_reused` clusters and all 11 `twin_match`
+clusters). 423 of 605 candidates carry
+labels (the 182 unlabelled remainder are lower-coverage `regions` helper
+clusters).
+Sixteen clusters are `true_finding` — twelve
 from `duplicates`: near-verbatim copies inside the pytest thread/unraisable
 plugin pair, werkzeug's Request/Response deprecation wrappers
 (`content_md5`, `pragma`), `is_json`, and the `mimetype_params` copied from
 `Response` into `EnvironBuilder`, plus click's twin reader/writer helpers and
 shell-completion env parsing and starlette's `Route`/`WebSocketRoute`
-`url_path_for`; and two from `regions`, both halves of the same pytest plugin
-pair: the `collect_thread_exception`/`collect_unraisable` hooks and the
-`pytest_configure` wiring that each plugin copies from its twin. The
+`url_path_for`; and four from `regions` — the two halves of the same pytest
+plugin pair (the `collect_thread_exception`/`collect_unraisable` hooks and the
+`pytest_configure` wiring each plugin copies from its twin) reported twice,
+once by the shared-capability channel and once by the `twin_match` function
+channel, plus werkzeug's `mimetype_params` and `content_md5` copies that the
+twin channel surfaces as API-ful builder twins. The
 remaining clusters are false positives (intentional API-layer wrappers,
 sync/async dual-interface mirrors, boilerplate dunder families, parallel
 parsers with distinct grammars, and token-coincidence matches where the
 region never actually inline-copies the canonical named helper).
-Corpus totals at the pinned commits: precision 0.029 (12/407), review burden
-50.2 candidates per confirmed finding, 6.31 candidates per KLOC, runtime
-0.299s per KLOC. A label file whose `target_id` matches no candidate in the
+Corpus totals at the pinned commits: precision 0.038 (16/423), review burden
+37.8 candidates per confirmed finding, 6.34 candidates per KLOC, runtime
+~0.3s per KLOC. A label file whose `target_id` matches no candidate in the
 pinned commit is reported as `unmatched_labels` (stale scope), so label drift
-is visible rather than silent.
+is visible rather than silent. Fourteen `unmatched_labels` entries exist,
+every one a `false_positive` constructor/`__init__`-boilerplate or ASGI-idiom
+label created before the `__init__`-canonical helper filter landed; the two
+`regions` `true_finding` labels still match, so no confirmed finding was lost.
 
-The regions scanner adds ~1.8 candidates per KLOC on the six pinned repos
-(181 clusters; helper-not-reused matches dominate at 149, shared-capability
-12, short-block 9, function-twin 11); once regions entered the profile the
-review burden rose from 42.1, and the helper-FP filters below brought it back
-to 49.2, with the twin channel now adding the 11 unlabelled clusters to 50.2.
+The regions scanner adds ~1.9 candidates per KLOC on the six pinned repos
+(184 clusters; helper-not-reused matches dominate at 152, plain
+shared-capability 12, function-twin 11, short-block 9); once regions entered
+the profile the review burden rose from 42.1, and the helper-FP filters below
+brought it back to 49.2. The twin channel's 11 clusters were then adjudicated
+in the second batch: 4 `true_finding` (pytest's `pytest_configure` and collect
+hook pairs, werkzeug's `mimetype_params` and `content_md5`) and 7
+`false_positive` in deliberate-parallel families (public `@fixture` API
+surface, text/bytes mirror hierarchies, the header-property idiom, parallel
+deprecation shims, and type-narrowed dunder overrides). All 4 true findings
+corroborate pairs the `duplicates` channel already flags — the twin channel
+confirms them as function-level API-ful builders rather than span-level
+coincidences, with twin precision 4/11 = 0.36. That adjudication dropped the
+review burden to 37.8 and raised corpus precision to 0.038, and argues the
+remaining twin FPs need semantic filters (public API / parallel-family
+suppression), not a different clustering linkage: every FP pair is
+deliberately parallel, so complete-link or medoid clustering would still join
+them.
 First-batch adjudication of that cohort found 2
 `true_finding` clusters out of 71 labelled: the pytest thread/unraisable
 plugin pair duplicates both its collect hook and its configure wiring (the
@@ -237,7 +257,7 @@ clusters corpus-wide from 178 to 149 with zero loss of confirmed findings
 the mutation-corpus helper recall still passes). The remaining helper FP
 families — deliberate parallel families and token-coincidence matches — need
 semantic signals beyond token overlap; the 31 labelled survivors stay open
-for a second adjudication batch alongside the 118 remaining unlabelled
+for a second adjudication batch alongside the 116 remaining unlabelled
 helper clusters.
 
 ### Mutation corpus (recall)
@@ -256,9 +276,11 @@ python benchmarks\run_mutation.py
 Recall is exact target matching, not count matching: a channel that fires on
 the wrong target (or reports the right count for unrelated reasons) is a
 miss. The v2 corpus covers all seven code scanners and now also injects a
-`hardcoded` mutant (a hand-written SHA-256 hexdigest) and four region
-mutants (a checkpoint block in the `shared` channel, an inline validation
-re-implementing a lib helper in `helper_not_reused`, asymmetric
+`hardcoded` mutant (a hand-written SHA-256 hexdigest) and region mutants
+covering all four channels (a checkpoint block in the `shared` channel,
+inline device/dtype validation re-implementing a lib helper in
+`helper_not_reused` — both a plain inline copy and a partial-reuse drift
+case where the parent also calls the helper, asymmetric
 `S00`/`S01`/`S10`/`S11` table lookups in `short_risky`, and a gauge-style
 provider builder duplicated between lib and experiments in the
 function-twin channel). Current corpus: 25 injected targets, 25 matched,
@@ -363,9 +385,13 @@ exclusive):
 - `--test-command "<shell command>"` — runs the target project's tests
   inside the gate; a non-zero exit rejects.
 - `--test-result <file>` — consumes a machine-readable external test
-  artifact (a JSON object with a required `"status": "passed"` or
-  `"failed"`, plus optional provenance like `tool`/`summary`/`exit_code`;
-  e.g. a CI result file). Machine-checked like an internal run.
+  artifact with strong provenance so a hand-written `{"status":"passed"}`
+  cannot be full verification evidence: required fields are `status`
+  (`"passed"`/`"failed"`), `exit_code` (consistent with `status`),
+  `git_head` (40-char hex, must equal the report's `provenance.git.head` —
+  test evidence must come from the same commit the report was scanned at),
+  and a runner identity via `tool` or `command`. Machine-checked like an
+  internal run.
 - `--no-tests` — declares that behavioral verification is delegated outside
   the gate (`test_gate: "external_unverified"`); accepted, but the result
   JSON then reports `fully_verified: false`.
@@ -373,9 +399,15 @@ exclusive):
 A code-action verdict with no test evidence at all is rejected — the gate
 never self-approves. The result JSON (`--json`) reports `passed`, the
 `test_gate` value, and `fully_verified`, which is true only when the gate
-passed and the test evidence was machine-checked. Exit code 0 means
-acceptance; `--scope` limits the new-candidate check to the path the patch
-touched.
+passed, the test evidence was machine-checked, **and** a comparable
+pre-patch report was given (`--previous`): full verification means the gate
+can prove the patch introduced no new high/medium candidate, which is
+impossible without a baseline. An incompatible `--previous` (schema /
+package / profile / scanner-set mismatch) rejects rather than trusting a
+garbage baseline. Verdict artifacts the Layer 2 validator would reject also
+reject the gate fail-closed — an invalid verdict file is never silently
+dropped from the gate's input. Exit code 0 means acceptance; `--scope`
+limits the new-candidate check to the path the patch touched.
 
 ## Continuous integration
 

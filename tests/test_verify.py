@@ -92,21 +92,27 @@ def test_verify_detects_unchanged_evidence() -> None:
 def test_verify_rejects_new_high_candidate_in_scope() -> None:
     previous = _cluster_report([])
     report = _cluster_report([_cluster("new1", "high")])
-    failures, _ = _check_report(report, _verdicts([]), previous, None)
+    failures, _ = _check_report(
+        report, _verdicts([]), previous, None, previous_comparable=True
+    )
     assert any("new high candidate" in failure for failure in failures)
 
 
 def test_verify_scope_filters_new_candidates() -> None:
     previous = _cluster_report([])
     report = _cluster_report([_cluster("new1", "high")])
-    failures, _ = _check_report(report, _verdicts([]), previous, "experiments/")
+    failures, _ = _check_report(
+        report, _verdicts([]), previous, "experiments/", previous_comparable=True
+    )
     assert failures == []
 
 
 def test_verify_ignores_new_low_candidate() -> None:
     previous = _cluster_report([])
     report = _cluster_report([_cluster("new1", "low")])
-    failures, _ = _check_report(report, _verdicts([]), previous, None)
+    failures, _ = _check_report(
+        report, _verdicts([]), previous, None, previous_comparable=True
+    )
     assert failures == []
 
 
@@ -206,7 +212,9 @@ def test_verify_risk_level_falls_back_to_severity() -> None:
     }
     detail = report["scanners"]["hardcoded"]["hits"]["sha256"][0]
     assert _risk_level("hardcoded", detail) == "medium"
-    failures, _ = _check_report(report, _verdicts([]), _cluster_report([]), None)
+    failures, _ = _check_report(
+        report, _verdicts([]), _cluster_report([]), None, previous_comparable=True
+    )
     assert any("new medium candidate" in failure for failure in failures)
 
 
@@ -221,7 +229,9 @@ def test_verify_risk_level_maps_dead_status_to_high() -> None:
     }
     detail = report["scanners"]["deadcode"]["candidates"][0]
     assert _risk_level("deadcode", detail) == "high"
-    failures, _ = _check_report(report, _verdicts([]), _cluster_report([]), None)
+    failures, _ = _check_report(
+        report, _verdicts([]), _cluster_report([]), None, previous_comparable=True
+    )
     assert any("new high candidate" in failure for failure in failures)
 
 
@@ -262,7 +272,9 @@ def test_verify_new_contracts_candidate_rejects_with_previous() -> None:
     )
     scanner, target_id, detail = signature
     verdicts = {"verdicts": []}
-    failures, _ = _check_report(report, verdicts, _cluster_report([]), None)
+    failures, _ = _check_report(
+        report, verdicts, _cluster_report([]), None, previous_comparable=True
+    )
     assert any("new high candidate" in failure for failure in failures)
     # And the finding hash canonicalizes the channel-injected detail.
     assert finding_evidence_hash(scanner, target_id, detail)
@@ -274,7 +286,8 @@ def test_verify_loads_per_case_verdict_directory(tmp_path) -> None:
     The shared ``load_protocol_verdict`` pipeline validates every file: the
     triple binding (filename == evidence_hash == case_hash), the bridge
     fields, and the full protocol validator.  A file that fails any step is
-    skipped with a warning — never half-parsed into the gate.
+    reported as an invalid verdict artifact, and the gate rejects fail-closed
+    — an invalid verdict can never silently disappear from the input.
     """
     verdicts_dir = tmp_path / "verdicts"
     verdicts_dir.mkdir()
@@ -332,19 +345,29 @@ def test_verify_loads_per_case_verdict_directory(tmp_path) -> None:
         ),
         encoding="utf-8",
     )
-    entries, warnings = _load_verdicts(verdicts_dir)
+    entries, invalid = _load_verdicts(verdicts_dir)
     assert len(entries) == 1
     assert entries[0]["scanner"] == "duplicates"
     assert entries[0]["target_id"] == "cluster/abc"
     assert entries[0]["case_hash"] == digest
-    assert any("pre-bridge" in warning for warning in warnings)
-    assert any("must set recommended_action" in warning for warning in warnings)
+    assert len(invalid) == 2
+    assert any("pre-bridge" in message for message in invalid)
+    assert any("must set recommended_action" in message for message in invalid)
 
     failures, stats = _check_report(
-        _cluster_report([cluster]), {"verdicts": entries}, None, None, "skipped"
+        _cluster_report([cluster]),
+        {"verdicts": entries},
+        None,
+        None,
+        "skipped",
+        verdict_invalid=invalid,
     )
     assert stats["code_action_verdicts"] == 1
     assert any("finding still present" in failure for failure in failures)
+    # The invalid artifacts reject the gate fail-closed: acceptance is not
+    # possible while a verdict file the Layer 2 validator would reject is
+    # sitting in the input directory.
+    assert any("invalid verdict artifact" in failure for failure in failures)
 
 
 def test_verify_rejects_case_hash_binding_mismatch(tmp_path) -> None:
@@ -371,9 +394,9 @@ def test_verify_rejects_case_hash_binding_mismatch(tmp_path) -> None:
         ),
         encoding="utf-8",
     )
-    entries, warnings = _load_verdicts(verdicts_dir)
+    entries, invalid = _load_verdicts(verdicts_dir)
     assert entries == []
-    assert any("case_hash" in warning for warning in warnings)
+    assert any("case_hash" in message for message in invalid)
 
 
 def test_verify_cli_end_to_end(tmp_path) -> None:
@@ -453,24 +476,94 @@ def test_verify_cli_rejects_without_test_gate(tmp_path) -> None:
     assert "no test evidence" in result.stderr + result.stdout
 
 
+def _full_report(clusters: list[dict], head: str) -> dict:
+    """A report shaped like run_all's payload: comparable metadata plus git
+    provenance the test artifact's git_head can bind to."""
+    from run_all import SCHEMA_VERSION
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "package": "pkg",
+        "configuration": {"profile": "code"},
+        "provenance": {"git": {"head": head}},
+        "scanners": {"duplicates": {"clusters": clusters}},
+    }
+
+
 def test_verify_external_artifact_passed_is_fully_verified(tmp_path) -> None:
-    """A machine-readable external test artifact with status 'passed' is
+    """A machine-readable external test artifact with status 'passed', bound
+    to the report's git head and backed by a comparable pre-patch report, is
     machine-checked evidence: the gate can be fully verified."""
     import subprocess
     import sys
 
+    head = "a" * 40
     report_path = tmp_path / "report.json"
+    previous_path = tmp_path / "previous.json"
     verdicts_path = tmp_path / "verdicts.json"
     artifact_path = tmp_path / "ci-result.json"
-    report_path.write_text(json.dumps(_cluster_report([])), encoding="utf-8")
+    report_path.write_text(
+        json.dumps(_full_report([], head)), encoding="utf-8"
+    )
+    previous_path.write_text(
+        json.dumps(_full_report([], head)), encoding="utf-8"
+    )
     verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
     artifact_path.write_text(
         json.dumps(
             {
                 "status": "passed",
                 "tool": "pytest",
+                "command": "pytest -q",
                 "summary": "42 passed",
                 "exit_code": 0,
+                "git_head": head,
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "run_verify",
+            "--report", str(report_path),
+            "--verdicts", str(verdicts_path),
+            "--previous", str(previous_path),
+            "--test-result", str(artifact_path),
+            "--json", str(tmp_path / "verify.json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "test_gate=external_passed" in result.stderr + result.stdout
+    assert "fully_verified=True" in result.stderr + result.stdout
+    payload = json.loads((tmp_path / "verify.json").read_text(encoding="utf-8"))
+    assert payload["stats"]["test_gate"] == "external_passed"
+    assert payload["stats"]["fully_verified"] is True
+
+
+def test_verify_external_artifact_passed_without_previous_is_not_fully_verified(
+    tmp_path,
+) -> None:
+    """Without a comparable pre-patch report the gate cannot prove the patch
+    introduced no new candidate: accepted, but never fully_verified."""
+    import subprocess
+    import sys
+
+    head = "b" * 40
+    report_path = tmp_path / "report.json"
+    verdicts_path = tmp_path / "verdicts.json"
+    artifact_path = tmp_path / "ci-result.json"
+    report_path.write_text(json.dumps(_full_report([], head)), encoding="utf-8")
+    verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "tool": "pytest",
+                "exit_code": 0,
+                "git_head": head,
             }
         ),
         encoding="utf-8",
@@ -488,11 +581,9 @@ def test_verify_external_artifact_passed_is_fully_verified(tmp_path) -> None:
         check=False,
     )
     assert result.returncode == 0
-    assert "test_gate=external_passed" in result.stderr + result.stdout
-    assert "fully_verified=True" in result.stderr + result.stdout
+    assert "fully_verified=False" in result.stderr + result.stdout
     payload = json.loads((tmp_path / "verify.json").read_text(encoding="utf-8"))
-    assert payload["stats"]["test_gate"] == "external_passed"
-    assert payload["stats"]["fully_verified"] is True
+    assert payload["stats"]["fully_verified"] is False
 
 
 def test_verify_external_artifact_failure_rejects(tmp_path) -> None:
@@ -500,13 +591,22 @@ def test_verify_external_artifact_failure_rejects(tmp_path) -> None:
     import subprocess
     import sys
 
+    head = "c" * 40
     report_path = tmp_path / "report.json"
     verdicts_path = tmp_path / "verdicts.json"
     artifact_path = tmp_path / "ci-result.json"
-    report_path.write_text(json.dumps(_cluster_report([])), encoding="utf-8")
+    report_path.write_text(json.dumps(_full_report([], head)), encoding="utf-8")
     verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
     artifact_path.write_text(
-        json.dumps({"status": "failed", "exit_code": 3}), encoding="utf-8"
+        json.dumps(
+            {
+                "status": "failed",
+                "tool": "pytest",
+                "exit_code": 3,
+                "git_head": head,
+            }
+        ),
+        encoding="utf-8",
     )
     result = subprocess.run(
         [
@@ -524,17 +624,26 @@ def test_verify_external_artifact_failure_rejects(tmp_path) -> None:
 
 
 def test_verify_external_artifact_invalid_rejects(tmp_path) -> None:
-    """An unreadable or malformed artifact cannot self-approve the gate."""
+    """An unreadable, malformed, under-provenanced, or unbound artifact
+    cannot self-approve the gate."""
     import subprocess
     import sys
 
     report_path = tmp_path / "report.json"
     verdicts_path = tmp_path / "verdicts.json"
-    report_path.write_text(json.dumps(_cluster_report([])), encoding="utf-8")
+    report_path.write_text(json.dumps(_full_report([], "d" * 40)), encoding="utf-8")
     verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
     for name, content in (
         ("garbage.json", "not json at all"),
         ("bad-status.json", '{"status": "skipped"}'),
+        # Provenance is mandatory: {"status": "passed"} alone is not full
+        # verification evidence.
+        ("no-provenance.json", '{"status": "passed"}'),
+        ("bad-exit.json", '{"status": "passed", "exit_code": 1, "git_head": "' + "d" * 40 + '", "tool": "pytest"}'),
+        ("missing-head.json", '{"status": "passed", "exit_code": 0, "tool": "pytest"}'),
+        ("no-runner.json", '{"status": "passed", "exit_code": 0, "git_head": "' + "d" * 40 + '"}'),
+        # A bare git_head mismatch between artifact and report rejects.
+        ("wrong-head.json", '{"status": "passed", "exit_code": 0, "git_head": "' + "e" * 40 + '", "tool": "pytest"}'),
     ):
         artifact_path = tmp_path / name
         artifact_path.write_text(content, encoding="utf-8")
@@ -551,6 +660,73 @@ def test_verify_external_artifact_invalid_rejects(tmp_path) -> None:
         )
         assert result.returncode == 1, name
         assert "invalid" in result.stderr + result.stdout, name
+
+
+def test_verify_incompatible_previous_rejects(tmp_path) -> None:
+    """A pre-patch report with a different schema, package, or scanner set
+    makes the new-risk check meaningless: the gate rejects rather than
+    trusting a garbage baseline."""
+    import subprocess
+    import sys
+
+    head = "f" * 40
+    report_path = tmp_path / "report.json"
+    previous_path = tmp_path / "previous.json"
+    verdicts_path = tmp_path / "verdicts.json"
+    report_path.write_text(json.dumps(_full_report([], head)), encoding="utf-8")
+    verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
+    previous = _full_report([], head)
+    previous["scanners"]["deadcode"] = {"candidates": []}
+    previous_path.write_text(json.dumps(previous), encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "run_verify",
+            "--report", str(report_path),
+            "--verdicts", str(verdicts_path),
+            "--previous", str(previous_path),
+            "--no-tests",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "not comparable" in result.stderr + result.stdout
+
+
+def test_verify_invalid_verdict_artifact_rejects_gate(tmp_path) -> None:
+    """A protocol-invalid verdict file in the input directory rejects the
+    gate fail-closed — it is never silently dropped from the input."""
+    import subprocess
+    import sys
+
+    head = "f" * 40
+    report_path = tmp_path / "report.json"
+    previous_path = tmp_path / "previous.json"
+    verdicts_dir = tmp_path / "verdicts"
+    verdicts_dir.mkdir()
+    report_path.write_text(json.dumps(_full_report([], head)), encoding="utf-8")
+    previous_path.write_text(json.dumps(_full_report([], head)), encoding="utf-8")
+    (verdicts_dir / "broken.json").write_text(
+        json.dumps(
+            {"schema_version": 1, "verdict": {"disposition": "true_finding"}}
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "run_verify",
+            "--report", str(report_path),
+            "--verdicts", str(verdicts_dir),
+            "--previous", str(previous_path),
+            "--no-tests",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "invalid verdict artifact" in result.stderr + result.stdout
 
 
 def test_verify_no_tests_is_external_unverified(tmp_path) -> None:
