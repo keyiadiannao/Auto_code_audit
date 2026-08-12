@@ -5,7 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from benchmarks.evidence_fusion import _issue_bundles, _summarize, main as fusion_main
+from benchmarks.evidence_fusion import (
+    _issue_bundles,
+    _proposed_bundles,
+    _proposed_stats,
+    _score_bundles,
+    _summarize,
+    main as fusion_main,
+)
 from benchmarks.run_benchmarks import (
     _aggregate_totals,
     _label_stats,
@@ -142,6 +149,24 @@ def test_label_stats_compute_precision_and_coverage() -> None:
     assert stats["unmatched_labels"] == ["deadcode/DEAD/lib/zzz.py"]
     assert stats["per_scanner"]["duplicates"]["precision"] == 1.0
     assert stats["per_scanner"]["forks"]["labelled"] == 0
+    # Toy clusters carry no max_sim/twin_match signal, so everything lands
+    # in the low-value cohort.
+    assert stats["cohorts"] == {
+        "high": {"candidates": 0, "labelled": 0, "true_findings": 0, "precision": None},
+        "medium": {
+            "candidates": 0,
+            "labelled": 0,
+            "true_findings": 0,
+            "precision": None,
+        },
+        "low": {
+            "candidates": 4,
+            "labelled": 3,
+            "true_findings": 2,
+            "precision": 0.667,
+        },
+    }
+    assert stats["estimated_tokens"] > 0
     # cross-scanner issue grouping: the matched duplicates and deadcode true
     # findings share one issue_id, so two candidates collapse into one issue;
     # the stale true label is its own issue but is not reproduced.
@@ -163,19 +188,40 @@ def test_label_stats_compute_precision_and_coverage() -> None:
 
 
 def _fusion_report() -> dict:
-    """Minimal payloads; ``_candidate_signatures`` reads duplicates
-    ``clusters[].id`` and regions ``clusters[].id`` only."""
+    """Minimal payloads.  Proposed fusion reads cluster members'
+    ``path``/``qualname``; ``_candidate_signatures`` reads cluster ids."""
     return {
         "scanners": {
             "duplicates": {
                 "clusters": [
-                    {"id": "abc123", "priority": "high"},
-                    {"id": "def456", "priority": "low"},
+                    {
+                        "id": "abc123",
+                        "priority": "high",
+                        "members": [
+                            {"path": "lib/a.py", "name": "twin", "qualname": "twin"},
+                            {"path": "lib/b.py", "name": "twin", "qualname": "twin"},
+                        ],
+                    },
+                    {
+                        "id": "def456",
+                        "priority": "low",
+                        "members": [
+                            {"path": "lib/c.py", "name": "solo", "qualname": "solo"}
+                        ],
+                    },
                 ]
             },
             "regions": {
                 "clusters": [
-                    {"id": "abc123", "priority": "high", "kind": "shared_capability"},
+                    {
+                        "id": "abc123",
+                        "priority": "high",
+                        "kind": "shared_capability",
+                        "members": [
+                            {"path": "lib/a.py", "qualname": "twin"},
+                            {"path": "lib/b.py", "qualname": "twin"},
+                        ],
+                    }
                 ]
             },
         }
@@ -271,10 +317,148 @@ def test_evidence_fusion_cli_writes_issue_table(tmp_path: Path) -> None:
     )
     assert rc == 0
     payload = json.loads(out.read_text(encoding="utf-8"))
-    assert payload["stats"]["issues"] == 2
-    assert payload["stats"]["single_signal_precision"] == 0.0
-    assert payload["stats"]["corroborated_precision"] == 1.0
-    assert len(payload["issues"]) == 2
+    proposed = payload["stats"]["proposed"]
+    # The identical symbol sets of duplicates/abc123 and regions/abc123 merge
+    # label-independently into one corroborated bundle; both candidates are
+    # true findings under the twin-pair issue.
+    assert proposed["bundles"] == 2
+    assert proposed["corroborated"] == 1
+    assert proposed["corroborated_precision"] == 1.0
+    assert proposed["single_precision"] == 0.0
+    assert proposed["issue_recall"] == 1.0
+    assert proposed["fusion_purity"] == 1.0
+    assert proposed["compression_ratio"] == 1.5
+    assert len(payload["bundles"]) == 2
+    merged = next(b for b in payload["bundles"] if len(b["channels"]) == 2)
+    assert merged["issue_id"].startswith("proposed/")
+    assert merged["candidates"] == [
+        {"scanner": "duplicates", "target_id": "cluster/abc123"},
+        {"scanner": "regions", "target_id": "region/abc123"},
+    ]
+    assert merged["ground_truth_issues"] == ["twin-pair"]
+    # The retrospective view keeps its own (oracle-grouped) numbers.
+    retro = payload["stats"]["retrospective"]
+    assert retro["issues"] == 2
+    assert retro["single_signal_precision"] == 0.0
+    assert retro["corroborated_precision"] == 1.0
+
+
+def test_evidence_fusion_proposed_bundles_require_exact_symbol_sets() -> None:
+    """Overlapping but non-identical symbol sets must NOT merge: the
+    conservative fusion only joins clusters whose members are exactly the
+    same functions."""
+    report = {
+        "scanners": {
+            "duplicates": {
+                "clusters": [
+                    {
+                        "id": "d1",
+                        "members": [
+                            {"path": "lib/a.py", "qualname": "check"},
+                            {"path": "lib/b.py", "qualname": "check"},
+                        ],
+                    },
+                    {
+                        "id": "d2",
+                        "members": [
+                            {"path": "lib/a.py", "qualname": "check"},
+                            {"path": "lib/c.py", "qualname": "check"},
+                        ],
+                    },
+                ]
+            },
+            "regions": {
+                "clusters": [
+                    {
+                        "id": "r1",
+                        "kind": "shared_capability",
+                        "members": [
+                            {"path": "lib/a.py", "qualname": "check"},
+                            {"path": "lib/b.py", "qualname": "check"},
+                        ],
+                    }
+                ]
+            },
+        }
+    }
+    bundles = _proposed_bundles(report)
+    by_id = {bundle["issue_id"]: bundle for bundle in bundles}
+    merged = [b for b in bundles if len(b["channels"]) == 2]
+    assert len(merged) == 1
+    assert merged[0]["candidates"] == [
+        {"scanner": "duplicates", "target_id": "cluster/d1"},
+        {"scanner": "regions", "target_id": "region/r1"},
+    ]
+    # d2's symbol set differs from r1's by one member, so it stays single.
+    single = by_id["duplicates/cluster/d2"]
+    assert single["signals"] == 1
+    assert single["channels"] == ["duplicates"]
+
+
+def test_evidence_fusion_proposed_stats_split_issues_and_mis_merges(
+    tmp_path: Path,
+) -> None:
+    """issue_recall drops when an issue's candidates scatter across bundles;
+    fusion_purity drops when one bundle carries two ground-truth issues."""
+    labels = {
+        "schema_version": 1,
+        "project_id": "toy",
+        "commit": "0" * 40,
+        "labels": [
+            # Issue A: both candidates reproduced in one merged bundle.
+            {"scanner": "duplicates", "target_id": "cluster/d1",
+             "label": "true_finding", "issue_id": "issue-a"},
+            {"scanner": "regions", "target_id": "region/r1",
+             "label": "true_finding", "issue_id": "issue-a"},
+            # Issue B: candidates reproduced but never merged (symbol sets
+            # differ), so they land in two separate single bundles.
+            {"scanner": "duplicates", "target_id": "cluster/d2",
+             "label": "true_finding", "issue_id": "issue-b"},
+            {"scanner": "regions", "target_id": "region/r2",
+             "label": "true_finding", "issue_id": "issue-b"},
+            # Issues C and D: merged into one bundle that mixes them.
+            {"scanner": "duplicates", "target_id": "cluster/d3",
+             "label": "true_finding", "issue_id": "issue-c"},
+            {"scanner": "regions", "target_id": "region/r3",
+             "label": "true_finding", "issue_id": "issue-d"},
+        ],
+    }
+    report = {
+        "scanners": {
+            "duplicates": {
+                "clusters": [
+                    {"id": "d1", "members": [{"path": "a.py", "qualname": "x"},
+                                             {"path": "b.py", "qualname": "x"}]},
+                    {"id": "d2", "members": [{"path": "c.py", "qualname": "y"}]},
+                    {"id": "d3", "members": [{"path": "e.py", "qualname": "z"},
+                                             {"path": "f.py", "qualname": "z"}]},
+                ]
+            },
+            "regions": {
+                "clusters": [
+                    {"id": "r1", "kind": "shared_capability",
+                     "members": [{"path": "a.py", "qualname": "x"},
+                                 {"path": "b.py", "qualname": "x"}]},
+                    {"id": "r2", "kind": "shared_capability",
+                     "members": [{"path": "c.py", "qualname": "y"},
+                                 {"path": "g.py", "qualname": "y"}]},
+                    {"id": "r3", "kind": "shared_capability",
+                     "members": [{"path": "e.py", "qualname": "z"},
+                                 {"path": "f.py", "qualname": "z"}]},
+                ]
+            },
+        }
+    }
+    bundles = _score_bundles(_proposed_bundles(report), labels)
+    stats = _proposed_stats(bundles, {"toy": labels})
+    # d3/r3 merged (identical symbols) but their true candidates carry
+    # different issue_ids: the bundle mixes two issues.  All four issues have
+    # a reproduced candidate, so the denominator is 4.
+    assert stats["ground_truth_issues"] == 4
+    assert stats["issues_formed"] == 1
+    assert stats["issue_recall"] == 0.25
+    assert stats["fusion_purity"] == 0.75
+    assert stats["compression_ratio"] == 1.5
 
 
 def test_label_stats_counts_matched_issues_only(tmp_path: Path) -> None:
@@ -314,6 +498,97 @@ def test_label_stats_without_labels_leaves_all_unlabelled() -> None:
     stats = _label_stats(_toy_report(), labels)
     assert stats["coverage"]["labelled"] == 0
     assert stats["aggregate"]["precision"] is None
+
+
+def test_label_stats_cohorts_split_by_expected_value() -> None:
+    """The value_cohort rules (near-exact duplicates -> high, region twins ->
+    high, shared-capability regions -> medium, everything else -> low) must
+    drive the per-cohort precision table."""
+    report = {
+        "scanners": {
+            "duplicates": {
+                "clusters": [
+                    {
+                        "id": "twin99",
+                        "max_sim": 0.99,
+                        "min_edge_sim": 0.99,
+                    },
+                    {
+                        "id": "loose90",
+                        "max_sim": 0.90,
+                        "min_edge_sim": 0.90,
+                    },
+                ]
+            },
+            "regions": {
+                "clusters": [
+                    {"id": "twins", "kind": "shared_capability", "twin_match": True},
+                    {
+                        "id": "shared",
+                        "kind": "shared_capability",
+                        "twin_match": False,
+                    },
+                    {"id": "helper", "kind": "helper_not_reused"},
+                ]
+            },
+            "forks": {"pairs": [], "small_function_pairs": []},
+            "contracts": {
+                "experiment_as_library": [],
+                "forwarding_wrappers": [],
+                "unreferenced_top_level_functions": [],
+                "cli_without_bootstrap": [],
+                "defensive_param_loosening": [],
+                "env_written_not_read": [],
+                "generation_path_without_env": [],
+                "same_name_contracts": [],
+            },
+            "capabilities": {"overlap": []},
+            "hardcoded": {"hits": {}},
+            "style": {"hits": {}},
+        }
+    }
+    labels = {
+        "schema_version": 1,
+        "project_id": "toy",
+        "commit": "0" * 40,
+        "labels": [
+            {
+                "scanner": "duplicates",
+                "target_id": "cluster/twin99",
+                "label": "true_finding",
+                "issue_id": "twin-issue",
+                "reason": "near-exact twin",
+            },
+            {
+                "scanner": "regions",
+                "target_id": "region/shared",
+                "label": "false_positive",
+                "reason": "generic loop",
+            },
+        ],
+    }
+    stats = _label_stats(report, labels)
+    assert stats["cohorts"] == {
+        "high": {
+            "candidates": 2,
+            "labelled": 1,
+            "true_findings": 1,
+            "precision": 1.0,
+        },
+        "medium": {
+            "candidates": 1,
+            "labelled": 1,
+            "true_findings": 0,
+            "precision": 0.0,
+        },
+        "low": {
+            "candidates": 2,
+            "labelled": 0,
+            "true_findings": 0,
+            "precision": None,
+        },
+    }
+    assert stats["aggregate"]["precision"] == 0.5
 
 
 def test_load_labels_validates_entries(tmp_path: Path) -> None:
@@ -419,6 +694,7 @@ def test_aggregate_totals_combine_labelled_results() -> None:
                         "precision": 0.8,
                         "unique_issues": 3,
                     },
+                    "estimated_tokens": 400,
                 },
             },
             {"elapsed_seconds": 1.0, "python_lines": 3000, "label_stats": None},
@@ -432,8 +708,36 @@ def test_aggregate_totals_combine_labelled_results() -> None:
     assert totals["unique_issues"] == 3
     assert totals["unique_issue_ratio"] == 0.75
     assert totals["evidence_per_issue"] == 1.33
+    assert totals["estimated_tokens"] == 400
+    assert totals["tokens_per_verified_issue"] == 133.3
+    assert totals["verified_issue_yield"] == 0.3
     assert totals["candidates_per_kloc"] == 2.0
     assert totals["runtime_per_kloc"] == 0.6
+
+
+def test_aggregate_totals_tolerates_old_results_without_tokens() -> None:
+    totals = _aggregate_totals(
+        [
+            {
+                "elapsed_seconds": 1.0,
+                "python_lines": 1000,
+                "label_stats": {
+                    "coverage": {"candidates": 5, "labelled": 2, "unlabelled": 3},
+                    "aggregate": {
+                        "candidates": 5,
+                        "labelled": 2,
+                        "true_findings": 1,
+                        "false_positives": 1,
+                        "precision": 0.5,
+                        "unique_issues": 1,
+                    },
+                },
+            }
+        ]
+    )
+    assert totals["estimated_tokens"] == 0
+    assert totals["tokens_per_verified_issue"] == 0.0
+    assert totals["verified_issue_yield"] == 0.2
 
 
 def test_mutation_recall_reports_missing_targets() -> None:
@@ -471,6 +775,99 @@ def test_label_files_load_and_match_manifest_projects() -> None:
         payload = load_labels(labels_dir / f"{project_id}.json")
         assert payload["project_id"] == project_id
         assert payload["commit"] == project["commit"]
+        # Every label file carries its ground-truth provenance.
+        provenance = payload["provenance"]
+        assert provenance["human_verified"] is True
+        assert provenance["reviewers"] == ["keyiadiannao"]
+        assert provenance["ground_truth_version"] == "1.0"
+
+
+def test_load_labels_rejects_bad_provenance(tmp_path: Path) -> None:
+    def write(provenance: object) -> Path:
+        path = tmp_path / "labels.json"
+        payload = {
+            "schema_version": 1,
+            "project_id": "toy",
+            "commit": "0" * 40,
+            "labels": [
+                {
+                    "scanner": "deadcode",
+                    "target_id": "DEAD/a.py",
+                    "label": "false_positive",
+                    "reason": "x",
+                }
+            ],
+        }
+        if provenance is not None:
+            payload["provenance"] = provenance
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    with pytest.raises(ValueError, match="provenance"):
+        load_labels(write({"human_verified": "yes", "reviewers": [], "ground_truth_version": "1"}))
+    with pytest.raises(ValueError, match="reviewers"):
+        load_labels(write({"human_verified": True, "reviewers": [], "ground_truth_version": "1"}))
+    with pytest.raises(ValueError, match="ground_truth_version"):
+        load_labels(write({"human_verified": True, "reviewers": ["me"], "ground_truth_version": ""}))
+    with pytest.raises(ValueError, match="unknown provenance"):
+        load_labels(write({"human_verified": True, "reviewers": ["me"], "ground_truth_version": "1", "extra": 1}))
+    # No provenance block is still valid (backwards compatible).
+    assert load_labels(write(None))["labels"][0]["label"] == "false_positive"
+
+
+def test_load_labels_rejects_bad_confidence(tmp_path: Path) -> None:
+    path = tmp_path / "labels.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "project_id": "toy",
+                "commit": "0" * 40,
+                "labels": [
+                    {
+                        "scanner": "deadcode",
+                        "target_id": "DEAD/a.py",
+                        "label": "true_finding",
+                        "confidence": "certain",
+                        "reason": "x",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="confidence"):
+        load_labels(path)
+
+
+def test_gold_manifest_matches_labels_and_balances_cohorts() -> None:
+    manifest = json.loads(
+        Path("benchmarks/gold_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["schema_version"] == 1
+    counts = manifest["counts"]
+    assert 80 <= counts["entries"] <= 120
+    assert counts["true_findings"] == 16
+    assert counts["false_positives"] + counts["true_findings"] == counts["entries"]
+
+    truth: dict[tuple[str, str, str], str] = {}
+    for path in Path("benchmarks/labels").glob("*.json"):
+        payload = load_labels(path)
+        for entry in payload["labels"]:
+            truth[(path.stem, entry["scanner"], entry["target_id"])] = entry["label"]
+
+    gold_true: set[tuple[str, str, str]] = set()
+    for entry in manifest["entries"]:
+        key = (entry["project"], entry["scanner"], entry["target_id"])
+        assert key in truth, f"gold entry not in corpus: {key}"
+        assert entry["gold_label"] == truth[key]
+        if entry["gold_label"] == "true_finding":
+            gold_true.add(key)
+    # The gold subset contains every true finding, and only reproduced ones.
+    corpus_true = {
+        key for key, label in truth.items() if label == "true_finding"
+    }
+    assert gold_true == corpus_true
 
 
 def test_benchmark_metrics_summarize_scanner_payloads() -> None:

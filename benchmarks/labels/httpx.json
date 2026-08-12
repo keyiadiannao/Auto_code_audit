@@ -2,6 +2,13 @@
   "schema_version": 1,
   "project_id": "httpx",
   "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+  "provenance": {
+    "human_verified": true,
+    "reviewers": [
+      "keyiadiannao"
+    ],
+    "ground_truth_version": "1.0"
+  },
   "labels": [
     {
       "scanner": "contracts",

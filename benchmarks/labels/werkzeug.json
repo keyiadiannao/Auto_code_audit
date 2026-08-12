@@ -2,6 +2,13 @@
   "schema_version": 1,
   "project_id": "werkzeug",
   "commit": "218a653fd952b0a7fde05657dff00c40be5b8291",
+  "provenance": {
+    "human_verified": true,
+    "reviewers": [
+      "keyiadiannao"
+    ],
+    "ground_truth_version": "1.0"
+  },
   "labels": [
     {
       "scanner": "contracts",

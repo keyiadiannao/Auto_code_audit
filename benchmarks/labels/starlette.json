@@ -2,6 +2,13 @@
   "schema_version": 1,
   "project_id": "starlette",
   "commit": "398e5a3430eb1ddd33e1d48d766efe41426e231f",
+  "provenance": {
+    "human_verified": true,
+    "reviewers": [
+      "keyiadiannao"
+    ],
+    "ground_truth_version": "1.0"
+  },
   "labels": [
     {
       "scanner": "contracts",

@@ -200,9 +200,15 @@ public functions, fork pairs that are intentional convenience wrappers,
 non-security digest hashes, every `duplicates` cluster emitted at the pinned
 commits, and the first region batch (all 21 shared/short clusters plus the 50
 highest-coverage `helper_not_reused` clusters and all 11 `twin_match`
-clusters). 412 of 594 candidates carry
-labels (the 182 unlabelled remainder are lower-coverage `regions` helper
-clusters).
+clusters). Every label file carries its provenance — `human_verified`,
+`reviewers`, `ground_truth_version` — and
+`benchmarks/gold_manifest.json` is the curated gold subset built
+deterministically from the corpus: 100 entries, all 16 true findings plus 84
+false positives stratified per project and scanner, 20 of them tagged
+`boundary` because their reason signals a near-miss (`benchmarks/gold_sample.py`
+regenerates the manifest; the integrity test pins it to the label files).  The
+gold subset is the trust anchor for scoring an AI adjudicator against the
+human labels.
 Sixteen clusters are `true_finding` — twelve
 from `duplicates`: near-verbatim copies inside the pytest thread/unraisable
 plugin pair, werkzeug's Request/Response deprecation wrappers
@@ -222,7 +228,9 @@ region never actually inline-copies the canonical named helper).
 Corpus totals at the pinned commits: precision 0.027 (16/594), review burden
 37.1 candidates per confirmed finding, 6.22 candidates per KLOC, runtime
 ~0.32s per KLOC, unique-issue ratio 0.62 (10 unique issues per 16 labelled
-findings), evidence per issue 1.6. Every candidate in the corpus is now
+findings), evidence per issue 1.6, and an estimated ~136k review tokens for
+the whole candidate surface (~13.6k per verified issue; 1.7% of candidates
+resolve to a distinct verified defect). Every candidate in the corpus is now
 adjudicated (594/594 labelled — the final 182 low-coverage helper candidates
 were all false positives in the established shape-match families), so the
 precision figure is no longer partial. The 16 labelled true findings collapse
@@ -290,27 +298,67 @@ helper clusters.
 `benchmarks/evidence_fusion.py` quantifies the case for adjudicating *issues*
 instead of candidates: a defect is an issue, and an issue is *corroborated*
 when 2+ candidates signal it — ideally from 2+ scanners (a `duplicates`
-cluster confirmed by a `regions` twin for the same function pair).  Labels
-already carry an `issue_id`, so the experiment groups reproduced candidates
-into bundles without any heuristic merging (a label without an `issue_id` is
-its own single-signal issue):
+cluster confirmed by a `regions` twin for the same function pair).  It
+reports two views:
+
+* **Proposed bundles (predictive, label-independent).**  Fusion runs before
+  any ground truth is consulted: two clusters from different channels merge
+  into one proposed issue only when their member-symbol sets are *identical*
+  (`{a.py:Foo, b.py:Bar}` == `{a.py:Foo, b.py:Bar}`); every other candidate
+  is its own single bundle, so the proposed view covers all 594 candidates.
+  Labels are joined afterwards, only to score the bundles — a fresh
+  candidate corroborated by two scanners is a proposed bundle *before*
+  anyone adjudicates it.
+* **Retrospective (reference).**  The previous grouping, which merges
+  candidates by the `issue_id` assigned to true findings during
+  adjudication.  Its corroborated precision is enriched by construction — it
+  measures "how many confirmed issues carry multi-scanner evidence", not
+  whether corroboration predicts truth.
 
 ```powershell
 python -m benchmarks.evidence_fusion --json C:\Temp\issue_table.json
 ```
 
-At the pinned commits the gap is stark: single-signal issues run at 1.0%
-precision (6 true out of 584 — the denominator grew as the final unlabelled
-candidates, all false positives, entered the bundle set), while corroborated
-issues run at 100%
-(4/4 — two pytest plugin-pair defects each with a duplicates cluster plus two
-region twins, and two werkzeug copies each with a duplicates cluster plus one
-region twin).  Every true corroborated issue spans both scanners.  The
-construction caveat is printed with every run: `issue_id` was assigned to
-true findings during adjudication, so corroborated issues in the label set
-are enriched by construction — the pipeline measures the gap and emits the
-per-issue evidence table a future LLM adjudicator will consume, but the gap
-itself is only validated by adjudicating unlabelled bundles.
+At the pinned commits the gap is stark.  The proposed view collapses the
+594 candidates into 574 bundles (compression 1.03) and is honest about both
+ends: corroborated bundles run at 28.6% precision (4 true of 14), and
+single bundles at 1.4% (8 of 560).  Issue recall is 0.8 — 8 of the 10
+ground-truth issues are correctly formed as exactly one bundle; the two
+failures are the conservative rule's cost (`deprecation-wrapper-properties`
+and `exception-hook-plugin-pair` split across bundles because their
+duplicates cluster and region twin have different member sets).  Fusion
+purity is 1.0: no bundle mixes two true issues.  The retrospective view,
+by contrast, still reports 100% corroborated precision (4/4) — the number
+that motivated the rewrite: it is oracle-enriched by construction, and both
+views are printed side by side so the distinction stays visible.
+
+### Candidate cohort ranking (review-surface compression)
+
+`run_all.value_cohort` ranks every candidate into a `high` / `medium` /
+`low` expected-value cohort from label-independent evidence, derived from
+the pinned-commit corpus: only near-exact duplication (`duplicates`
+`max_sim >= 0.98`) and region twins (`regions` `twin_match`) carry confirmed
+findings; plain shared-capability regions are medium; every other channel —
+contracts, forks, deadcode, capabilities, hardcoded, style, low-similarity
+duplicates, and helper regions — has (at most) a stray confirmed finding.
+At the pinned commits the split is stark:
+
+| cohort | candidates | true findings | precision |
+|---|---:|---:|---:|
+| high (near-exact duplicates, region twins) | 69 | 12 | 0.174 |
+| medium (shared-capability regions) | 21 | 2 | 0.095 |
+| low (everything else) | 504 | 2 | 0.004 |
+
+The markdown worksheet hides the low-value cohort by default — the default
+view is the 90 high/medium candidates carrying 14 of the 16 confirmed
+findings, an estimated ~20k review tokens against ~136k for the full
+surface — with a per-section note counting what was hidden and a top-level
+hint; `run_all.py --exhaustive` restores the full worksheet.  The benchmark
+aggregate reports per-cohort precision alongside the corpus totals plus the
+token-economy metrics `estimated_tokens` (≈1 token per 4 characters of
+worksheet line plus candidate detail), `tokens_per_verified_issue`, and
+`verified_issue_yield`, so the compression the ranking buys stays
+measurable and honest.
 
 ### Mutation corpus (recall)
 

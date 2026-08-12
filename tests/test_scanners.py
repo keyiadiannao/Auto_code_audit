@@ -204,6 +204,98 @@ class Group:
     ]
 
 
+def test_duplicate_conditional_definitions_get_distinct_definition_ids(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """Two real definitions sharing a ``path:qualname`` (version-gated or
+    conditional branches) must be distinct identities: the first keeps the
+    bare symbol key, later definitions get a ``#N`` definition ordinal, so
+    their clusters cannot collide on the shared symbol id."""
+    body1 = """\
+def {name}(values):
+    total = 0
+    for value in values:
+        total += value * 2
+    if total > 10:
+        return total
+    return 0
+"""
+    body2 = """\
+def {name}(values):
+    total = 1
+    for value in values:
+        total += value
+    if total > 20:
+        return total * 2
+    return total
+"""
+    _write(mini_repo / "pkg" / "lib" / "shared.py", body1.format(name="shared"))
+    _write(mini_repo / "pkg" / "experiments" / "a.py", body1.format(name="alpha"))
+    _write(
+        mini_repo / "pkg" / "experiments" / "gate.py",
+        body1.format(name="resolve")
+        + "\n\nif sys.version_info >= (3, 11):\n"
+        + "\n".join(
+            f"    {line}" if line else line
+            for line in body2.format(name="resolve").splitlines()
+        )
+        + "\n",
+    )
+    _write(mini_repo / "pkg" / "experiments" / "b.py", body2.format(name="beta"))
+
+    output = tmp_path / "duplicates.json"
+    assert (
+        scan_duplicates.main(
+            [
+                "--root",
+                str(mini_repo),
+                "--package",
+                "pkg",
+                "--threshold",
+                "0.95",
+                "--min-chars",
+                "0",
+                "--json",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    ids = [item["id"] for item in payload["clusters"]]
+    assert len(ids) == len(set(ids))
+    # First definition clusters with the lib helper under the bare symbol;
+    # the version-gated second definition clusters with beta under #1.
+    first = next(
+        item
+        for item in payload["clusters"]
+        if any(m["path"] == "experiments/gate.py" and "qualname" in m for m in item["members"])
+    )
+    gate_member = next(m for m in first["members"] if m["path"] == "experiments/gate.py")
+    assert gate_member["qualname"] == "resolve"
+    assert "definition_ordinal" not in gate_member
+    assert {m["path"] for m in first["members"]} == {
+        "lib/shared.py",
+        "experiments/a.py",
+        "experiments/gate.py",
+    }
+    second = next(
+        item
+        for item in payload["clusters"]
+        if any(
+            m.get("definition_ordinal") == 1
+            for m in item["members"]
+        )
+    )
+    assert {m["path"] for m in second["members"]} == {
+        "experiments/gate.py",
+        "experiments/b.py",
+    }
+    assert next(m for m in second["members"] if m["path"] == "experiments/gate.py")[
+        "qualname"
+    ] == "resolve"
+
+
 def test_scanners_accept_utf8_bom_entrypoint(mini_repo: Path, tmp_path: Path) -> None:
     path = mini_repo / "pkg" / "experiments" / "bom_cli.py"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -2502,6 +2594,132 @@ def test_report_formatter_renders_region_cluster_kinds() -> None:
     assert "2 functions across 2 files" in text
     assert "`lib/gauge_fixed.py:intervention_providers:97`" in text
     assert "coverage=0.988" in text
+
+
+def test_report_formatter_keep_hides_low_value_cohort() -> None:
+    """With a ``keep`` predicate, low-value candidates are hidden by default
+    and a top-level hint plus per-section note explain how to see them."""
+    twin = {
+        "id": "twin1",
+        "kind": "shared_capability",
+        "twin_match": True,
+        "priority": "high",
+        "priority_reason": "near-identical function bodies across files",
+        "size": 2,
+        "file_count": 2,
+        "max_sim": 1.0,
+        "min_edge_sim": 0.98,
+        "members": [
+            {
+                "path": "lib/a.py",
+                "qualname": "f",
+                "start_line": 1,
+                "nstatements": 5,
+                "coverage": 0.99,
+            },
+            {
+                "path": "lib/b.py",
+                "qualname": "g",
+                "start_line": 1,
+                "nstatements": 5,
+                "coverage": 0.99,
+            },
+        ],
+    }
+    helper = {
+        "id": "helper1",
+        "kind": "helper_not_reused",
+        "priority": "high",
+        "priority_reason": "inline copy covers 90% of canonical helper check",
+        "size": 1,
+        "max_coverage": 0.9,
+        "canonical_symbol": "lib/helper.py:check",
+        "canonical": {"path": "lib/helper.py", "qualname": "check", "lineno": 3},
+        "members": [
+            {
+                "path": "experiments/a.py",
+                "qualname": "run",
+                "start_line": 4,
+                "end_line": 10,
+                "nstatements": 4,
+                "extractability": 1.0,
+                "coverage": 0.9,
+                "canonical_referenced_in_parent": False,
+            }
+        ],
+    }
+    payloads = {
+        "deadcode": {
+            "candidates": [
+                {
+                    "status": "UNUSED",
+                    "path": "lib/old.py",
+                    "py_refs": [],
+                    "doc_refs": [],
+                }
+            ]
+        },
+        "duplicates": {
+            "clusters": [],
+            "priority_counts": {"high": 0, "medium": 0, "low": 0},
+        },
+        "forks": {"pairs": [], "small_function_pairs": []},
+        "contracts": {
+            "experiment_as_library": [],
+            "forwarding_wrappers": [],
+            "same_name_contracts": [],
+            "unreferenced_top_level_functions": [],
+            "cli_without_bootstrap": [],
+            "defensive_param_loosening": [],
+            "env_written_not_read": [],
+            "generation_path_without_env": [],
+        },
+        "capabilities": {"overlap": []},
+        "hardcoded": {"hits": {}},
+        "style": {"hits": {}},
+        "regions": {"clusters": [twin, helper]},
+    }
+    summary = {
+        "package": "pkg",
+        "generated_at": "2026-08-12T00:00:00",
+        "provenance": {"git": {"head": "abc1234", "dirty_count": 0}},
+    }
+
+    def keep(scanner: str, detail: dict) -> bool:
+        if scanner == "regions":
+            return bool(detail.get("twin_match"))
+        return False
+
+    text = report_formatter.markdown(payloads, summary, keep=keep)
+    assert "`twin1`" in text
+    assert "`helper1`" not in text
+    assert "`lib/old.py`" not in text
+    assert "low-value cohort" in text  # top-level hint
+    assert "`--exhaustive`" in text
+
+    full = report_formatter.markdown(payloads, summary)
+    assert "`helper1`" in full
+    assert "`lib/old.py`" in full
+    assert "low-value cohort" not in full
+
+
+def test_value_cohort_rules_match_corpus_signal() -> None:
+    """The cohort rules encode the pinned-commit corpus signal: only
+    near-exact duplicates and region twins carry confirmed findings."""
+    assert run_all.value_cohort("duplicates", {"max_sim": 0.99}) == "high"
+    assert run_all.value_cohort("duplicates", {"max_sim": 0.98}) == "high"
+    assert run_all.value_cohort("duplicates", {"max_sim": 0.90}) == "low"
+    assert run_all.value_cohort("duplicates", {}) == "low"
+    assert run_all.value_cohort("regions", {"twin_match": True}) == "high"
+    assert (
+        run_all.value_cohort(
+            "regions", {"kind": "shared_capability", "twin_match": False}
+        )
+        == "medium"
+    )
+    assert run_all.value_cohort("regions", {"kind": "helper_not_reused"}) == "low"
+    for scanner in ("deadcode", "forks", "contracts", "capabilities", "hardcoded", "style"):
+        assert run_all.value_cohort(scanner, {}) == "low"
 
 
 def test_region_scan_ignores_generic_loops_without_api_calls(

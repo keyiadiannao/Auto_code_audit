@@ -20,6 +20,8 @@ DEFAULT_WORKSPACE = Path(tempfile.gettempdir()) / "auto-code-audit-benchmarks"
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "results" / "latest.json"
 
 LABEL_VALUES = {"true_finding", "false_positive"}
+CONFIDENCE_VALUES = {"high", "medium", "low"}
+PROVENANCE_KEYS = {"human_verified", "reviewers", "ground_truth_version"}
 
 
 def load_labels(path: Path) -> dict[str, Any]:
@@ -37,6 +39,30 @@ def load_labels(path: Path) -> dict[str, Any]:
         raise ValueError(f"label file commit must be a 40-char SHA: {path}")
     if not isinstance(labels, list) or not labels:
         raise ValueError(f"label file labels must be a non-empty list: {path}")
+    provenance = payload.get("provenance")
+    if provenance is not None:
+        if not isinstance(provenance, dict):
+            raise ValueError(f"label provenance must be an object: {path}")
+        unknown = set(provenance) - PROVENANCE_KEYS
+        if unknown:
+            raise ValueError(f"unknown provenance key(s) {sorted(unknown)}: {path}")
+        if not isinstance(provenance.get("human_verified"), bool):
+            raise ValueError(f"provenance.human_verified must be a bool: {path}")
+        reviewers = provenance.get("reviewers")
+        if (
+            not isinstance(reviewers, list)
+            or not reviewers
+            or not all(isinstance(r, str) and r for r in reviewers)
+        ):
+            raise ValueError(
+                f"provenance.reviewers must be a non-empty list of strings: {path}"
+            )
+        if not isinstance(provenance.get("ground_truth_version"), str) or not (
+            provenance.get("ground_truth_version")
+        ):
+            raise ValueError(
+                f"provenance.ground_truth_version must be a non-empty string: {path}"
+            )
     seen: set[tuple[str, str]] = set()
     for entry in labels:
         if entry.get("label") not in LABEL_VALUES:
@@ -54,6 +80,12 @@ def load_labels(path: Path) -> dict[str, Any]:
             not isinstance(issue_id, str) or not issue_id
         ):
             raise ValueError(f"label issue_id must be a non-empty string: {path}")
+        confidence = entry.get("confidence")
+        if confidence is not None and confidence not in CONFIDENCE_VALUES:
+            raise ValueError(
+                f"label confidence must be one of "
+                f"{sorted(CONFIDENCE_VALUES)}: {path}"
+            )
         if (scanner, target_id) in seen:
             raise ValueError(f"duplicated label {scanner}/{target_id}: {path}")
         seen.add((scanner, target_id))
@@ -186,7 +218,7 @@ def _label_stats(
     ``unique_issues`` only when at least one of its candidates matched in
     this run.
     """
-    from run_all import _candidate_signatures
+    from run_all import _candidate_signatures, value_cohort
 
     candidates = _candidate_signatures(report.get("scanners", {}))
     labels_by_scanner: dict[str, dict[str, tuple[str, str]]] = {}
@@ -204,19 +236,34 @@ def _label_stats(
     total_true = 0
     total_false = 0
     matched_issues: dict[str, list[str]] = {}
+    cohorts: dict[str, dict[str, Any]] = {
+        cohort: {"candidates": 0, "labelled": 0, "true_findings": 0}
+        for cohort in ("high", "medium", "low")
+    }
+    # Rough review-token estimate: 1 token per ~4 characters of the
+    # worksheet line plus the candidate detail record.  The AI review cost
+    # is dominated by what the worksheet renders, so this tracks the
+    # compression the cohort ranking achieves.
+    estimated_tokens = 0.0
     for scanner, items in candidates.items():
         mapping = labels_by_scanner.get(scanner, {})
         true = false = 0
-        for signature, _, _ in items:
-            if signature in mapping:
-                label, issue = mapping[signature]
-                if label == "true_finding":
-                    true += 1
-                    matched_issues.setdefault(issue, []).append(
-                        f"{scanner}/{signature}"
-                    )
-                else:
-                    false += 1
+        for signature, display, detail in items:
+            estimated_tokens += (len(display) + len(json.dumps(detail))) / 4
+            cohort = cohorts[value_cohort(scanner, detail)]
+            cohort["candidates"] += 1
+            if signature not in mapping:
+                continue
+            label, issue = mapping[signature]
+            cohort["labelled"] += 1
+            if label == "true_finding":
+                true += 1
+                cohort["true_findings"] += 1
+                matched_issues.setdefault(issue, []).append(
+                    f"{scanner}/{signature}"
+                )
+            else:
+                false += 1
         total_candidates += len(items)
         total_labelled += true + false
         total_true += true
@@ -228,6 +275,13 @@ def _label_stats(
             "false_positives": false,
             "precision": round(true / (true + false), 3) if true + false else None,
         }
+
+    for cohort in cohorts.values():
+        cohort["precision"] = (
+            round(cohort["true_findings"] / cohort["labelled"], 3)
+            if cohort["labelled"]
+            else None
+        )
 
     unmatched: list[str] = []
     for scanner, mapping in labels_by_scanner.items():
@@ -256,6 +310,8 @@ def _label_stats(
             "unlabelled": total_candidates - total_labelled,
         },
         "per_scanner": per_scanner,
+        "cohorts": cohorts,
+        "estimated_tokens": round(estimated_tokens),
         "aggregate": {
             "candidates": total_candidates,
             "labelled": total_labelled,
@@ -291,6 +347,7 @@ def _aggregate_totals(results: list[dict[str, Any]]) -> dict[str, Any]:
         "unique_issues": 0,
         "python_lines": 0,
         "elapsed_seconds": 0.0,
+        "estimated_tokens": 0,
     }
     for result in results:
         stats = result.get("label_stats")
@@ -303,6 +360,8 @@ def _aggregate_totals(results: list[dict[str, Any]]) -> dict[str, Any]:
             totals["true_findings"] += aggregate["true_findings"]
             totals["false_positives"] += aggregate["false_positives"]
             totals["unique_issues"] += aggregate["unique_issues"]
+            # ``.get`` keeps old cached results loadable.
+            totals["estimated_tokens"] += stats.get("estimated_tokens", 0)
         totals["python_lines"] += result.get("python_lines", 0)
         totals["elapsed_seconds"] += result.get("elapsed_seconds", 0)
     labelled = totals["labelled"]
@@ -319,6 +378,19 @@ def _aggregate_totals(results: list[dict[str, Any]]) -> dict[str, Any]:
     totals["evidence_per_issue"] = (
         round(true_findings / totals["unique_issues"], 2)
         if totals["unique_issues"]
+        else None
+    )
+    # Token economy of the review surface: how many (estimated) review
+    # tokens each verified issue costs, and what fraction of emitted
+    # candidates resolve to a distinct verified defect.
+    totals["tokens_per_verified_issue"] = (
+        round(totals["estimated_tokens"] / totals["unique_issues"], 1)
+        if totals["unique_issues"]
+        else None
+    )
+    totals["verified_issue_yield"] = (
+        round(totals["unique_issues"] / totals["candidates"], 4)
+        if totals["candidates"]
         else None
     )
     kloc = max(0.001, totals["python_lines"] / 1000.0)
@@ -553,6 +625,9 @@ def main(argv: list[str] | None = None) -> int:
             f"unique_issue_ratio={totals['unique_issue_ratio']} "
             f"evidence_per_issue={totals['evidence_per_issue']} "
             f"review_burden={review_burden if review_burden is not None else '-'} "
+            f"estimated_tokens={totals['estimated_tokens']} "
+            f"tokens_per_verified_issue={totals['tokens_per_verified_issue']} "
+            f"verified_issue_yield={totals['verified_issue_yield']} "
             f"candidates_per_kloc={totals['candidates_per_kloc']} "
             f"runtime_per_kloc={totals['runtime_per_kloc']}s "
             f"labelled_projects={totals['labelled_projects']}"

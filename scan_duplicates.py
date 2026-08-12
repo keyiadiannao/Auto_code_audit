@@ -47,9 +47,17 @@ class FunctionRecord:
     arg_count: int
     node_count: int
     top_signature: tuple[str, ...]
+    definition_ordinal: int = 0
 
     @property
     def key(self) -> str:
+        """Stable identity.  ``path:qualname`` is the symbol id; conditional
+        or version-gated branches can define the same symbol twice, so later
+        definitions disambiguate with a ``#N`` definition ordinal.  The
+        first definition keeps the bare symbol so existing cluster ids and
+        labels stay stable."""
+        if self.definition_ordinal:
+            return f"{self.path}:{self.qualname}#{self.definition_ordinal}"
         return f"{self.path}:{self.qualname}"
 
 
@@ -92,10 +100,14 @@ def extract_functions(path: Path, min_chars: int) -> list[FunctionRecord]:
     tree = ast.parse(text)
 
     records: list[FunctionRecord] = []
+    ordinals: dict[str, int] = {}
     for node, parents in _iter_functions(tree):
         cloned = _without_docstring(node)
         if _is_signature_stub(cloned):
             continue
+        qualname = ".".join(parents + (node.name,))
+        ordinal = ordinals.get(qualname, 0)
+        ordinals[qualname] = ordinal + 1
         normalized_node = _Normalize().visit(cloned)
         ast.fix_missing_locations(normalized_node)
         normalized = " ".join(ast.unparse(normalized_node).split())
@@ -112,7 +124,7 @@ def extract_functions(path: Path, min_chars: int) -> list[FunctionRecord]:
             FunctionRecord(
                 path="",
                 name=node.name,
-                qualname=".".join(parents + (node.name,)),
+                qualname=qualname,
                 is_top_level=not parents,
                 nlines=end_lineno - node.lineno + 1,
                 normalized=normalized,
@@ -122,6 +134,7 @@ def extract_functions(path: Path, min_chars: int) -> list[FunctionRecord]:
                 + len(node.args.kwonlyargs),
                 node_count=sum(1 for _ in ast.walk(cloned)),
                 top_signature=tuple(type(x).__name__ for x in cloned.body[:3]),
+                definition_ordinal=ordinal,
             )
         )
     return records
@@ -238,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
                     arg_count=item.arg_count,
                     node_count=item.node_count,
                     top_signature=item.top_signature,
+                    definition_ordinal=item.definition_ordinal,
                 )
                 for item in extracted
             )
@@ -362,6 +376,11 @@ def main(argv: list[str] | None = None) -> int:
                         "qualname": member.qualname,
                         "is_top_level": member.is_top_level,
                         "nlines": member.nlines,
+                        **(
+                            {"definition_ordinal": member.definition_ordinal}
+                            if member.definition_ordinal
+                            else {}
+                        ),
                     }
                     for member in sorted(members, key=lambda item: item.key)
                 ],

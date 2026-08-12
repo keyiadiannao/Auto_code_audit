@@ -7,6 +7,8 @@ summary dict and returns the complete worksheet as a string.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
+
 SCANNER_NAMES: dict[str, str] = {
     "deadcode": "dead code",
     "duplicates": "duplicate clusters",
@@ -67,8 +69,26 @@ def _changes_markdown(block: dict | None) -> list[str]:
     return lines
 
 
-def markdown(payloads: dict[str, dict], summary: dict) -> str:
-    """Render the full markdown review worksheet from scanner payloads."""
+def _hidden_note(hidden: int, label: str) -> str:
+    return (
+        f"_{hidden} {label} in the low-value cohort are hidden by default; "
+        "run with `--exhaustive` to include them._"
+    )
+
+
+def markdown(
+    payloads: dict[str, dict],
+    summary: dict,
+    *,
+    keep: Callable[[str, dict], bool] | None = None,
+) -> str:
+    """Render the full markdown review worksheet from scanner payloads.
+
+    ``keep`` optionally rejects candidates by ``(scanner, detail)``: rejected
+    items are the low-value cohort (no confirmed findings at the pinned
+    benchmark commits), hidden by default and reachable by running the audit
+    with ``--exhaustive``.
+    """
     dead = payloads["deadcode"]
     duplicates = payloads["duplicates"]
     forks = payloads["forks"]
@@ -78,6 +98,64 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
     style = payloads["style"]
     regions = payloads.get("regions", {})
     provenance = summary["provenance"]
+
+    def partition(scanner: str, items: list[dict]) -> tuple[list[dict], int]:
+        if keep is None:
+            return list(items), 0
+        kept = [item for item in items if keep(scanner, item)]
+        return kept, len(items) - len(kept)
+
+    dead_candidates, dead_hidden = partition("deadcode", dead.get("candidates", []))
+    dup_clusters, dup_hidden = partition("duplicates", duplicates.get("clusters", []))
+    regions_clusters, regions_hidden = partition(
+        "regions", regions.get("clusters", [])
+    )
+    fork_pairs, fork_hidden = partition("forks", forks.get("pairs", []))
+    small_pairs, small_hidden = partition(
+        "forks", forks.get("small_function_pairs", [])
+    )
+    cap_overlap, cap_hidden = partition(
+        "capabilities", capabilities.get("overlap", [])
+    )
+    contract_parts = {
+        key: partition("contracts", contracts.get(key, []))
+        for key in (
+            "experiment_as_library",
+            "forwarding_wrappers",
+            "same_name_contracts",
+            "unreferenced_top_level_functions",
+            "cli_without_bootstrap",
+            "defensive_param_loosening",
+            "env_written_not_read",
+            "generation_path_without_env",
+        )
+    }
+    contracts_hidden = sum(hidden for _, hidden in contract_parts.values())
+    hardcoded_hits: dict[str, list[dict]] = {}
+    hardcoded_hidden = 0
+    for pattern, items in hardcoded.get("hits", {}).items():
+        kept, hidden = partition("hardcoded", items)
+        hardcoded_hidden += hidden
+        if kept:
+            hardcoded_hits[pattern] = kept
+    style_hits: dict[str, list[dict]] = {}
+    style_hidden = 0
+    for metric, items in style.get("hits", {}).items():
+        kept, hidden = partition("style", items)
+        style_hidden += hidden
+        if kept:
+            style_hits[metric] = kept
+    hidden_total = (
+        dead_hidden
+        + dup_hidden
+        + regions_hidden
+        + fork_hidden
+        + small_hidden
+        + cap_hidden
+        + contracts_hidden
+        + hardcoded_hidden
+        + style_hidden
+    )
 
     lines = [
         f"# Self-Audit review worksheet: `{summary['package']}`",
@@ -138,29 +216,39 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
             f"| hard-coded patterns | {sum(len(v) for v in hardcoded.get('hits', {}).values())} | {hardcoded.get('elapsed_seconds', 0):.3f} |",
             f"| writing-style candidates | {sum(len(v) for v in style.get('hits', {}).values())} | {style.get('elapsed_seconds', 0):.3f} |",
             "",
-            "## Dead-code candidates",
-            "",
         ]
     )
-    if dead.get("candidates"):
+    if hidden_total:
+        lines.extend(
+            [
+                f"> {hidden_total} candidates are in the low-value cohort "
+                "(no confirmed findings at the pinned benchmark commits) and "
+                "are hidden by default; run with `--exhaustive` to include them.",
+                "",
+            ]
+        )
+    lines.extend(["## Dead-code candidates", ""])
+    if dead_candidates:
         lines.extend(
             [
                 "| status | path | Python references | document references | verdict |",
                 "|---|---|---|---|---|",
             ]
         )
-        for item in dead["candidates"]:
+        for item in dead_candidates:
             py_refs = ", ".join(item.get("py_refs", []) + item.get("dynamic_refs", [])) or "-"
             doc_refs = ", ".join(item.get("doc_refs", [])) or "-"
             lines.append(
                 f"| {item['status']} | `{item['path']}` | {py_refs} | {doc_refs} | |"
             )
+    elif dead_hidden:
+        lines.append(_hidden_note(dead_hidden, "candidates"))
     else:
         lines.append("No candidates.")
 
     lines.extend(["", "## Duplicate-implementation candidates", ""])
-    if duplicates.get("clusters"):
-        for cluster in duplicates["clusters"]:
+    if dup_clusters:
+        for cluster in dup_clusters:
             shared = ""
             if cluster.get("lib_shared"):
                 shared = "; shared-lib member: " + ", ".join(
@@ -180,11 +268,15 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                     f"({member['nlines']} lines)"
                 )
             lines.extend(["- Verdict:", ""])
+        if dup_hidden:
+            lines.append(_hidden_note(dup_hidden, "clusters"))
+    elif dup_hidden:
+        lines.extend([_hidden_note(dup_hidden, "clusters"), ""])
     else:
         lines.extend(["No candidates.", ""])
 
     lines.extend(["", "## Repeated code regions", ""])
-    if regions.get("clusters"):
+    if regions_clusters:
         lines.extend(
             [
                 "Statement blocks inside functions that recur with similar inputs, "
@@ -193,7 +285,7 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                 "",
             ]
         )
-        for cluster in regions["clusters"]:
+        for cluster in regions_clusters:
             lines.append(f"### [{cluster['priority']}] `{cluster['id']}`")
             lines.append("")
             lines.append(f"Reason: {cluster['priority_reason']}.")
@@ -255,11 +347,15 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                         f"({member['nstatements']} stmts, ext={member['extractability']})"
                     )
             lines.extend(["- Verdict:", ""])
+        if regions_hidden:
+            lines.append(_hidden_note(regions_hidden, "clusters"))
+    elif regions_hidden:
+        lines.extend([_hidden_note(regions_hidden, "clusters"), ""])
     else:
         lines.extend(["No region clusters.", ""])
 
     lines.extend(["", "## Script-to-script fork candidates", ""])
-    if forks.get("pairs"):
+    if fork_pairs:
         lines.extend(
             [
                 "Cross-file callables sharing a large common skeleton with diverged ",
@@ -270,7 +366,7 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                 "|---|---|---|---|---|---|---|",
             ]
         )
-        for item in forks["pairs"]:
+        for item in fork_pairs:
             left, right = item["left"], item["right"]
             sig = "yes" if item["signature_match"] else "no"
             imp = (
@@ -285,11 +381,12 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                 f"`{right['path']}:{right['qualname']}` "
                 f"(L{right['lineno']}, {right['nlines']} lines) | {sig} | {imp} | |"
             )
+    elif fork_hidden:
+        lines.extend([_hidden_note(fork_hidden, "pairs"), ""])
     else:
         lines.extend(["No fork pairs.", ""])
 
     lines.extend(["", "## Small-function fork candidates", ""])
-    small_pairs = forks.get("small_function_pairs", [])
     if small_pairs:
         lines.extend(
             [
@@ -316,6 +413,8 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                 f"`{right['path']}:{right['qualname']}` "
                 f"(L{right['lineno']}, {right['nlines']} lines) | {sig} | {imp} | |"
             )
+    elif small_hidden:
+        lines.extend([_hidden_note(small_hidden, "pairs"), ""])
     else:
         lines.extend(["No small-function pairs.", ""])
 
@@ -326,116 +425,126 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
             "valuable adapter, compatibility debt, or an independent audit boundary; code ",
             "shape alone cannot decide which.",
             "",
-            "### Experiment modules used as libraries",
-            "",
         ]
     )
-    if contracts.get("experiment_as_library"):
-        for item in contracts["experiment_as_library"]:
-            names = ", ".join(item["names"])
-            lines.append(
-                f"- `{item['path']}:{item['line']}` imports `{item['module']}` "
-                f"({names}); importer layer: `{item['importer_layer']}`"
-            )
-    else:
-        lines.append("No candidates.")
-
-    lines.extend(["", "### Forwarding wrappers", ""])
-    if contracts.get("forwarding_wrappers"):
-        for item in contracts["forwarding_wrappers"]:
-            lines.append(
-                f"- `{item['path']}:{item['line']}` `{item['name']}{item['signature']}` "
-                f"delegates to `{item['target']}`; returns "
-                f"`{', '.join(item['return_contract'])}`"
-            )
-    else:
-        lines.append("No candidates.")
-
-    lines.extend(["", "### Repeated contract-sensitive names", ""])
-    if contracts.get("same_name_contracts"):
-        for group in contracts["same_name_contracts"]:
-            lines.append(f"#### `{group['name']}`")
-            lines.append("")
-            for item in group["definitions"]:
+    if any(kept for kept, _ in contract_parts.values()):
+        lines.extend(["### Experiment modules used as libraries", ""])
+        kept, hidden = contract_parts["experiment_as_library"]
+        if kept:
+            for item in kept:
+                names = ", ".join(item["names"])
                 lines.append(
-                    f"- `{item['path']}:{item['line']}` `{item['signature']}` -> "
+                    f"- `{item['path']}:{item['line']}` imports `{item['module']}` "
+                    f"({names}); importer layer: `{item['importer_layer']}`"
+                )
+        elif hidden:
+            lines.append(_hidden_note(hidden, "candidates"))
+
+        lines.extend(["", "### Forwarding wrappers", ""])
+        kept, hidden = contract_parts["forwarding_wrappers"]
+        if kept:
+            for item in kept:
+                lines.append(
+                    f"- `{item['path']}:{item['line']}` `{item['name']}{item['signature']}` "
+                    f"delegates to `{item['target']}`; returns "
                     f"`{', '.join(item['return_contract'])}`"
                 )
-            lines.append("")
-    else:
-        lines.append("No candidates.")
+        elif hidden:
+            lines.append(_hidden_note(hidden, "candidates"))
 
-    lines.extend(["", "### Unreferenced top-level functions", ""])
-    lines.append(
-        "This is a coarse symbol-use screen. Dynamic dispatch and external entrypoints "
-        "remain manual-review false positives."
-    )
-    lines.append("")
-    if contracts.get("unreferenced_top_level_functions"):
-        for item in contracts["unreferenced_top_level_functions"]:
-            lock = (
-                f"; source lock: {item['source_lock']}"
-                if item.get("source_lock")
-                else ""
-            )
-            lines.append(
-                f"- `{item['path']}:{item['line']}` "
-                f"`{item['name']}{item['signature']}`{lock}"
-            )
-    else:
-        lines.append("No candidates.")
+        lines.extend(["", "### Repeated contract-sensitive names", ""])
+        kept, hidden = contract_parts["same_name_contracts"]
+        if kept:
+            for group in kept:
+                lines.append(f"#### `{group['name']}`")
+                lines.append("")
+                for item in group["definitions"]:
+                    lines.append(
+                        f"- `{item['path']}:{item['line']}` `{item['signature']}` -> "
+                        f"`{', '.join(item['return_contract'])}`"
+                    )
+                lines.append("")
+        elif hidden:
+            lines.append(_hidden_note(hidden, "candidates"))
 
-    lines.extend(["", "### CLI entry scripts without sys.path bootstrap", ""])
-    if contracts.get("cli_without_bootstrap"):
-        lines.extend(
-            [
-                "These entry scripts import package modules but never add the repo "
-                "root to sys.path, so they only run when the cwd already contains "
-                "the repo root or when launched via `python -m`. Verify the launch "
-                "method against how the submission actually runs them.",
-                "",
-            ]
+        lines.extend(["", "### Unreferenced top-level functions", ""])
+        lines.append(
+            "This is a coarse symbol-use screen. Dynamic dispatch and external entrypoints "
+            "remain manual-review false positives."
         )
-        for item in contracts["cli_without_bootstrap"]:
-            lines.append(
-                f"- `{item['path']}:{item['line']}` imports `{item['module']}` "
-                "without a bootstrap"
-            )
-    else:
-        lines.append("No candidates.")
+        lines.append("")
+        kept, hidden = contract_parts["unreferenced_top_level_functions"]
+        if kept:
+            for item in kept:
+                lock = (
+                    f"; source lock: {item['source_lock']}"
+                    if item.get("source_lock")
+                    else ""
+                )
+                lines.append(
+                    f"- `{item['path']}:{item['line']}` "
+                    f"`{item['name']}{item['signature']}`{lock}"
+                )
+        elif hidden:
+            lines.append(_hidden_note(hidden, "candidates"))
 
-    lines.extend(["", "### Defensive-parameter loosening", ""])
-    if contracts.get("defensive_param_loosening"):
-        lines.extend(
-            [
-                "`strict=False` / `weights_only=False` weaken a load-time safety "
-                "contract. Each hit needs a verdict: deliberate partial load, or "
-                "accidental degradation.",
-                "",
-            ]
-        )
-        for item in contracts["defensive_param_loosening"]:
-            lines.append(f"- `{item['path']}:{item['line']}` `{item['code']}`")
-    else:
-        lines.append("No candidates.")
+        lines.extend(["", "### CLI entry scripts without sys.path bootstrap", ""])
+        kept, hidden = contract_parts["cli_without_bootstrap"]
+        if kept:
+            lines.extend(
+                [
+                    "These entry scripts import package modules but never add the repo "
+                    "root to sys.path, so they only run when the cwd already contains "
+                    "the repo root or when launched via `python -m`. Verify the launch "
+                    "method against how the submission actually runs them.",
+                    "",
+                ]
+            )
+            for item in kept:
+                lines.append(
+                    f"- `{item['path']}:{item['line']}` imports `{item['module']}` "
+                    "without a bootstrap"
+                )
+        elif hidden:
+            lines.append(_hidden_note(hidden, "candidates"))
 
-    lines.extend(["", "### Env-contract candidates", ""])
-    env_hits = contracts.get("env_written_not_read", []) + contracts.get(
-        "generation_path_without_env", []
-    )
-    if env_hits:
-        for item in contracts.get("env_written_not_read", []):
-            lines.append(
-                f"- env `{item['var']}` written at `{item['path']}:{item['line']}` "
-                "but never read in-package"
+        lines.extend(["", "### Defensive-parameter loosening", ""])
+        kept, hidden = contract_parts["defensive_param_loosening"]
+        if kept:
+            lines.extend(
+                [
+                    "`strict=False` / `weights_only=False` weaken a load-time safety "
+                    "contract. Each hit needs a verdict: deliberate partial load, or "
+                    "accidental degradation.",
+                    "",
+                ]
             )
-        for item in contracts.get("generation_path_without_env", []):
-            first = item["constants"][0]
-            lines.append(
-                f"- `{item['path']}` embeds a generation-pinned path "
-                f"({len(item['constants'])} const(s), first L{first['line']}) "
-                "with no env-var read in the file"
-            )
+            for item in kept:
+                lines.append(f"- `{item['path']}:{item['line']}` `{item['code']}`")
+        elif hidden:
+            lines.append(_hidden_note(hidden, "candidates"))
+
+        lines.extend(["", "### Env-contract candidates", ""])
+        env_written, env_hidden = contract_parts["env_written_not_read"]
+        gen_path, gen_hidden = contract_parts["generation_path_without_env"]
+        env_hidden_total = env_hidden + gen_hidden
+        if env_written or gen_path:
+            for item in env_written:
+                lines.append(
+                    f"- env `{item['var']}` written at `{item['path']}:{item['line']}` "
+                    "but never read in-package"
+                )
+            for item in gen_path:
+                first = item["constants"][0]
+                lines.append(
+                    f"- `{item['path']}` embeds a generation-pinned path "
+                    f"({len(item['constants'])} const(s), first L{first['line']}) "
+                    "with no env-var read in the file"
+                )
+        elif env_hidden_total:
+            lines.append(_hidden_note(env_hidden_total, "candidates"))
+    elif contracts_hidden:
+        lines.extend([_hidden_note(contracts_hidden, "candidates"), ""])
     else:
         lines.append("No candidates.")
 
@@ -458,7 +567,6 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
     )
 
     lines.extend(["", "## Capability-overlap candidates", ""])
-    cap_overlap = capabilities.get("overlap", [])
     if cap_overlap:
         untagged = capabilities.get("untagged_lib_capabilities", [])
         if untagged:
@@ -486,12 +594,14 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                 f"`{local['path']}:{local['qualname']}` (L{local['lineno']}) | "
                 f"`{lib['path']}:{lib['qualname']}` (L{lib['lineno']}, refs={lib['occurrences']}) | |"
             )
+    elif cap_hidden:
+        lines.extend([_hidden_note(cap_hidden, "candidates"), ""])
     else:
         lines.extend(["No candidates.", ""])
 
     lines.extend(["## Hard-coded-pattern candidates", ""])
-    if hardcoded.get("hits"):
-        for pattern, items in hardcoded["hits"].items():
+    if hardcoded_hits:
+        for pattern, items in hardcoded_hits.items():
             lines.append(f"### `{pattern}` ({len(items)})")
             lines.append("")
             for item in items:
@@ -501,12 +611,14 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                 lines.append(f"  Review prompt: {item['suggestion']}")
                 lines.append("  Verdict:")
             lines.append("")
+    elif hardcoded_hidden:
+        lines.extend([_hidden_note(hardcoded_hidden, "candidates"), ""])
     else:
         lines.extend(["No candidates.", ""])
 
     lines.extend(["## Writing-style candidates", ""])
-    if style.get("hits"):
-        for metric, items in style["hits"].items():
+    if style_hits:
+        for metric, items in style_hits.items():
             lines.append(f"### `{metric}` ({len(items)})")
             lines.append("")
             for item in items:
@@ -517,6 +629,8 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                 lines.append(f"  Review prompt: {item['suggestion']}")
                 lines.append("  Verdict:")
             lines.append("")
+    elif style_hidden:
+        lines.extend([_hidden_note(style_hidden, "candidates"), ""])
     else:
         lines.extend(["No candidates.", ""])
 

@@ -1,29 +1,36 @@
 #!/usr/bin/env python3
-"""Evidence-fusion experiment: does multi-scanner corroboration raise
+"""Evidence-fusion benchmark: does multi-scanner corroboration raise
 issue-level precision?
 
-An issue is a distinct defect.  The label registry groups candidates into
-issues via ``issue_id`` (every true finding carries one; every other
-candidate is its own issue).  An issue is *corroborated* when it carries
-2+ candidate signals — ideally from 2+ scanners (e.g. a ``duplicates``
-cluster confirmed by a ``regions`` twin for the same function pair).
+Two views are computed from the same per-project reports:
 
-The observed gap — single-signal issue precision of a few percent versus
-corroborated-issue precision at 100% in the current corpus — is the
-quantified case for fusing candidates into IssueBundles before
-adjudication: judging the bundle once gives the adjudicator strictly more
-evidence than judging its candidates independently.
+* **Proposed bundles (predictive, label-independent).**  Deterministic
+  fusion runs *before* any ground truth is consulted: a ``duplicates``
+  cluster and a ``regions`` cluster are merged into one proposed issue
+  only when their member-symbol sets are *identical*
+  (``{a.py:Foo, b.py:Bar}`` == ``{a.py:Foo, b.py:Bar}`` — Jaccard 1.0).
+  Labels are joined afterwards, only to score the bundles.  This answers
+  the product question directly: a fresh candidate corroborated by two
+  scanners is a proposed bundle *before* anyone adjudicates it.
 
-Construction caveat (printed with every run): ``issue_id`` was assigned to
-true findings during adjudication, so corroborated issues in the label set
-are enriched by construction.  This pipeline (a) measures the gap and
-(b) emits the per-issue evidence table a future LLM adjudicator will
-consume; the gap itself is only validated by adjudicating unlabelled
-bundles.
+* **Retrospective oracle (reference).**  The previous grouping, which
+  merges candidates by the ``issue_id`` assigned to true findings during
+  adjudication.  Its corroborated precision is enriched by construction —
+  it measures "how many confirmed issues carry multi-scanner evidence",
+  not whether corroboration predicts truth.
 
-Fusion is conservative by design: no heuristic merging of candidates into
-issues.  Bundles come only from explicit ``issue_id`` groups; everything
-else stays a single-signal issue.
+Four scores are reported for the proposed view:
+
+* ``bundle_precision`` — of the corroborated bundles (2+ channels), how
+  many contain at least one ground-truth true finding;
+* ``issue_recall`` — of the ground-truth issues with a reproduced
+  candidate, how many were *correctly formed*: every reproduced candidate
+  of the issue lands in exactly one proposed bundle with no other issue;
+* ``fusion_purity`` — share of proposed bundles whose candidates come
+  from at most one ground-truth issue (a bundle mixing two issues is a
+  mis-merge);
+* ``compression_ratio`` — candidates per proposed bundle, i.e. how many
+  AI adjudication units the raw candidates collapse to.
 
 Exit code 0 unless the inputs cannot be loaded.
 """
@@ -36,14 +43,19 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
+from _scanner_common import short_hash as _short_hash
 from benchmarks.run_benchmarks import load_labels
 from run_all import _candidate_signatures
+
+# Retrospective view ------------------------------------------------------------------
 
 
 def _issue_bundles(report: dict, labels: dict) -> list[dict[str, Any]]:
     """Group matched labels into issues; a label without an issue_id is its
     own issue.  Issues with no candidate reproduced in this run are dropped
-    (stale labels are not evidence)."""
+    (stale labels are not evidence).  This is the *retrospective* grouping:
+    issue_id was assigned to true findings during adjudication, so bundles
+    built this way are oracle-enriched by construction."""
     candidates = _candidate_signatures(report.get("scanners", {}))
     matched: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_target: dict[tuple[str, str], str] = {}
@@ -84,7 +96,7 @@ def _summarize(bundles: list[dict[str, Any]]) -> dict[str, Any]:
     true = sum(1 for bundle in bundles if bundle["true"])
     single = [bundle for bundle in bundles if bundle["signals"] == 1]
     corroborated = [bundle for bundle in bundles if bundle["signals"] >= 2]
-    stats = {
+    stats: dict[str, Any] = {
         "issues": total,
         "true_issues": true,
         "single_signal": len(single),
@@ -104,6 +116,188 @@ def _summarize(bundles: list[dict[str, Any]]) -> dict[str, Any]:
     return stats
 
 
+# Proposed (predictive) view ----------------------------------------------------------
+
+def _cluster_symbols(scanner: str, cluster: dict) -> tuple[frozenset[str], str]:
+    """Member-symbol set ``{path:qualname, ...}`` and the target_id of one
+    scanner cluster (duplicates or regions)."""
+    members = cluster.get("members", [])
+    symbols = frozenset(
+        f"{member['path']}:{member['qualname']}"
+        for member in members
+        if member.get("path") and member.get("qualname")
+    )
+    if scanner == "duplicates":
+        target = f"cluster/{cluster['id']}"
+    else:
+        target = f"region/{cluster['id']}"
+    return symbols, target
+
+
+def _proposed_bundles(report: dict) -> list[dict[str, Any]]:
+    """Label-independent deterministic fusion over the full candidate set.
+
+    Two clusters from *different* channels are merged into one proposed issue
+    only when their member-symbol sets are identical (conservative: exact
+    sets, two or more members).  Every remaining candidate — single-channel
+    clusters and all non-cluster candidates (deadcode, contracts, forks,
+    capabilities, hardcoded, style) — is its own single bundle, so the
+    proposed view covers every candidate the scanners emitted.  No label
+    information is consulted anywhere in this function.
+    """
+    clusters: list[tuple[str, str, frozenset[str]]] = []
+    scanners = report.get("scanners", {})
+    for cluster in scanners.get("duplicates", {}).get("clusters", []):
+        symbols, target = _cluster_symbols("duplicates", cluster)
+        clusters.append(("duplicates", target, symbols))
+    for cluster in scanners.get("regions", {}).get("clusters", []):
+        symbols, target = _cluster_symbols("regions", cluster)
+        clusters.append(("regions", target, symbols))
+
+    # Conservative merge: identical non-trivial symbol sets across channels.
+    bundles: list[dict[str, Any]] = []
+    merged: set[tuple[str, str]] = set()
+    by_symbol: dict[frozenset[str], list[tuple[str, str]]] = defaultdict(list)
+    for channel, target, symbols in clusters:
+        if len(symbols) >= 2:
+            by_symbol[symbols].append((channel, target))
+    for symbols, members in by_symbol.items():
+        channels = {channel for channel, _ in members}
+        if len(channels) >= 2:
+            issue_id = "proposed/" + _short_hash(*sorted(symbols))
+            bundles.append(
+                {
+                    "issue_id": issue_id,
+                    "candidates": [
+                        {"scanner": ch, "target_id": tid}
+                        for ch, tid in sorted(members)
+                    ],
+                    "channels": sorted(channels),
+                    "signals": len(members),
+                }
+            )
+            merged.update(members)
+    for channel, target, _ in clusters:
+        if (channel, target) in merged:
+            continue
+        bundles.append(
+            {
+                "issue_id": f"{channel}/{target}",
+                "candidates": [{"scanner": channel, "target_id": target}],
+                "channels": [channel],
+                "signals": 1,
+            }
+        )
+    # Every non-cluster candidate is its own single bundle.
+    for scanner, items in _candidate_signatures(scanners).items():
+        if scanner in {"duplicates", "regions"}:
+            continue
+        for signature, _, _ in items:
+            bundles.append(
+                {
+                    "issue_id": f"{scanner}/{signature}",
+                    "candidates": [{"scanner": scanner, "target_id": signature}],
+                    "channels": [scanner],
+                    "signals": 1,
+                }
+            )
+    return sorted(bundles, key=lambda b: b["issue_id"])
+
+
+def _score_bundles(bundles: list[dict[str, Any]], labels: dict) -> list[dict[str, Any]]:
+    """Join ground truth onto proposed bundles: label each bundle with the
+    ground-truth issues among its true candidates and whether any is true.
+
+    False-positive candidates define no issue, so a bundle that fuses one
+    true issue together with false candidates is impure only if it mixes two
+    *true* issues; the false contamination is a precision matter, not a
+    merge-quality one."""
+    truth = {
+        (entry["scanner"], entry["target_id"]): (
+            entry["label"],
+            entry.get("issue_id") or f"{entry['scanner']}/{entry['target_id']}",
+        )
+        for entry in labels["labels"]
+    }
+    for bundle in bundles:
+        issues: set[str] = set()
+        true = False
+        for member in bundle["candidates"]:
+            entry = truth.get((member["scanner"], member["target_id"]))
+            if entry is None:
+                continue
+            if entry[0] == "true_finding":
+                true = True
+                issues.add(entry[1])
+        bundle["ground_truth_issues"] = sorted(issues)
+        bundle["true"] = true
+    return bundles
+
+
+def _proposed_stats(
+    bundles: list[dict[str, Any]], labels_by_project: dict[str, dict]
+) -> dict[str, Any]:
+    """Corpus-wide scores for the proposed view."""
+    corroborated = [b for b in bundles if len(b["channels"]) >= 2]
+    single = [b for b in bundles if len(b["channels"]) == 1]
+    stats: dict[str, Any] = {
+        "bundles": len(bundles),
+        "corroborated": len(corroborated),
+        "corroborated_true": sum(1 for b in corroborated if b["true"]),
+        "single": len(single),
+        "single_true": sum(1 for b in single if b["true"]),
+    }
+    stats["corroborated_precision"] = (
+        round(stats["corroborated_true"] / len(corroborated), 3)
+        if corroborated
+        else None
+    )
+    stats["single_precision"] = (
+        round(stats["single_true"] / len(single), 3) if single else None
+    )
+    # issue recall: ground-truth issues with a reproduced candidate, formed
+    # when all their reproduced candidates sit in one bundle with no other
+    # issue.
+    gt_issues: defaultdict[str, list[str]] = defaultdict(list)
+    for project, labels in labels_by_project.items():
+        for entry in labels["labels"]:
+            if entry["label"] != "true_finding":
+                continue
+            issue = entry.get("issue_id") or (
+                f"{entry['scanner']}/{entry['target_id']}"
+            )
+            gt_issues[issue].append(f"{entry['scanner']}/{entry['target_id']}")
+    reproduced = {
+        f"{b['candidates'][i]['scanner']}/{b['candidates'][i]['target_id']}": b
+        for b in bundles
+        for i in range(b["signals"])
+    }
+    formed = 0
+    total_gt = 0
+    for issue, candidates in gt_issues.items():
+        present = [c for c in candidates if c in reproduced]
+        if not present:
+            continue
+        total_gt += 1
+        owning = {reproduced[c]["issue_id"] for c in present}
+        if len(owning) != 1:
+            continue
+        if len(reproduced[present[0]]["ground_truth_issues"]) == 1:
+            formed += 1
+    stats["issue_recall"] = round(formed / total_gt, 3) if total_gt else None
+    stats["ground_truth_issues"] = total_gt
+    stats["issues_formed"] = formed
+    # purity: share of bundles touching at most one ground-truth issue.
+    pure = sum(1 for b in bundles if len(b["ground_truth_issues"]) <= 1)
+    stats["fusion_purity"] = round(pure / len(bundles), 3) if bundles else None
+    candidates = sum(b["signals"] for b in bundles)
+    stats["compression_ratio"] = round(candidates / len(bundles), 2) if bundles else None
+    stats["candidates"] = candidates
+    return stats
+
+
+# CLI ---------------------------------------------------------------------------------
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
@@ -118,10 +312,12 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         help="directory of per-project label files",
     )
-    ap.add_argument("--json", type=Path, default=None, help="write issue table here")
+    ap.add_argument("--json", type=Path, default=None, help="write bundle table here")
     args = ap.parse_args(argv)
 
-    bundles: list[dict[str, Any]] = []
+    proposed: list[dict[str, Any]] = []
+    retrospective: list[dict[str, Any]] = []
+    labels_by_project: dict[str, dict] = {}
     for path in sorted(args.results_dir.glob("*.json")):
         if path.name in {"latest.json", "mutation_check.json"}:
             continue
@@ -130,39 +326,51 @@ def main(argv: list[str] | None = None) -> int:
         if not labels_path.is_file():
             continue
         labels = load_labels(labels_path)
-        project_bundles = _issue_bundles(report, labels)
-        for bundle in project_bundles:
-            bundle["project"] = path.stem
-        bundles.extend(project_bundles)
-
-    stats = _summarize(bundles)
-    print("ISSUE BUNDLES", json.dumps(stats))
-    by_channel = Counter(len(bundle["channels"]) for bundle in bundles)
-    print("channels-per-issue:", dict(sorted(by_channel.items())))
-    true_bundles = [bundle for bundle in bundles if bundle["true"]]
-    corroborated_true = [bundle for bundle in true_bundles if bundle["signals"] >= 2]
-    print(
-        f"true issues corroborated: {len(corroborated_true)}/{len(true_bundles)} "
-        f"(signals across scanners: "
-        f"{sorted(set(len(b['channels']) for b in corroborated_true))})"
-    )
-    for bundle in sorted(true_bundles, key=lambda b: (-b["signals"], b["issue_id"])):
-        print(
-            f"  [{bundle['signals']} sig / {len(bundle['channels'])} ch] "
-            f"{bundle['project']} {bundle['issue_id']}: "
-            f"{', '.join(m['scanner'] + '/' + m['target_id'] for m in bundle['candidates'])}"
+        labels_by_project[path.stem] = labels
+        project_proposed = _score_bundles(
+            _proposed_bundles(report), labels
         )
+        for bundle in project_proposed:
+            bundle["project"] = path.stem
+        proposed.extend(project_proposed)
+        for bundle in _issue_bundles(report, labels):
+            bundle["project"] = path.stem
+            retrospective.append(bundle)
+
+    proposed_stats = _proposed_stats(proposed, labels_by_project)
+    retro_stats = _summarize(retrospective)
+    print("PROPOSED BUNDLES", json.dumps(proposed_stats))
+    by_channel = Counter(len(bundle["channels"]) for bundle in proposed)
+    print("channels-per-proposed-bundle:", dict(sorted(by_channel.items())))
+    for bundle in sorted(
+        (b for b in proposed if len(b["channels"]) >= 2),
+        key=lambda b: b["issue_id"],
+    ):
+        print(
+            f"  [{'/'.join(bundle['channels'])}] {bundle['project']} "
+            f"{bundle['issue_id']}: true={bundle['true']} "
+            f"issues={bundle['ground_truth_issues']}"
+        )
+    print("RETROSPECTIVE (oracle grouping)", json.dumps(retro_stats))
     print(
-        "caveat: issue_ids were assigned to true findings during adjudication, "
-        "so corroborated issues are enriched by construction; the gap is "
-        "validated only by adjudicating unlabelled bundles"
+        "note: proposed bundles are label-independent; retrospective bundles "
+        "merge by adjudication-time issue_id and are oracle-enriched by "
+        "construction"
     )
 
     if args.json is not None:
         args.json.parent.mkdir(parents=True, exist_ok=True)
         args.json.write_text(
             json.dumps(
-                {"stats": stats, "issues": bundles}, indent=2, ensure_ascii=False
+                {
+                    "stats": {
+                        "proposed": proposed_stats,
+                        "retrospective": retro_stats,
+                    },
+                    "bundles": proposed,
+                },
+                indent=2,
+                ensure_ascii=False,
             ),
             encoding="utf-8",
         )

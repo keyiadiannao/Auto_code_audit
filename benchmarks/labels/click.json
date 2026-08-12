@@ -2,6 +2,13 @@
   "schema_version": 1,
   "project_id": "click",
   "commit": "9c4dfdaebe0e6b2aabc566eb81f6f10eb5cd6ea1",
+  "provenance": {
+    "human_verified": true,
+    "reviewers": [
+      "keyiadiannao"
+    ],
+    "ground_truth_version": "1.0"
+  },
   "labels": [
     {
       "scanner": "contracts",

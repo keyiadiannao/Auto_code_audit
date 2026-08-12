@@ -1,0 +1,1017 @@
+{
+  "schema_version": 1,
+  "purpose": "curated subset of the adjudicated corpus used as the trust anchor for AI adjudicator comparisons; every entry reproduces a human label",
+  "selection": {
+    "all_true_findings": true,
+    "false_positive_sampling": "per-project largest-remainder quotas, per-scanner stride sampling, deterministic",
+    "boundary_tagging": "near-miss reason keywords"
+  },
+  "counts": {
+    "entries": 100,
+    "true_findings": 16,
+    "false_positives": 84,
+    "boundary": 20
+  },
+  "entries": [
+    {
+      "project": "click",
+      "scanner": "contracts",
+      "target_id": "forwarding/_compat.py:212:_stream_is_misconfigured",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "click",
+      "scanner": "contracts",
+      "target_id": "forwarding/termui.py:767:unstyle",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "click",
+      "scanner": "contracts",
+      "target_id": "unreferenced/decorators.py:421:version_option",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "project": "click",
+      "scanner": "contracts",
+      "target_id": "unreferenced/termui.py:442:progressbar",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "project": "click",
+      "scanner": "duplicates",
+      "target_id": "cluster/0347d4ec8533",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "decorator factory pair (argument/option) sharing the skeleton; distinct semantics"
+    },
+    {
+      "project": "click",
+      "scanner": "duplicates",
+      "target_id": "cluster/32b6626b9b44",
+      "gold_label": "true_finding",
+      "issue_id": "text-reader-writer-pair",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "reader/writer twin helpers with identical 14-line bodies differing only in predicate name"
+    },
+    {
+      "project": "click",
+      "scanner": "duplicates",
+      "target_id": "cluster/5c3ee0f439c3",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "public decorator API helpers plus an unrelated util; structural coincidence"
+    },
+    {
+      "project": "click",
+      "scanner": "duplicates",
+      "target_id": "cluster/7bd2e02f7bf8",
+      "gold_label": "true_finding",
+      "issue_id": "completion-args-env-parsing",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "identical 11-line env-var parsing in Bash/Zsh/PowerShell get_completion_args; could share a base implementation"
+    },
+    {
+      "project": "click",
+      "scanner": "duplicates",
+      "target_id": "cluster/833b36278b73",
+      "gold_label": "true_finding",
+      "issue_id": "win-console-stream-trio",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "stdin/stderr/stdout win-console stream trio sharing identical construction logic"
+    },
+    {
+      "project": "click",
+      "scanner": "duplicates",
+      "target_id": "cluster/8b0fc5ec2cfd",
+      "gold_label": "true_finding",
+      "issue_id": "binary-reader-writer-pair",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "reader/writer twin helpers with byte-identical 16-line bodies differing only in predicate name"
+    },
+    {
+      "project": "click",
+      "scanner": "duplicates",
+      "target_id": "cluster/bff7b24ed403",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "4-line decorator boilerplate; overloads"
+    },
+    {
+      "project": "click",
+      "scanner": "regions",
+      "target_id": "region/0a9c8d79d87d",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical get_text_stderr; members are console IO and command registration, unrelated"
+    },
+    {
+      "project": "click",
+      "scanner": "regions",
+      "target_id": "region/391ef448f5de",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical get_text_stdin (stream helper); members _WindowsConsoleReader.readinto / _WindowsConsoleWriter.write (winconsole family siblings) / Group.add_command matched on guard shapes, unrelated"
+    },
+    {
+      "project": "click",
+      "scanner": "regions",
+      "target_id": "region/84b6d97b8a05",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical ConsoleStream.write (stream dispatch); member _is_incomplete_option matched on isinstance/early-return shapes, unrelated"
+    },
+    {
+      "project": "httpx",
+      "scanner": "contracts",
+      "target_id": "forwarding/_api.py:174:get",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "httpx",
+      "scanner": "contracts",
+      "target_id": "forwarding/_urlparse.py:478:PERCENT",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "vendored urllib3 compat shim (deliberate vendoring of a small parser helper)"
+    },
+    {
+      "project": "httpx",
+      "scanner": "duplicates",
+      "target_id": "cluster/021adc5a5675",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (async_auth_flow/sync_auth_flow Auth internal)"
+    },
+    {
+      "project": "httpx",
+      "scanner": "duplicates",
+      "target_id": "cluster/139de50a7338",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (patch/post/put Client/AsyncClient)"
+    },
+    {
+      "project": "httpx",
+      "scanner": "duplicates",
+      "target_id": "cluster/4809e5e75af1",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_init_proxy_transport Client/AsyncClient)"
+    },
+    {
+      "project": "httpx",
+      "scanner": "duplicates",
+      "target_id": "cluster/94c142d45a23",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_send_single_request Client/AsyncClient)"
+    },
+    {
+      "project": "httpx",
+      "scanner": "duplicates",
+      "target_id": "cluster/baf95dd64d21",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__exit__/__aexit__ Client)"
+    },
+    {
+      "project": "httpx",
+      "scanner": "duplicates",
+      "target_id": "cluster/d7035179921d",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (close/aclose Client)"
+    },
+    {
+      "project": "httpx",
+      "scanner": "forks",
+      "target_id": "fork/_api.py:stream|_client.py:AsyncClient.stream",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "project": "httpx",
+      "scanner": "regions",
+      "target_id": "region/0db19c16f3c4",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "Client/AsyncClient _send_single_request are a deliberate sync/async mirror pair"
+    },
+    {
+      "project": "httpx",
+      "scanner": "regions",
+      "target_id": "region/8d1f9d0b9b78",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical ZStandardDecoder.__init__ vs constructor boilerplate family"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "experiment_as_library/_py/path.py:1097:<dynamic spec_from_file_location>",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "stdlib importlib spec_from_file_location dynamic loading, not experiment-as-library reuse"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "forwarding/assertion/_guards.py:14:istext",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "forwarding/faulthandler.py:78:get_timeout_config_value",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "forwarding/legacypath.py:377:Session_startdir",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "forwarding/pathlib.py:1093:samefile_nofollow",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "forwarding/raises.py:300:repr_callable",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "unreferenced/assertion/rewrite.py:468:_should_repr_global_name",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "unreferenced/capture.py:1070:capsysbinary",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "unreferenced/fixtures.py:1609:yield_fixture",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "unreferenced/junitxml.py:341:record_testsuite_property",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "project": "pytest",
+      "scanner": "contracts",
+      "target_id": "unreferenced/recwarn.py:49:deprecated_call",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "project": "pytest",
+      "scanner": "deadcode",
+      "target_id": "DEAD/assertion/truncate.py",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "referenced by _pytest/assertion/__init__.py via package-relative import; scope-limited ref resolution"
+    },
+    {
+      "project": "pytest",
+      "scanner": "duplicates",
+      "target_id": "cluster/026ad02041e4",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "outcome __call__ boilerplate (3L)"
+    },
+    {
+      "project": "pytest",
+      "scanner": "duplicates",
+      "target_id": "cluster/1316275d5ce6",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "tiny assertion-state helpers"
+    },
+    {
+      "project": "pytest",
+      "scanner": "duplicates",
+      "target_id": "cluster/29b1005634f3",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "pytester result accessors (getfailures/getreports)"
+    },
+    {
+      "project": "pytest",
+      "scanner": "duplicates",
+      "target_id": "cluster/553f24a6faa8",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "raises message helpers (no_match_for_expected/actual)"
+    },
+    {
+      "project": "pytest",
+      "scanner": "duplicates",
+      "target_id": "cluster/8d13ea40e8bb",
+      "gold_label": "true_finding",
+      "issue_id": "exception-hook-plugin-pair",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "near-verbatim 38-39L exception hook duplicated across threadexception and unraisableexception plugins"
+    },
+    {
+      "project": "pytest",
+      "scanner": "duplicates",
+      "target_id": "cluster/a13b907ea058",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "dispatch stubs for user types (dict/list/string)"
+    },
+    {
+      "project": "pytest",
+      "scanner": "duplicates",
+      "target_id": "cluster/b4e9ceb8b736",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "pprint formatting handlers for different containers"
+    },
+    {
+      "project": "pytest",
+      "scanner": "duplicates",
+      "target_id": "cluster/dc70a2feaa0c",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "tiny junitxml write helpers (4L)"
+    },
+    {
+      "project": "pytest",
+      "scanner": "duplicates",
+      "target_id": "cluster/dfab0110b285",
+      "gold_label": "true_finding",
+      "issue_id": "collect-hook-plugin-pair",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "near-verbatim 37L collector duplicated across threadexception and unraisableexception plugins"
+    },
+    {
+      "project": "pytest",
+      "scanner": "forks",
+      "target_id": "fork/threadexception.py:collect_thread_exception|unraisableexception.py:collect_unraisable",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "deliberate sibling plugins (ThreadExceptionPlugin vs UnraisableExceptionPlugin) sharing hook shape for different exception mechanisms, not drift"
+    },
+    {
+      "project": "pytest",
+      "scanner": "hardcoded",
+      "target_id": "hard/manual_sha256/python.py:1064",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "hash used for hashing/IDs, not security; pattern is a false positive"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/06d44a99db5c",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical MockAwareDocTestFinder._find_lineno (property unwrap for doctest); members Visitor.__init__ / FixtureFunctionMarker.__call__ / LoggingPlugin.__init__ matched on isinstance/option plumbing, unrelated"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/078c50de785c",
+      "gold_label": "true_finding",
+      "issue_id": "exception-hook-plugin-pair",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "pytest_configure is a near-verbatim copy between the same plugin pair (excepthook vs unraisablehook wiring) — same duplication as the collect_* pair"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/1a75de7c819c",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "canonical Module._register_setup_module_fixture (xunit setUpModule autouse fixture); member Class._register_setup_method_fixture is the sibling method-scoped twin, same idiom, not a missed helper"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/293539aca00c",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical SafeRepr.repr_instance (try/except repr to _format_repr_exception); members MonkeyPatch.setattr import-path parsing and pkg-root resolution are unrelated"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/374b7f41103b",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical get_real_func (inspect.unwrap + partial.func); members deindent, truncation, conftest load, toml config are unrelated"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/4cbb16dd7e62",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "canonical _get_truncation_parameters (verbosity/CI truncation decision); member _truncate_explanation is the sibling truncation helper it already consults, matched on early-return guard shape, not a missed helper"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/4d40293005af",
+      "gold_label": "true_finding",
+      "issue_id": "exception-hook-plugin-pair",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "pytest_configure is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (excepthook vs unraisablehook wiring)"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/60797e94fde3",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical Pytester.inline_genitems (in-process collection); member LogXML.node_reporter matched on getattr key shape, unrelated"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/725a8e4abf77",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical Node.warn (warning dispatch); member MonkeyPatch.setattr matched on isinstance+raise TypeError guard shape, unrelated"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/7ce798bea36a",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "canonical reportinfo; members matched on generic getattr/tuple-return tokens"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/8cf7e69aa943",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical _NodeReporter._add_simple (XML element append); members SubRequest._format_fixturedef_line / bestrelpath / RunResult.__init__ matched on assignment/slice shapes, unrelated"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/963ac0f1c4e8",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "xunit setup fixture registration family (class/function/module); same shape differing only in scope and name lookup, the corpus's canonical deliberate-parallel family"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/a2c5f659c67f",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical LocalPath.parts (ancestor walk); member SysCaptureBase.__init__ matched on getattr/while shapes, unrelated"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/c049bc53e9e5",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical PytestDoctestRunner.report_unexpected_exception (doctest exc re-raise); member FixtureFunctionMarker.__call__ matched on isinstance+raise validation shape, unrelated"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/df095a6c4ebe",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical MarkMatcher.from_markers (mark grouping); member pytest_pyfunc_call matched on dict/loop shape, unrelated"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/dfab0110b285",
+      "gold_label": "true_finding",
+      "issue_id": "collect-hook-plugin-pair",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "collect hook is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (collect_thread_exception vs collect_unraisable)"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/e670a97200af",
+      "gold_label": "true_finding",
+      "issue_id": "collect-hook-plugin-pair",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "near-verbatim copy of the collect hook between the threadexception and unraisableexception plugins: same errors-loop structure differing only in stash/warning types"
+    },
+    {
+      "project": "pytest",
+      "scanner": "regions",
+      "target_id": "region/ea04637ce2fc",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "self-pair artifact: Item.__init__ matched against itself"
+    },
+    {
+      "project": "requests",
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:117:post",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "requests",
+      "scanner": "contracts",
+      "target_id": "unreferenced/api.py:137:put",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "project": "requests",
+      "scanner": "duplicates",
+      "target_id": "cluster/1592b9b56b70",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional API-layer forwarding wrappers (requests.api convenience vs Session methods); per-method semantics differ"
+    },
+    {
+      "project": "requests",
+      "scanner": "forks",
+      "target_id": "fork/api.py:head|sessions.py:Session.head",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "project": "requests",
+      "scanner": "hardcoded",
+      "target_id": "hard/manual_sha256/auth.py:195",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "hash used for hashing/IDs, not security; pattern is a false positive"
+    },
+    {
+      "project": "requests",
+      "scanner": "regions",
+      "target_id": "region/0028c2740fab",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical Response.__setstate__ is a pickle hook; members are unrelated functions, match is token-level"
+    },
+    {
+      "project": "starlette",
+      "scanner": "contracts",
+      "target_id": "forwarding/middleware/gzip.py:221:_normalize_content_types",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "starlette",
+      "scanner": "deadcode",
+      "target_id": "DEAD/config.py",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "project": "starlette",
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/trustedhost.py",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "project": "starlette",
+      "scanner": "duplicates",
+      "target_id": "cluster/1425764c496b",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "testclient HTTP method family (deliberate per-method wrappers)"
+    },
+    {
+      "project": "starlette",
+      "scanner": "duplicates",
+      "target_id": "cluster/37b43b1caf81",
+      "gold_label": "true_finding",
+      "issue_id": "url-path-for-route-pair",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "identical 10-line url_path_for on Route and WebSocketRoute differing only by protocol string"
+    },
+    {
+      "project": "starlette",
+      "scanner": "duplicates",
+      "target_id": "cluster/8e45063553bb",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "facade delegation (Starlette proxies host/mount/add_websocket_route to Router); bodies differ by design"
+    },
+    {
+      "project": "starlette",
+      "scanner": "regions",
+      "target_id": "region/044570a0c9d2",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "self-pair artifact: requires matched against itself; repeated-constant idiom is intra-function"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "contracts",
+      "target_id": "forwarding/_internal.py:29:_wsgi_decoding_dance",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "contracts",
+      "target_id": "forwarding/http.py:1221:is_resource_modified",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:375:_dump_csp_header",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:846:_parse_csp_header",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "contracts",
+      "target_id": "unreferenced/security.py:75:generate_password_hash",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/dispatcher.py",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "duplicates",
+      "target_id": "cluster/02dbf50e76d4",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "factory accessors (get_rules) on different rule classes"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "duplicates",
+      "target_id": "cluster/106e6dae78a6",
+      "gold_label": "true_finding",
+      "issue_id": "mimetype-params-copy",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "verbatim 13-line mimetype_params copied from Response into EnvironBuilder (test.py)"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "duplicates",
+      "target_id": "cluster/4edc03c41872",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "EnvironBuilder property pair (args/form) with different merge logic"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "duplicates",
+      "target_id": "cluster/8530876e3719",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "parallel parsers for different header grammars (Cache-Control vs CSP) emitting different structures"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "duplicates",
+      "target_id": "cluster/89976ed0f586",
+      "gold_label": "true_finding",
+      "issue_id": "is-json-duplication",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "identical is_json logic duplicated across Request and Response"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "duplicates",
+      "target_id": "cluster/ac4fe641d23a",
+      "gold_label": "true_finding",
+      "issue_id": "deprecation-wrapper-properties",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "near-verbatim deprecation-wrapper properties (content_md5/pragma) duplicated across Request and Response"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "duplicates",
+      "target_id": "cluster/b51bec7f8a53",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "exception header-builder family (get_headers x3)"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "forks",
+      "target_id": "fork/datastructures/cache_control.py:_CacheControl.from_header|datastructures/structures.py:HeaderSet.from_header",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "4-line classmethod parsers delegating to different parse helpers (parse_dict_header vs parse_list_header) for different header types, not drift"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "forks",
+      "target_id": "fork/sansio/request.py:Request.content_md5|sansio/response.py:Response.content_md5",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "deliberate parallel deprecated compat properties (same deprecation wrapper, different header semantics), not drift"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "regions",
+      "target_id": "region/00ffb8d7305e",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "member uri_to_iri is the deliberate inverse of iri_to_uri in the same file — a parallel direction pair, not a skipped named helper"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "regions",
+      "target_id": "region/106e6dae78a6",
+      "gold_label": "true_finding",
+      "issue_id": "mimetype-params-copy",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "mimetype_params is a verbatim copy from Response into EnvironBuilder (on_update + parse_options_header + CallbackDict), versionadded 0.5 vs 0.14; already a duplicates true_finding"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "regions",
+      "target_id": "region/33ded048685c",
+      "gold_label": "true_finding",
+      "issue_id": "deprecation-wrapper-properties",
+      "cohort": "true_finding",
+      "boundary": false,
+      "reason": "Request/Response content_md5 are a verbatim deprecation-wrapper pair; already a duplicates true_finding"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "regions",
+      "target_id": "region/657cdfa89f12",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "repr-generator helpers in the debug module; parallel repr families with distinct output shapes"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "regions",
+      "target_id": "region/a40881fa3733",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": false,
+      "reason": "Headers.__or__ re-implements the inherited MultiDict.__or__ body with type-narrowed signature; deliberate typing override, not copy-paste drift"
+    },
+    {
+      "project": "werkzeug",
+      "scanner": "regions",
+      "target_id": "region/c5405d50a916",
+      "gold_label": "false_positive",
+      "issue_id": null,
+      "cohort": "false_positive",
+      "boundary": true,
+      "reason": "canonical load_ssl_context (SSL context builder); members IfRange.from_header / stream_encode_multipart / redirect matched on guard and construction shapes, unrelated"
+    }
+  ]
+}

@@ -2,6 +2,13 @@
   "schema_version": 1,
   "project_id": "pytest",
   "commit": "0d6fbdeffa57c796123f62f81f7dd370d9b7ecdc",
+  "provenance": {
+    "human_verified": true,
+    "reviewers": [
+      "keyiadiannao"
+    ],
+    "ground_truth_version": "1.0"
+  },
   "labels": [
     {
       "scanner": "contracts",

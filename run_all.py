@@ -141,6 +141,28 @@ CONTRACTS_RISK: dict[str, str] = {
 }
 
 
+def value_cohort(scanner: str, detail: dict) -> str:
+    """Label-independent expected-value cohort for review prioritisation.
+
+    Derived from the pinned-commit corpus (16 true findings over 594
+    adjudicated candidates): the signal that separates true findings is
+    near-exact duplication (``duplicates`` ``max_sim >= 0.98`` — the same-file
+    reader/writer copies, the pytest plugin-pair hooks) and region twins
+    (``regions`` ``twin_match``); plain shared-capability regions are medium;
+    every other channel — contracts, forks, deadcode, capabilities,
+    hardcoded, style, low-similarity duplicates, and helper regions — has
+    zero confirmed findings at the pinned commits and is low-value.  The
+    benchmark reports per-cohort precision so the table stays honest.
+    """
+    if scanner == "duplicates":
+        return "high" if detail.get("max_sim", 0) >= 0.98 else "low"
+    if scanner == "regions":
+        if detail.get("twin_match"):
+            return "high"
+        return "medium" if detail.get("kind") == "shared_capability" else "low"
+    return "low"
+
+
 def finding_severity(scanner: str, detail: dict) -> str | None:
     """Unified risk severity for the Layer-3 new-risk gate.
 
@@ -608,6 +630,14 @@ def main(argv: list[str] | None = None) -> int:
         help="report ignore.json entries that no longer target live code "
              "(file, line, or symbol gone); does not modify the registry",
     )
+    ap.add_argument(
+        "--exhaustive",
+        action="store_true",
+        help="include the low-value cohort in the review worksheet (hidden "
+             "by default: contracts, forks, deadcode, low-similarity "
+             "duplicates, and helper regions have no confirmed findings at "
+             "the pinned commits)",
+    )
     args = ap.parse_args(argv)
 
     if args.cli_smoke:
@@ -719,6 +749,7 @@ def main(argv: list[str] | None = None) -> int:
         "ignore_file": str(args.ignore.resolve()) if args.ignore else None,
         "config_file": str(config_path) if config_path.is_file() else None,
         "cli_smoke": bool(args.cli_smoke),
+        "exhaustive": bool(args.exhaustive),
     }
     config_hash = audit_config_hash(configuration)
     bundle_sha_map = {path.name: _sha256(path) for path in scanner_files}
@@ -798,7 +829,14 @@ def main(argv: list[str] | None = None) -> int:
     args.json.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
     )
-    args.markdown.write_text(report_formatter.markdown(payloads, summary), encoding="utf-8")
+    keep = (
+        None
+        if args.exhaustive
+        else lambda scanner, detail: value_cohort(scanner, detail) != "low"
+    )
+    args.markdown.write_text(
+        report_formatter.markdown(payloads, summary, keep=keep), encoding="utf-8"
+    )
 
     dead_count = sum(
         item["status"] == "DEAD" for item in payloads["deadcode"]["candidates"]
