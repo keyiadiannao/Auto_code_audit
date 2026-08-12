@@ -801,8 +801,8 @@ def main(argv: list[str] | None = None) -> int:
     for i, record in enumerate(records):
         if "short_risky" in record.channel and record.short_signature is not None:
             short_buckets[record.short_signature].append(i)
-    for members in short_buckets.values():
-        unique = sorted(set(members))
+    for bucket in short_buckets.values():
+        unique = sorted(set(bucket))
         for pos, left in enumerate(unique):
             for right in unique[pos + 1 :]:
                 if not _length_comparable(records[left].tokens, records[right].tokens):
@@ -850,11 +850,11 @@ def main(argv: list[str] | None = None) -> int:
         by_function[fi].append((qi, coverage, referenced))
     for fi, fn_matches in by_function.items():
         fn = functions[fi]
-        members: list[dict[str, Any]] = []
+        helper_members: list[dict[str, Any]] = []
         files = {fn.path}
         for qi, coverage, referenced in sorted(fn_matches):
             region = records[qi]
-            members.append(
+            helper_members.append(
                 {
                     "path": region.path,
                     "qualname": region.parent,
@@ -890,13 +890,13 @@ def main(argv: list[str] | None = None) -> int:
             priority = "low"
             priority_reason = f"inline copy resembles canonical helper {fn.qualname}"
         cluster_id = _short_hash(
-            fn.path, fn.qualname, *sorted(member["region_id"] for member in members)
+            fn.path, fn.qualname, *sorted(member["region_id"] for member in helper_members)
         )
         if cluster_id in ignored_ids:
             ignored.append(
                 {
                     "id": cluster_id,
-                    "members": sorted(member["region_id"] for member in members),
+                    "members": sorted(member["region_id"] for member in helper_members),
                 }
             )
             continue
@@ -906,8 +906,8 @@ def main(argv: list[str] | None = None) -> int:
                 "kind": "helper_not_reused",
                 "priority": priority,
                 "priority_reason": priority_reason,
-                "size": len(members),
-                "max_lines": max(member["nlines"] for member in members),
+                "size": len(helper_members),
+                "max_lines": max(member["nlines"] for member in helper_members),
                 "max_coverage": round(best, 4),
                 "canonical_symbol": f"{fn.path}:{fn.qualname}",
                 "canonical": {
@@ -925,7 +925,7 @@ def main(argv: list[str] | None = None) -> int:
                         for signal in records[qi].risk_signals
                     }
                 ),
-                "members": members,
+                "members": helper_members,
             }
         )
 

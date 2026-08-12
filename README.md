@@ -175,8 +175,9 @@ The label set covers the channels most reliably adjudicated on public
 packages: dead-`public`-`API` candidates, forwarding wrappers, unreferenced
 public functions, fork pairs that are intentional convenience wrappers,
 non-security digest hashes, and every `duplicates` cluster emitted at the
-pinned commits. 355 of 421 candidates carry labels. Ten clusters are
-`true_finding` — near-verbatim copies inside the pytest thread/unraisable
+pinned commits. 355 of 620 candidates carry labels (the 199 unlabelled
+newcomers are `regions` clusters, which postdate the label set). Ten clusters
+are `true_finding` — near-verbatim copies inside the pytest thread/unraisable
 plugin pair, werkzeug's Request/Response deprecation wrappers
 (`content_md5`, `pragma`), `is_json`, and the `mimetype_params` copied from
 `Response` into `EnvironBuilder`, plus click's twin reader/writer helpers and
@@ -185,10 +186,16 @@ shell-completion env parsing and starlette's `Route`/`WebSocketRoute`
 (intentional API-layer wrappers, sync/async dual-interface mirrors,
 boilerplate dunder families, parallel parsers with distinct grammars).
 Corpus totals at the pinned commits: precision 0.028 (10/355), review burden
-42.1 candidates per confirmed finding, 4.41 candidates per KLOC. A label file
-whose `target_id` matches no candidate in the pinned commit is reported as
-`unmatched_labels` (stale scope), so label drift is visible rather than
-silent.
+62.0 candidates per confirmed finding, 6.5 candidates per KLOC, runtime 0.3s
+per KLOC. A label file whose `target_id` matches no candidate in the pinned
+commit is reported as `unmatched_labels` (stale scope), so label drift is
+visible rather than silent.
+
+The regions scanner adds ~2.1 candidates per KLOC on the six pinned repos
+(199 clusters; helper-not-reused matches dominate at 178, shared-capability
+12, short-block 9), so the review burden grew from 42.1 to 62.0 once regions
+entered the profile. None of the region clusters are labelled yet — first
+adjudication of that cohort is the next benchmark milestone.
 
 ### Mutation corpus (recall)
 
@@ -205,12 +212,14 @@ python benchmarks\run_mutation.py
 
 Recall is exact target matching, not count matching: a channel that fires on
 the wrong target (or reports the right count for unrelated reasons) is a
-miss. The v2 corpus covers all seven scanners and now also injects a
-`hardcoded` mutant (a hand-written SHA-256 hexdigest) so the digest channel
-has a recall target too. Current corpus: 21 injected targets, 21 matched,
-recall 1.000; the runner exits nonzero when any channel misses expected
-detections, so the regression gate covers scanner recall as well as
-precision on the corpus.
+miss. The v2 corpus covers all seven code scanners and now also injects a
+`hardcoded` mutant (a hand-written SHA-256 hexdigest) and three region
+mutants (a checkpoint block in the `shared` channel, an inline validation
+re-implementing a lib helper in `helper_not_reused`, and asymmetric
+`S00`/`S01`/`S10`/`S11` table lookups in `short_risky`). Current corpus: 24
+injected targets, 24 matched, recall 1.000; the runner exits nonzero when
+any channel misses expected detections, so the regression gate covers
+scanner recall as well as precision on the corpus.
 
 ## Scanners
 
@@ -283,7 +292,9 @@ wheel build/import smoke, and a whitespace check.
 ```text
 run_all.py              one-command orchestration + summary report + report diff
 adjudicate.py           resumable Layer-2 semantic candidate review
-scan_*.py               the seven deterministic scanners
+scan_*.py               the deterministic scanners (deadcode, duplicates,
+                        regions, forks, contracts, capabilities, hardcoded,
+                        style)
 scan_cli_smoke.py       entrypoint --help regression gate (run_all --cli-smoke)
 pyproject.toml          packaging metadata; console scripts auto-code-audit/-adjudicate
 benchmarks/             fixed-commit pilot corpus and read-only benchmark harness
