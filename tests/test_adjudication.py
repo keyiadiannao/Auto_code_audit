@@ -1,0 +1,252 @@
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from benchmarks.adjudication_cases import build_case
+from benchmarks.adjudication_protocol import (
+    CASE_SCHEMA_VERSION,
+    RECOMMENDED_ACTIONS,
+    REASON_CODES,
+    VERIFICATION_GATES,
+    validate_case,
+    validate_verdict,
+)
+from benchmarks.run_adjudication import (
+    _parse_verdict,
+    confusion_metrics,
+    prepare_cases,
+    read_verdict_file,
+    restrict_to_corpus,
+    user_prompt,
+    write_verdict_file,
+)
+
+
+def _valid_verdict() -> dict:
+    return {
+        "disposition": "true_finding",
+        "confidence": 0.9,
+        "reason": "identical 11-line env parsing in three shells",
+        "reason_codes": ["DUPLICATED_OWNERSHIP"],
+        "recommended_action": "extract_shared_component",
+        "reuse_target": "utils.py::parse_env_args",
+        "required_verification": ["unit_tests", "re_audit"],
+    }
+
+
+def test_validate_verdict_accepts_full_protocol() -> None:
+    verdict = validate_verdict(_valid_verdict())
+    assert verdict["disposition"] == "true_finding"
+    assert verdict["confidence"] == 0.9
+    assert verdict["reason_codes"] == ["DUPLICATED_OWNERSHIP"]
+    assert verdict["required_verification"] == ["re_audit", "unit_tests"]
+
+
+def test_validate_verdict_rejects_bad_fields() -> None:
+    with pytest.raises(ValueError, match="missing required"):
+        validate_verdict({"disposition": "true_finding"})
+    bad = _valid_verdict()
+    bad["disposition"] = "maybe"
+    with pytest.raises(ValueError, match="disposition"):
+        validate_verdict(bad)
+    bad = _valid_verdict()
+    bad["confidence"] = 1.5
+    with pytest.raises(ValueError, match="confidence"):
+        validate_verdict(bad)
+    bad = _valid_verdict()
+    bad["reason"] = ""
+    with pytest.raises(ValueError, match="reason"):
+        validate_verdict(bad)
+    bad = _valid_verdict()
+    bad["reason_codes"] = ["NOT_A_CODE"]
+    with pytest.raises(ValueError, match="reason_code"):
+        validate_verdict(bad)
+    bad = _valid_verdict()
+    bad["recommended_action"] = "delete_everything"
+    with pytest.raises(ValueError, match="recommended_action"):
+        validate_verdict(bad)
+    bad = _valid_verdict()
+    bad["required_verification"] = ["fuzz_forever"]
+    with pytest.raises(ValueError, match="verification"):
+        validate_verdict(bad)
+
+
+def test_protocol_enums_are_nonempty_and_stable() -> None:
+    assert REASON_CODES >= {"CONTRACT_DRIFT", "ORPHANED_CODE", "DUPLICATED_OWNERSHIP"}
+    assert RECOMMENDED_ACTIONS >= {"none", "extract_shared_component", "reuse_existing"}
+    assert VERIFICATION_GATES >= {"unit_tests", "re_audit"}
+    assert "investigate" in RECOMMENDED_ACTIONS
+
+
+def test_validate_case_checks_schema_version_and_scanner() -> None:
+    bundle = {
+        "case_schema_version": CASE_SCHEMA_VERSION,
+        "project_id": "p",
+        "commit": "0" * 40,
+        "scanner": "duplicates",
+        "target_id": "cluster/abc",
+        "display": "x",
+        "evidence": {},
+        "evidence_hash": "h",
+    }
+    assert validate_case(bundle)["scanner"] == "duplicates"
+    with pytest.raises(ValueError, match="missing required"):
+        validate_case({key: value for key, value in bundle.items() if key != "evidence"})
+    bad = dict(bundle)
+    bad["case_schema_version"] = 99
+    with pytest.raises(ValueError, match="case_schema_version"):
+        validate_case(bad)
+    bad = dict(bundle)
+    bad["scanner"] = "nonsense"
+    with pytest.raises(ValueError, match="scanner"):
+        validate_case(bad)
+
+
+def test_build_case_is_deterministic_and_label_free(tmp_path) -> None:
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "a.py").write_text(
+        "def foo(x):\n    return x + 1\n\ndef bar(y):\n    return y - 1\n",
+        encoding="utf-8",
+    )
+    detail = {"path": "a.py", "name": "foo", "line": 1, "signature": "(x)"}
+    first = build_case("p", "0" * 40, "contracts", "t", "d", detail, package)
+    second = build_case("p", "0" * 40, "contracts", "t", "d", detail, package)
+    assert first["evidence_hash"] == second["evidence_hash"]
+    assert "label" not in first
+    assert "ground_truth" not in first
+    assert first["snippets"][0]["code"].startswith("L1: def foo(x):")
+    altered = build_case("p", "0" * 40, "contracts", "t", "d", {"path": "a.py", "line": 4}, package)
+    assert altered["evidence_hash"] != first["evidence_hash"]
+
+
+def test_parse_verdict_handles_fences_and_garbage() -> None:
+    verdict = _parse_verdict('```json\n{"disposition": "false_positive", '
+                             '"confidence": 0.2, "reason": "public API"}\n```')
+    assert verdict is not None
+    assert verdict["disposition"] == "false_positive"
+    assert _parse_verdict("no json here") is None
+    assert _parse_verdict('{"disposition": "true_finding"}') is None
+    assert _parse_verdict('{"disposition": "maybe", "confidence": 1, "reason": "x"}') is None
+
+
+def test_user_prompt_contains_evidence_but_no_label(tmp_path) -> None:
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "a.py").write_text("def foo(x):\n    return x\n", encoding="utf-8")
+    bundle = build_case(
+        "p", "0" * 40, "duplicates", "cluster/1", "d",
+        {"members": [{"path": "a.py", "qualname": "foo"}]}, package,
+    )
+    prompt = user_prompt(bundle)
+    assert "cluster/1" in prompt
+    assert "def foo(x):" in prompt
+    assert "ground_truth" not in prompt
+    assert '"label"' not in prompt
+
+
+def test_confusion_metrics_numbers() -> None:
+    scored = [
+        {"ground_truth": "true_finding", "predicted": "true_finding"},
+        {"ground_truth": "true_finding", "predicted": "false_positive"},
+        {"ground_truth": "false_positive", "predicted": "true_finding"},
+        {"ground_truth": "false_positive", "predicted": "false_positive"},
+        {"ground_truth": "false_positive", "predicted": "false_positive"},
+    ]
+    metrics = confusion_metrics(scored)
+    assert metrics["tp"] == 1
+    assert metrics["fp"] == 1
+    assert metrics["fn"] == 1
+    assert metrics["tn"] == 2
+    assert metrics["adjudication_precision"] == 0.5
+    assert metrics["adjudication_recall"] == 0.5
+    assert metrics["fp_rejection_rate"] == pytest.approx(0.667, abs=0.001)
+    assert metrics["fn_rate"] == 0.5
+
+
+def test_verdict_file_roundtrip_validates(tmp_path) -> None:
+    verdict = _valid_verdict()
+    path = write_verdict_file(tmp_path, "abc123", verdict)
+    assert read_verdict_file(path)["disposition"] == "true_finding"
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text(
+        json.dumps({"schema_version": 1, "verdict": {"disposition": "true_finding"}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="missing required"):
+        read_verdict_file(malformed)
+    wrong_schema = tmp_path / "wrongschema.json"
+    wrong_schema.write_text(
+        json.dumps({"schema_version": 99, "verdict": _valid_verdict()}),
+        encoding="utf-8",
+    )
+    assert read_verdict_file(wrong_schema) is None
+
+
+def test_restrict_to_corpus_gates_on_verified_and_hash(tmp_path) -> None:
+    corpus_dir = tmp_path / "corpus"
+    corpus_dir.mkdir()
+    cases = [
+        {
+            "project_id": "p",
+            "scanner": "duplicates",
+            "target_id": "cluster/1",
+            "evidence_hash": "h1",
+        },
+        {
+            "project_id": "p",
+            "scanner": "duplicates",
+            "target_id": "cluster/2",
+            "evidence_hash": "h2",
+        },
+    ]
+    (corpus_dir / "p.json").write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "scanner": "duplicates",
+                        "target_id": "cluster/1",
+                        "label": "true_finding",
+                        "evidence_hash": "h1",
+                        "human_verified": True,
+                    },
+                    {
+                        "scanner": "duplicates",
+                        "target_id": "cluster/2",
+                        "label": "false_positive",
+                        "evidence_hash": "STALE",
+                        "human_verified": True,
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    truth = {"h1": "true_finding", "h2": "false_positive"}
+    kept, truth_out, warnings = restrict_to_corpus(cases, truth, corpus_dir, verified_only=True)
+    assert [case["evidence_hash"] for case in kept] == ["h1"]
+    assert truth_out["h1"] == "true_finding"
+    assert any("mismatch" in warning for warning in warnings)
+    kept_all, _, _ = restrict_to_corpus(cases, truth, corpus_dir, verified_only=False)
+    assert len(kept_all) == 1
+
+
+def test_prepare_cases_writes_jsonl(tmp_path) -> None:
+    cases_file = tmp_path / "cases.jsonl"
+    bundle = {
+        "evidence_hash": "abc",
+        "scanner": "contracts",
+        "target_id": "t",
+        "display": "d",
+        "evidence": {"path": "a.py"},
+        "snippets": [],
+    }
+    prepare_cases([bundle], cases_file)
+    lines = cases_file.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    payload = json.loads(lines[0])
+    assert payload["evidence_hash"] == "abc"
+    assert "prompt" in payload

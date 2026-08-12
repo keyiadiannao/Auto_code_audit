@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "project_id": "pytest",
+  "commit": "0d6fbdeffa57c796123f62f81f7dd370d9b7ecdc",
+  "entries": [
+    {
+      "scanner": "contracts",
+      "target_id": "experiment_as_library/_py/path.py:1097:<dynamic spec_from_file_location>",
+      "label": "false_positive",
+      "evidence_hash": "83159c3943bc4f65b59ae99028f04bc02c715be5833ac970b6614c782e29fa78",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/_py/error.py:118:__getattr__",
+      "label": "false_positive",
+      "evidence_hash": "463010276de0702734acfeb351b723775a6be931946339a669b95b3cdb034e16",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/compat.py:176:get_default_arg_names",
+      "label": "false_positive",
+      "evidence_hash": "f8af92f034b921dd950a0db3ed57ded25836ce089cad5042d7aa84eb273d6d6c",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/fixtures.py:1749:deduplicate_names",
+      "label": "false_positive",
+      "evidence_hash": "0c6ba80526242b2d961b5b1639a061b4ffe0616c858428da98e74c9c15847ef3",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/legacypath.py:357:Config_rootdir",
+      "label": "false_positive",
+      "evidence_hash": "5c3c45472942279479dcf17ee37484974335a4d5a0b87fc7591e2d4bb0439cde",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/main.py:475:pytest_collect_directory",
+      "label": "false_positive",
+      "evidence_hash": "7a2a0d09c682c273cf5d4f4fa156452fd8cebc00ff3618b70bce9f854228601b",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/pathlib.py:69:get_lock_path",
+      "label": "false_positive",
+      "evidence_hash": "4855ae4bee9b33627362431190be636aaedd1aa6f0df8c2348d0e068d184e479",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/python.py:235:pytest_pycollect_makemodule",
+      "label": "false_positive",
+      "evidence_hash": "f313c2eaa65445cfb95c061280084754113aa371f1ab3b91d3615b6dc0b96697",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/assertion/truncate.py",
+      "label": "false_positive",
+      "evidence_hash": "26cf0cf78d111fcfdaf737bbc18b69c0a9951dc7dfce82f521bdb618a19147a7",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/026ad02041e4",
+      "label": "false_positive",
+      "evidence_hash": "9c0b2401741a62ff11d028527f1b6002155237db65fa7b5b3ef20f3e0ba7c4b6",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0d5a95d45621",
+      "label": "false_positive",
+      "evidence_hash": "0884bee8a753a7f289132b801fbe7e6d747be2f74e5cd46689b949361951e03d",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/1dbb76cc9b91",
+      "label": "false_positive",
+      "evidence_hash": "c6251cda90d32fe84025d1a972d8d7982ec028ced03ffdae011bd30321907ef8",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/2b8d90c73e0e",
+      "label": "false_positive",
+      "evidence_hash": "0206e4ffb5445269b8ac011bd1dba5b2968419b19f9b85a3ac5e6e33e8e2913b",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/5523b32e61a8",
+      "label": "false_positive",
+      "evidence_hash": "a592b9c1ed0f71c31dc11db843699c495a87170ae565d2113a2480c834a41e41",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/8d13ea40e8bb",
+      "label": "true_finding",
+      "evidence_hash": "1ec4a692be1552f9a9ee662a672d50eddda5cb5a9b3abdf26ac3e2ad359e804b",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/9283ad7c5c25",
+      "label": "false_positive",
+      "evidence_hash": "ec023a480d8ce18e22286ac0979a886d66fc101201955541844f98d7320ef985",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a674dc897d67",
+      "label": "false_positive",
+      "evidence_hash": "551834ef61aaf72de57f5bae64c6ca5ab78ecf5b037fe97c5be74b8ebfa3b580",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b4e9ceb8b736",
+      "label": "false_positive",
+      "evidence_hash": "4d8ae5a056bb49a61f96cd22c866ed6adf0720c0bc77ea48e7d5013824ded42a",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d7060cdf9818",
+      "label": "false_positive",
+      "evidence_hash": "e76e3052a9c3792ca62d89a9ab9e56796bec6c4988e1199a88db9706aebb2642",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/dfab0110b285",
+      "label": "true_finding",
+      "evidence_hash": "36ea693588fb6721dc37799d619969e882accc4d07b9114047891d710d491e84",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f2a58f75d202",
+      "label": "false_positive",
+      "evidence_hash": "5abd63a37fc4ef041266aceb6def0fe83d9739bd99a146ed07c6a734c71ab568",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "hardcoded",
+      "target_id": "hard/manual_sha256/python.py:1064",
+      "label": "false_positive",
+      "evidence_hash": "d128c7f2df11d29a9f3975b4847f7fe4bd8bdf0f8a10913a061bc5efa290b4a0",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    }
+  ]
+}

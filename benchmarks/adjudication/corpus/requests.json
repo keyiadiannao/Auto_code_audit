@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "project_id": "requests",
+  "commit": "8068356288978c4f54661ae6f95afe0e0831885e",
+  "entries": [
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:117:post",
+      "label": "false_positive",
+      "evidence_hash": "24ac5b363d915b3a8d9710747aa13841546af0f647d1142c7e8b51fb16b3fc20",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:90:options",
+      "label": "false_positive",
+      "evidence_hash": "b358385ca6184f958cb2f4d31a26bab85329a7a122935d02a92444f82910eb03",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/api.py:102:head",
+      "label": "false_positive",
+      "evidence_hash": "076a809ff5f111761a9f3125f65439b243dfea4b97a80cff04e37fbaa8ddec5f",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/api.py:90:options",
+      "label": "false_positive",
+      "evidence_hash": "ed37f6412207811cc21c85f2636868b78fe569bf77aaec2e019c89d7f3f3d674",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:408:parse_list_header",
+      "label": "false_positive",
+      "evidence_hash": "44cfbf3d539958b835e3c4de1d3a474dfdd14cc3884e94122c9a8ef827f1cbd5",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/1592b9b56b70",
+      "label": "false_positive",
+      "evidence_hash": "fb6a3c83b61e437e5d44d23b13b042fa075d8e6401cbf41dfcdf35c31b62386c",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/api.py:head|sessions.py:Session.head",
+      "label": "false_positive",
+      "evidence_hash": "ffc562c332af2afea7cae7e01a328a4a10c5721e6a33f43874dc26636ecb876c",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "hardcoded",
+      "target_id": "hard/manual_sha256/auth.py:195",
+      "label": "false_positive",
+      "evidence_hash": "000d2449af52700be12702f13a1d10d0d43de396288a03f66d0a882f9de95fcd",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    }
+  ]
+}

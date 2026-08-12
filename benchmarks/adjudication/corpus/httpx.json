@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "project_id": "httpx",
+  "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+  "entries": [
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/_api.py:174:get",
+      "label": "false_positive",
+      "evidence_hash": "b5a6b6ff86bd304d8bd3c81c2b914a6bf4852afaf1cdd28a28bf4f303cf14fc6",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/_api.py:364:patch",
+      "label": "false_positive",
+      "evidence_hash": "d7a334bcc2f458039bba6d0ee3dad64d43e6bad96e51a7db1117a8f5e733f13a",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/_api.py:246:head",
+      "label": "false_positive",
+      "evidence_hash": "bc4dad2f674f1d2584fd63d5dce3188c9539e94ee04cace05b84bd9c76f88fb2",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/021adc5a5675",
+      "label": "false_positive",
+      "evidence_hash": "fb694adb7e8c42a9a73e4ba8de598b9c0a727db67c8ea9732fdd6de14f225cf2",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0ac814a57dee",
+      "label": "false_positive",
+      "evidence_hash": "30ff6b69cfabe451873460dd5ca950f26da88434fbcd0c0da245b5242d6160ec",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/22542bcf604a",
+      "label": "false_positive",
+      "evidence_hash": "1a9af4d371a1577204ef38eb6d767723ffcbaa304169c187294a77ab8dbe047d",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/46f7d5e83341",
+      "label": "false_positive",
+      "evidence_hash": "2edf3c6a925827e25447545b362603bcfaee1ab88cba0c31f1cf2497b23621b6",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/7dc60f916200",
+      "label": "false_positive",
+      "evidence_hash": "b7bdf5ca2b655fc92a713715682894639094909731f68934825c384216dd6597",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/94c142d45a23",
+      "label": "false_positive",
+      "evidence_hash": "d5cd41c63b0c81a2f4c8d81e620f81e4321200e15e6003e8c76197d5330d73e5",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a95d36ecfb7a",
+      "label": "false_positive",
+      "evidence_hash": "262121b66b8eb7574fcd9e377015a4e5cb86eaa7ce34baf07b0148524362a58b",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/bce7518f1356",
+      "label": "false_positive",
+      "evidence_hash": "5ad6fbe7d7f685b0d6b59d7147a3e6ccc2e061f7e266c3382c6cd944aca7a177",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/cfc23cf3ed72",
+      "label": "false_positive",
+      "evidence_hash": "4234859c8aa0765a48fbcd5654610c3fcd377068b4d2d4d36bd816b2436d0cf9",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f38306d1fc76",
+      "label": "false_positive",
+      "evidence_hash": "13bd16f2537d8e1938ddae85ff78a49bf1cc2e8b03407696bc054446fa9cba87",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/_api.py:stream|_client.py:AsyncClient.stream",
+      "label": "false_positive",
+      "evidence_hash": "9bdbbd40c27ea05df5da8ccf1dc2ce9cc3ede996370f7a4832f91d36a6274191",
+      "human_verified": false,
+      "reviewers": [],
+      "ground_truth_version": 1,
+      "note": ""
+    }
+  ]
+}
