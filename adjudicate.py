@@ -307,6 +307,10 @@ def _project_root(
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
+        "--version", action="version",
+        version=f"%(prog)s {run_all.__version__}",
+    )
+    ap.add_argument(
         "--root",
         type=Path,
         default=None,

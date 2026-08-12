@@ -838,6 +838,9 @@ def _markdown(payloads: dict[str, dict], summary: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}",
+    )
+    ap.add_argument(
         "--root",
         type=Path,
         default=Path.cwd(),

@@ -162,3 +162,42 @@ def matches_module(imported: str, target: str) -> bool:
     Used by ``scan_deadcode`` and ``scan_forks``.
     """
     return imported == target or imported.startswith(target + ".")
+
+
+def extract_imports(path: Path, package_root: Path) -> set[str]:
+    """Return the set of module names imported by *path*.
+
+    Handles both absolute (``import foo``) and relative (``from . import bar``)
+    imports, resolving the latter against the file's position in *package_root*.
+    Used by ``scan_forks`` to determine whether fork sides already import
+    each other (live coupling vs inert copy).
+    """
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return set()
+
+    imports: set[str] = set()
+    rel_parts = list(path.relative_to(package_root).with_suffix("").parts)
+    package_parts = rel_parts if rel_parts[-1:] == ["__init__"] else rel_parts[:-1]
+    if package_parts[-1:] == ["__init__"]:
+        package_parts.pop()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                keep = max(0, len(package_parts) - (node.level - 1))
+                prefix = package_parts[:keep]
+            else:
+                prefix = []
+            module_parts = node.module.split(".") if node.module else []
+            base = ".".join(prefix + module_parts)
+            if base:
+                imports.add(base)
+            for alias in node.names:
+                if alias.name != "*":
+                    imports.add(".".join(part for part in (base, alias.name) if part))
+    return imports

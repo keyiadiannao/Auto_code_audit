@@ -30,7 +30,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
-import json
 import re
 import sys
 from pathlib import Path
@@ -410,7 +409,8 @@ def analyze_prose(
         "em_dash": em_dashes,
         "em_dash_per_100w": round(em_dash_per_100w, 3),
     }
-    return {"stats": stats, "hits": hits, "prose_preview": prose[:200]}
+    return {"stats": stats, "hits": hits, "prose_preview": prose[:200],
+            "_sentence_lengths": lengths}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -502,6 +502,8 @@ def main(argv: list[str] | None = None) -> int:
     }
     ignored_hits: list[dict] = []
 
+    all_lengths: list[float] = []
+
     for path in sorted(files):
         rel = path.relative_to(repo).as_posix()
         src = path.read_text(encoding="utf-8", errors="replace")
@@ -515,6 +517,7 @@ def main(argv: list[str] | None = None) -> int:
             threshold_burstiness=threshold_burstiness,
         )
         per_file[rel] = result["stats"]
+        all_lengths.extend(float(n) for n in result.get("_sentence_lengths", []))
         for metric, items in result["hits"].items():
             for item in items:
                 if (item["id"] in ignored_ids
@@ -555,14 +558,6 @@ def main(argv: list[str] | None = None) -> int:
         aggregated["em_dash_per_100w"] = round(
             aggregated["em_dash"] / total_words * 100, 3
         )
-    all_lengths = []
-    for path in sorted(files):
-        rel = path.relative_to(repo).as_posix()
-        prose, _lead_nl, _tail_nl = strip_tex(
-            path.read_text(encoding="utf-8", errors="replace")
-        )
-        for sent in SENTENCE_RE.split(prose):
-            all_lengths.append(float(_words(sent).__len__()))
     if len(all_lengths) > 1:
         mean, sd = _mean_std(all_lengths)
         aggregated["burstiness_overall"] = round(sd / mean, 3) if mean else 0.0
@@ -578,11 +573,7 @@ def main(argv: list[str] | None = None) -> int:
         "hits": {name: values for name, values in hits.items() if values},
         "ignored": ignored_hits,
     }
-    if args.json:
-        args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(
-            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+    _write_json(args.json, payload)
 
     hit_count = sum(len(values) for values in hits.values())
     print(f"STYLE_SCAN tex_dir={tex_dir_name} files={len(files)} "

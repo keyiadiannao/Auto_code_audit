@@ -48,6 +48,7 @@ from _scanner_common import (
     EXCLUDE_PARTS,
     PY_SUBDIRS,
     NormalizeAST as _Normalize,
+    extract_imports,
     load_ignore,
     matches_module as _matches_module,
     module_name as _module_name,
@@ -55,7 +56,6 @@ from _scanner_common import (
     without_docstring as _without_docstring,
     write_json as _write_json,
 )
-from scan_deadcode import _analyze_source
 
 import _audit_config
 COMMON_NAMES = {"main", "parse_args", "require", "close", "count"}
@@ -381,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             rel_path = path.relative_to(pkg).as_posix()
             module_by_file[rel_path] = _module_name(path, pkg)
-            imports_by_file[rel_path] = _analyze_source(path, pkg)[0]
+            imports_by_file[rel_path] = extract_imports(path, pkg)
             records.extend(
                 CallableRecord(
                     path=rel_path,
