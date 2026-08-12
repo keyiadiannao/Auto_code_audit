@@ -895,3 +895,164 @@ def test_verify_test_flags_are_mutually_exclusive(tmp_path) -> None:
     )
     assert result.returncode == 2
     assert "mutually exclusive" in result.stderr + result.stdout
+
+
+def test_audit_inputs_hash_tracks_document_channel(tmp_path) -> None:
+    """A change to a scanned document-channel file (docs/*.md) changes the
+    audit-input fingerprint even though the Python tree is untouched; with
+    the channel off, the file is not an input at all."""
+    from _scanner_common import audit_inputs_sha256
+
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    notes = tmp_path / "docs" / "notes.md"
+    notes.write_text("first\n", encoding="utf-8")
+    settings = dict(doc_dirs=["docs"], doc_exclude=[], tex_dir="docs", tex_exclude=[])
+    on = audit_inputs_sha256(tmp_path, "pkg", document_channel=True, profile="code", **settings)
+    off = audit_inputs_sha256(tmp_path, "pkg", document_channel=False, profile="code", **settings)
+    assert on != off  # docs are an input only when the channel is on
+    notes.write_text("second\n", encoding="utf-8")
+    assert audit_inputs_sha256(tmp_path, "pkg", document_channel=True, profile="code", **settings) != on
+    assert audit_inputs_sha256(tmp_path, "pkg", document_channel=False, profile="code", **settings) == off
+
+
+def test_audit_inputs_hash_tracks_tex_in_research_profile(tmp_path) -> None:
+    """TeX files under tex_dir enter the fingerprint only in the research
+    profile (the style scanner's profile)."""
+    from _scanner_common import audit_inputs_sha256
+
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    tex = tmp_path / "docs" / "paper.tex"
+    tex.write_text("\\section{One}\n", encoding="utf-8")
+    settings = dict(doc_dirs=[], doc_exclude=[], tex_dir="docs", tex_exclude=[])
+    research = audit_inputs_sha256(tmp_path, "pkg", profile="research", **settings)
+    code = audit_inputs_sha256(tmp_path, "pkg", profile="code", **settings)
+    assert research != code
+    tex.write_text("\\section{Two}\n", encoding="utf-8")
+    assert audit_inputs_sha256(tmp_path, "pkg", profile="research", **settings) != research
+    assert audit_inputs_sha256(tmp_path, "pkg", profile="code", **settings) == code
+
+
+def test_verify_live_inputs_mismatch_rejects(tmp_path) -> None:
+    """The gate also fingerprints the full audit-input manifest (document
+    channel, TeX) and rejects when a scanned input changed after the audit,
+    even though the Python tree is byte-identical."""
+    import subprocess
+    import sys
+
+    from _scanner_common import audit_inputs_sha256, source_tree_sha256
+
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    notes = tmp_path / "docs" / "notes.md"
+    notes.write_text("first\n", encoding="utf-8")
+    tree = source_tree_sha256(tmp_path, "pkg")
+    inputs = audit_inputs_sha256(
+        tmp_path,
+        "pkg",
+        document_channel=True,
+        profile="code",
+        doc_dirs=["docs"],
+        doc_exclude=[],
+        tex_dir="docs",
+        tex_exclude=[],
+    )
+
+    head = "k" * 40
+    report_path = tmp_path / "report.json"
+    verdicts_path = tmp_path / "verdicts.json"
+    report = _full_report([], head, tree=tree)
+    report["configuration"]["document_channel"] = True
+    report["provenance"]["audit_inputs_sha256"] = inputs
+    report["provenance"]["audit_inputs"] = {
+        "doc_dirs": ["docs"],
+        "doc_exclude": [],
+        "tex_dir": "docs",
+        "tex_exclude": [],
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
+
+    # A scanned input changes after the audit; the Python tree does not.
+    notes.write_text("second\n", encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "run_verify",
+            "--root", str(tmp_path),
+            "--report", str(report_path),
+            "--verdicts", str(verdicts_path),
+            "--no-tests",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "audit inputs" in result.stderr + result.stdout
+    assert "re-run the audit" in result.stderr + result.stdout
+
+
+def test_verify_post_test_rehash_rejects_modified_tree(tmp_path) -> None:
+    """TOCTOU guard: a passing --test-command that rewrites source must not
+    verify — the suite ran against mutated code, so the recorded tree hash
+    no longer matches the live tree."""
+    import subprocess
+    import sys
+
+    from _scanner_common import source_tree_sha256
+
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    source = pkg / "a.py"
+    source.write_text("x = 1\n", encoding="utf-8")
+    tree = source_tree_sha256(tmp_path, "pkg")
+
+    head = "m" * 40
+    report_path = tmp_path / "report.json"
+    verdicts_path = tmp_path / "verdicts.json"
+    report_path.write_text(
+        json.dumps(_full_report([], head, tree=tree)), encoding="utf-8"
+    )
+    verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
+
+    # Control: a test command that does not touch source passes.
+    benign = subprocess.run(
+        [
+            sys.executable, "-m", "run_verify",
+            "--root", str(tmp_path),
+            "--report", str(report_path),
+            "--verdicts", str(verdicts_path),
+            "--test-command", f"{sys.executable} -c pass",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert benign.returncode == 0
+
+    # A test command that rewrites a scanned .py file rejects the gate.
+    mutator = tmp_path / "mutate.py"
+    mutator.write_text(
+        "from pathlib import Path\n"
+        f"Path({str(source)!r}).write_text('y = 2\\n', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "run_verify",
+            "--root", str(tmp_path),
+            "--report", str(report_path),
+            "--verdicts", str(verdicts_path),
+            "--test-command", f'{sys.executable} "{mutator}"',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "modified the audited source" in result.stderr + result.stdout

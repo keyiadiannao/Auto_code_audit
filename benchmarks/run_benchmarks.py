@@ -309,8 +309,17 @@ def _aggregate_totals(results: list[dict[str, Any]]) -> dict[str, Any]:
     totals["precision"] = round(totals["true_findings"] / labelled, 3) if labelled else None
     true_findings = totals["true_findings"]
     totals["review_burden"] = round(totals["candidates"] / true_findings, 1) if true_findings else None
-    totals["issues_per_finding"] = (
+    # ``unique_issue_ratio``: what fraction of labelled true findings are
+    # distinct defects (10/16 = 0.625 for the current corpus — the lower,
+    # the more corroboration); ``evidence_per_issue``: how many labelled
+    # candidates support each distinct defect on average (16/10 = 1.6).
+    totals["unique_issue_ratio"] = (
         round(totals["unique_issues"] / true_findings, 2) if true_findings else None
+    )
+    totals["evidence_per_issue"] = (
+        round(true_findings / totals["unique_issues"], 2)
+        if totals["unique_issues"]
+        else None
     )
     kloc = max(0.001, totals["python_lines"] / 1000.0)
     totals["candidates_per_kloc"] = round(totals["candidates"] / kloc, 2)
@@ -541,6 +550,8 @@ def main(argv: list[str] | None = None) -> int:
             f"precision={precision if precision is not None else '-'} "
             f"labelled={totals['labelled']}/{totals['candidates']} "
             f"unique_issues={totals['unique_issues']} "
+            f"unique_issue_ratio={totals['unique_issue_ratio']} "
+            f"evidence_per_issue={totals['evidence_per_issue']} "
             f"review_burden={review_burden if review_burden is not None else '-'} "
             f"candidates_per_kloc={totals['candidates_per_kloc']} "
             f"runtime_per_kloc={totals['runtime_per_kloc']}s "

@@ -119,33 +119,45 @@ After the user (or you) applies a patch for an accepted true finding:
 
 1. Tests: run the project's test suite; all must pass. The gate makes the
    test evidence machine-checkable in three ways: `--test-command <cmd>`
-   executes the suite inside the gate (non-zero exit rejects);
-   `--test-result <file>` consumes a machine-readable external artifact (a
-   JSON object with `"status": "passed" | "failed"`, e.g. a CI result file);
-   `--no-tests` declares that behavioral verification is delegated outside
-   the gate (`test_gate: "external_unverified"`) — accepted but never
-   `fully_verified: true`. A code-action verdict with no test evidence at
-   all is rejected — the gate never self-approves. The three flags are
-   mutually exclusive; the result JSON reports `fully_verified`, true only
-   when the test evidence was machine-checked.
-2. Re-audit: re-run the full scan on the same scope.
+   executes the suite inside the gate (non-zero exit rejects; the gate
+   re-fingerprints the live source tree afterwards, so a test command that
+   rewrites source cannot verify); `--test-result <file>` consumes a
+   machine-readable external artifact bound to the report's git head and
+   source tree (must carry `git_head` and `source_tree_sha256` matching the
+   audited report); `--no-tests` declares that behavioral verification is
+   delegated outside the gate (`test_gate: "external_unverified"`) —
+   accepted but never `fully_verified: true`. A code-action verdict with no
+   test evidence at all is rejected — the gate never self-approves. The
+   three flags are mutually exclusive; the result JSON reports
+   `fully_verified`, true only when the test evidence was machine-checked.
+2. Re-audit: re-run the full scan on the same scope and tree. The report
+   records `source_tree_sha256` (the audited Python tree),
+   `audit_inputs_sha256` (the full scanner input manifest — Python scope,
+   document channel, and TeX), `audit_config_hash`, and
+   `scanner_bundle_hash` under `provenance`.
 3. Run the engine-owned gate (replaces the manual checklist). `--verdicts`
    accepts either the aggregated `verdicts.json` or the per-case verdict
    directory `adjudication/verdicts/` from Phase 2:
 
    ```text
-   python run_verify.py --report <post-fix report.json> \
+   python run_verify.py --root <tree the audit ran against> \
+     --report <post-fix report.json> \
      --verdicts <verdicts.json | verdicts dir> --previous <pre-fix report.json> \
      --scope <path substring the patch touched> --test-command "pytest -q"
    ```
 
-   It fails when a code-action verdict's `target_id` still appears in the
-   new report, when a still-present finding's `finding_evidence_hash`
-   recomputes unchanged, when the patch scope gained a high/medium candidate
-   that was absent before the patch, or when the test gate rejects. It
-   speaks both the protocol vocabulary (`true_finding` +
-   `recommended_action`) and the legacy `adjudicate.py` dispositions. Exit
-   code 0 = acceptance.
+   `--root` must be the tree the audit ran against: the gate fingerprints
+   the live source tree and the full audit inputs, and requires both to
+   equal the report's recorded hashes — code changed after the audit, or a
+   non-comparable pre-patch report (different `audit_config_hash` or
+   `scanner_bundle_hash`), rejects the gate. It fails when a code-action
+   verdict's `target_id` still appears in the new report, when a
+   still-present finding's `finding_evidence_hash` recomputes unchanged,
+   when the patch scope gained a high/medium candidate that was absent
+   before the patch, or when the test gate rejects. It speaks both the
+   protocol vocabulary (`true_finding` + `recommended_action`) and the
+   legacy `adjudicate.py` dispositions. Remediation is complete only when
+   the gate prints `fully_verified=True`.
 4. Only then mark the finding remediated and, if the outcome is a lasting
    project convention, append one line to `LESSONS.md`.
 

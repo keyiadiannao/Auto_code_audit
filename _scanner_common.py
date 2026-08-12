@@ -311,3 +311,98 @@ def source_tree_sha256(root: Path, package: str | None, all_py: bool = False) ->
             except OSError:
                 continue
     return digest.hexdigest()
+
+
+def audit_inputs_sha256(
+    root: Path,
+    package: str | None,
+    all_py: bool = False,
+    document_channel: bool = True,
+    profile: str = "research",
+    doc_dirs: list[str] | None = None,
+    doc_exclude: list[str] | None = None,
+    tex_dir: str | None = None,
+    tex_exclude: list[str] | None = None,
+) -> str:
+    """Content fingerprint of every file the active scanners consume.
+
+    ``source_tree_sha256`` covers only the ``*.py`` scope.  The dead-code
+    document channel (``{pkg}``/``docs``/``.github`` templates and root-level
+    markdown/TOML/... files) and the TeX style scanner (``*.tex`` under
+    ``tex_dir`` in the research profile) consume files outside that scope;
+    a change to one of those can stale a report while the Python tree hash
+    stays identical.  This fingerprint covers the full audit-input manifest:
+    the Python scope first, then document-channel files, then TeX files,
+    each domain tagged and root-relative so the digest is reproducible from
+    any checkout of the same tree.
+
+    The effective settings (``doc_dirs`` templates, ``tex_dir``, exclusion
+    sets) must be passed in explicitly — run_verify cannot re-read
+    ``audit.config.json`` — so run_all records them in the report's
+    ``provenance.audit_inputs`` and both sides call this with identical
+    arguments.
+    """
+    # Lazy imports: scanners import this module at module level, so pulling
+    # their constants here would create an import cycle.
+    from scan_deadcode import DOC_EXTS, DEFAULT_DOC_DIRS, DEFAULT_EXCLUDE
+    from scan_style import DEFAULT_EXCLUDE_PARTS, DEFAULT_TEX_DIR
+
+    doc_dirs = doc_dirs if doc_dirs is not None else DEFAULT_DOC_DIRS
+    doc_exclude = doc_exclude if doc_exclude is not None else sorted(DEFAULT_EXCLUDE)
+    tex_dir = tex_dir if tex_dir is not None else DEFAULT_TEX_DIR
+    tex_exclude = tex_exclude if tex_exclude is not None else sorted(DEFAULT_EXCLUDE_PARTS)
+
+    def _append_files(digest: Any, files: list[Path], base: Path) -> None:
+        for path in sorted(files):
+            try:
+                rel = path.relative_to(base).as_posix()
+            except ValueError:
+                rel = path.as_posix()
+            digest.update(rel.encode("utf-8"))
+            digest.update(b"\0")
+            try:
+                with path.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            except OSError:
+                continue
+
+    digest = hashlib.sha256()
+    digest.update(b"python-scope\n")
+    scope = root if all_py else (root / package if package else root)
+    if scope.is_dir():
+        _append_files(digest, list(scope.rglob("*.py")), scope)
+    if document_channel:
+        digest.update(b"documents\n")
+        exclude = set(doc_exclude)
+        docs: list[Path] = []
+        for template in doc_dirs:
+            candidate = (root / template.format(pkg=package or "")).resolve()
+            if candidate.is_dir():
+                for path in candidate.rglob("*"):
+                    if not path.is_file() or path.suffix.lower() not in DOC_EXTS:
+                        continue
+                    if any(
+                        part in exclude for part in path.relative_to(candidate).parts
+                    ):
+                        continue
+                    docs.append(path)
+        docs.extend(
+            path
+            for path in root.iterdir()
+            if path.is_file() and path.suffix.lower() in DOC_EXTS
+        )
+        _append_files(digest, docs, root)
+    if profile == "research":
+        digest.update(b"tex\n")
+        tex_root = (root / tex_dir).resolve()
+        tex_files: list[Path] = []
+        if tex_root.is_dir():
+            exclude = set(tex_exclude)
+            tex_files = [
+                path
+                for path in tex_root.rglob("*.tex")
+                if path.is_file() and not any(part in exclude for part in path.parts)
+            ]
+        _append_files(digest, tex_files, root)
+    return digest.hexdigest()

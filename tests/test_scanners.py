@@ -796,6 +796,21 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
             payload["provenance"]["scanner_sha256"], run_all.__version__
         )
     )
+    # The full audit-input fingerprint is reproducible from the recorded
+    # provenance settings — run_verify recomputes it with exactly these.
+    from _scanner_common import audit_inputs_sha256
+
+    assert payload["provenance"]["audit_inputs_sha256"] == audit_inputs_sha256(
+        mini_repo,
+        payload["package"],
+        bool(payload["configuration"].get("all_py")),
+        bool(payload["configuration"].get("document_channel", True)),
+        payload["configuration"].get("profile", "research"),
+        payload["provenance"]["audit_inputs"]["doc_dirs"],
+        payload["provenance"]["audit_inputs"]["doc_exclude"],
+        payload["provenance"]["audit_inputs"]["tex_dir"],
+        payload["provenance"]["audit_inputs"]["tex_exclude"],
+    )
     assert set(payload["provenance"]["scanner_sha256"]) == {
         "_audit_config.py",
         "_scanner_common.py",

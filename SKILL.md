@@ -117,6 +117,9 @@ Verdicts carry a target identity and an evidence fingerprint. A changed
 candidate is stale even when its path/symbol identity is unchanged. False
 positive verdicts should carry the suppression payload so `--export-ignore`
 can rebuild a registry without depending on a mutable latest report.
+Verdict files bind two hashes: `case_hash` (the context digest, identical
+to the filename) and `finding_evidence_hash` (the raw
+`{scanner, target_id, detail}` digest that makes a changed candidate stale).
 
 Before assigning a verdict, write a contract card for each caller or caller
 family. It must state:
@@ -217,15 +220,18 @@ After edits:
    `--root` must point at the tree the audit ran against (the same value
    `run_all.py --root` received, or the current directory when the audit
    ran from the project root): the gate fingerprints the live source tree
-   and requires it to equal the report's recorded `source_tree_sha256`.
+   and the full audit-input manifest (`source_tree_sha256` and
+   `audit_inputs_sha256`, which also covers the document channel and TeX)
+   and requires them to equal the report's recorded values.
 
    The gate is machine-checked, not advisory. Remediation is complete only
    when it prints `fully_verified=True`: the recorded test run passed and ran
    against the exact audited source tree (`source_tree_sha256` matches the
    live tree), the test artifact is bound to the report's git head, and a
-   comparable pre-patch report (same audit config, scanner bundle, profile,
-   and package) proves the patch introduced no new candidate. A `VERIFY FAIL`
-   means the patch or its evidence is not done — return to Layer 2.
+   comparable pre-patch report (same `audit_config_hash`, `scanner_bundle_hash`,
+   profile, and package) proves the patch introduced no new candidate. A
+   `VERIFY FAIL` means the patch or its evidence is not done — return to
+   Layer 2.
 
 If a gate fails, return to semantic review. A clean static report cannot
 override a failed behavior or provenance gate, and a passing test suite

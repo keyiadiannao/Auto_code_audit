@@ -726,6 +726,35 @@ def main(argv: list[str] | None = None) -> int:
     source_tree_hash = _scanner_common.source_tree_sha256(
         args.root, args.package, bool(args.all_py)
     )
+    # Effective audit-input settings: the scanners read these from
+    # audit.config.json, which the report stores only as a path — so the
+    # effective values must ride along in provenance for run_verify to
+    # reproduce the fingerprint.
+    dead_cfg = cfg.get("deadcode", {})
+    doc_dirs = _audit_config.as_string_list(
+        dead_cfg.get("doc_dirs"), scan_deadcode.DEFAULT_DOC_DIRS
+    )
+    doc_exclude = _audit_config.as_string_list(
+        dead_cfg.get("exclude"), sorted(scan_deadcode.DEFAULT_EXCLUDE)
+    )
+    style_cfg = cfg.get("style", {})
+    tex_dir_name = _audit_config.pick(
+        None, style_cfg, "tex_dir", scan_style.DEFAULT_TEX_DIR
+    )
+    tex_exclude = _audit_config.as_string_list(
+        style_cfg.get("exclude_parts"), sorted(scan_style.DEFAULT_EXCLUDE_PARTS)
+    )
+    audit_inputs_hash = _scanner_common.audit_inputs_sha256(
+        args.root,
+        args.package,
+        bool(args.all_py),
+        bool(configuration["document_channel"]),
+        args.profile,
+        doc_dirs,
+        doc_exclude,
+        tex_dir_name,
+        tex_exclude,
+    )
     summary = {
         "scanner": "self-audit-run-all",
         "schema_version": SCHEMA_VERSION,
@@ -745,6 +774,13 @@ def main(argv: list[str] | None = None) -> int:
         "provenance": {
             "git": _git_provenance(args.root, args.package),
             "source_tree_sha256": source_tree_hash,
+            "audit_inputs_sha256": audit_inputs_hash,
+            "audit_inputs": {
+                "doc_dirs": doc_dirs,
+                "doc_exclude": doc_exclude,
+                "tex_dir": tex_dir_name,
+                "tex_exclude": tex_exclude,
+            },
             "audit_config_hash": config_hash,
             "scanner_bundle_hash": bundle_hash,
             "scanner_sha256": bundle_sha_map,

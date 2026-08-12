@@ -184,6 +184,11 @@ project, plus corpus totals:
   carry an `issue_id`, so several candidates reporting one defect (a region
   twin corroborating a `duplicates` finding for the same function pair)
   count once; an issue counts only when a run reproduced it
+- `unique_issue_ratio` — `unique_issues / true_findings` (corpus 0.62):
+  how far below 1.0 the labelled findings collapse into distinct defects
+- `evidence_per_issue` — `true_findings / unique_issues` (corpus 1.6):
+  average labelled candidates supporting each distinct defect, the
+  corroboration metric the future evidence-fusion experiment will build on
 - `issues` — per-issue evidence: every true label of the issue plus which of
   them the run matched
 - `candidates_per_kloc` and `runtime_per_kloc` — cost of a full pass against
@@ -216,7 +221,9 @@ parsers with distinct grammars, and token-coincidence matches where the
 region never actually inline-copies the canonical named helper).
 Corpus totals at the pinned commits: precision 0.038 (16/423), review burden
 37.8 candidates per confirmed finding, 6.34 candidates per KLOC, runtime
-~0.3s per KLOC. The 16 labelled true findings collapse to 10 unique issues:
+~0.3s per KLOC, unique-issue ratio 0.62 (10 unique issues per 16 labelled
+findings), evidence per issue 1.6. The 16 labelled true findings collapse to
+10 unique issues:
 each corroborating twin label shares the issue id of the `duplicates`
 finding it confirms (pytest's two plugin-pair defects, werkzeug's
 `mimetype_params` and `content_md5` copies), so the region twins add channel

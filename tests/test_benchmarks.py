@@ -314,7 +314,8 @@ def test_aggregate_totals_combine_labelled_results() -> None:
     assert totals["precision"] == 0.8
     assert totals["review_burden"] == 2.5
     assert totals["unique_issues"] == 3
-    assert totals["issues_per_finding"] == 0.75
+    assert totals["unique_issue_ratio"] == 0.75
+    assert totals["evidence_per_issue"] == 1.33
     assert totals["candidates_per_kloc"] == 2.0
     assert totals["runtime_per_kloc"] == 0.6
 

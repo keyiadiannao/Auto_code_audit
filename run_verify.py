@@ -311,15 +311,15 @@ def _check_report(
     test_gate: str = "not_run",
     previous_comparable: bool | None = None,
     verdict_invalid: list[str] | None = None,
-    tree_mismatch: str | None = None,
+    mismatches: list[str] | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     """Evaluate the gate; ``previous_comparable`` is the run_all comparator's
     verdict (None when no ``--previous`` was given; an incompatible baseline
     rejects the gate because its new-risk check would be meaningless),
     ``verdict_invalid`` are protocol-invalid verdict artifacts, which reject
     the gate fail-closed instead of being dropped from the input, and
-    ``tree_mismatch`` is the message produced when the live source tree no
-    longer matches the report's recorded ``source_tree_sha256``."""
+    ``mismatches`` are the messages produced when the live source tree or
+    audit inputs no longer match the report's recorded fingerprints."""
     failures: list[str] = []
     stats: dict[str, Any] = {
         "code_action_verdicts": 0,
@@ -327,8 +327,8 @@ def _check_report(
         "test_gate": test_gate,
         "fully_verified": False,
     }
-    if tree_mismatch:
-        failures.append(tree_mismatch)
+    for message in mismatches or []:
+        failures.append(message)
     for message in verdict_invalid or []:
         failures.append(f"invalid verdict artifact: {message}")
     if previous is not None and previous_comparable is not True:
@@ -502,7 +502,7 @@ def main(argv: list[str] | None = None) -> int:
 
     provenance = report.get("provenance") or {}
     report_tree = provenance.get("source_tree_sha256")
-    tree_mismatch: str | None = None
+    mismatches: list[str] = []
     if report_tree:
         from _scanner_common import source_tree_sha256
 
@@ -513,18 +513,63 @@ def main(argv: list[str] | None = None) -> int:
             bool(configuration.get("all_py")),
         )
         if live_tree != report_tree:
-            tree_mismatch = (
+            mismatches.append(
                 f"live source tree does not match the report's audited tree "
                 f"(tree {live_tree[:12]} != report {report_tree[:12]}); "
                 f"the code changed after the audit, or --root does not point "
                 f"at the tree the audit was run against — re-run the audit "
                 f"before verifying"
             )
+    report_inputs = provenance.get("audit_inputs_sha256")
+    if report_inputs:
+        from _scanner_common import audit_inputs_sha256
+
+        configuration = report.get("configuration") or {}
+        inputs_meta = provenance.get("audit_inputs") or {}
+        live_inputs = audit_inputs_sha256(
+            args.root.resolve(),
+            report.get("package"),
+            bool(configuration.get("all_py")),
+            bool(configuration.get("document_channel", True)),
+            configuration.get("profile", "research"),
+            inputs_meta.get("doc_dirs"),
+            inputs_meta.get("doc_exclude"),
+            inputs_meta.get("tex_dir"),
+            inputs_meta.get("tex_exclude"),
+        )
+        if live_inputs != report_inputs:
+            mismatches.append(
+                f"live audit inputs (Python scope, document channel, TeX) do "
+                f"not match the report's recorded inputs "
+                f"(inputs {live_inputs[:12]} != report {report_inputs[:12]}); "
+                f"a scanned input file changed after the audit — re-run the "
+                f"audit before verifying"
+            )
 
     artifact_reason = ""
     if args.test_command:
         result = subprocess.run(args.test_command, shell=True)
         test_gate = "passed" if result.returncode == 0 else "failed"
+        if test_gate == "passed" and report_tree:
+            # TOCTOU guard: the test command may rewrite source (codegen,
+            # golden files, formatters), so re-fingerprint the tree after it
+            # ran — a passing suite against mutated code must not verify.
+            from _scanner_common import source_tree_sha256
+
+            configuration = report.get("configuration") or {}
+            post_test_tree = source_tree_sha256(
+                args.root.resolve(),
+                report.get("package"),
+                bool(configuration.get("all_py")),
+            )
+            if post_test_tree != report_tree:
+                mismatches.append(
+                    f"live source tree changed while running --test-command "
+                    f"(tree {post_test_tree[:12]} != report {report_tree[:12]}); "
+                    f"the tests modified the audited source — a passing suite "
+                    f"against rewritten code cannot verify; re-run the audit "
+                    f"before verifying"
+                )
     elif args.test_result:
         report_head = ((provenance.get("git") or {})).get("head")
         test_gate, artifact_reason = _external_test_gate(
@@ -543,7 +588,7 @@ def main(argv: list[str] | None = None) -> int:
         test_gate,
         previous_comparable,
         invalid_verdicts,
-        tree_mismatch,
+        mismatches,
     )
     if artifact_reason:
         print(f"test artifact: {artifact_reason}", file=sys.stderr)
