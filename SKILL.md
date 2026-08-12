@@ -113,6 +113,11 @@ record. Explicit `--root`, `--ignore`, `--lessons`, and `--verdicts` paths take
 precedence. This prevents a toolkit checkout from receiving state belonging to
 the project under audit.
 
+Verdicts carry a target identity and an evidence fingerprint. A changed
+candidate is stale even when its path/symbol identity is unchanged. False
+positive verdicts should carry the suppression payload so `--export-ignore`
+can rebuild a registry without depending on a mutable latest report.
+
 Before assigning a verdict, write a contract card for each caller or caller
 family. It must state:
 

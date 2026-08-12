@@ -110,6 +110,17 @@ defaulting to `git user.name`); re-suppressing an already-registered candidate
 keeps the original record. Pass `--ignore`, `--lessons`, or `--verdicts`
 explicitly when a project uses a non-default state layout.
 
+Each non-deferred verdict records a stable `target_id` and an `evidence_hash`.
+If the candidate evidence changes, `--check` requires a new review. False
+positive verdicts also store their compiled suppression payload, so this is
+reproducible even after the candidate disappears from a later report:
+
+```text
+python adjudicate.py --root /work/foo \
+  --verdicts /work/foo/reports/verdicts.json \
+  --export-ignore /work/foo/ignore.json
+```
+
 An optional `<root>/audit.config.json` tunes scanner thresholds and exclusions.
 The config is checked for supported keys, types, ranges, and schema version;
 invalid values produce one warning and use compiled-in defaults.
@@ -183,8 +194,8 @@ git diff --check
 
 `.github/workflows/ci.yml` runs on every push and pull request across Python
 3.10–3.13 on Ubuntu and Windows: the test suite, an entrypoint `--help`
-smoke, an end-to-end dogfood self-audit (including the report-diff path),
-and a whitespace check.
+smoke, an end-to-end dogfood self-audit (including the report-diff path), a
+wheel build/import smoke, and a whitespace check.
 
 ## Project layout
 

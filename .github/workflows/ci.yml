@@ -27,12 +27,30 @@ jobs:
         continue-on-error: true
         run: |
           python -m pip install --quiet mypy
-          python -m mypy run_all.py adjudicate.py _scanner_common.py _audit_config.py scan_capabilities.py scan_contracts.py scan_deadcode.py scan_duplicates.py scan_forks.py scan_hardcoded.py scan_style.py scan_cli_smoke.py
+          python -m mypy run_all.py adjudicate.py _audit_config.py _scanner_common.py report_formatter.py scan_capabilities.py scan_contracts.py scan_deadcode.py scan_duplicates.py scan_forks.py scan_hardcoded.py scan_style.py scan_cli_smoke.py
       - name: Install and verify entrypoints
         run: |
           python -m pip install --quiet -e .
           auto-code-audit --version
           auto-code-adjudicate --version
+      - name: Build and verify wheel
+        shell: bash
+        run: |
+          rm -rf dist wheel-smoke
+          python -m pip install --quiet build
+          python -m build --wheel --outdir dist
+          python -m venv wheel-smoke
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            WHEEL_PY="wheel-smoke/Scripts/python.exe"
+          else
+            WHEEL_PY="wheel-smoke/bin/python"
+          fi
+          "$WHEEL_PY" -m pip install --quiet dist/*.whl
+          mkdir -p wheel-smoke/outside
+          cd wheel-smoke/outside
+          "$WHEEL_PY" -c "import report_formatter, run_all; print(run_all.__version__)"
+          "$WHEEL_PY" -m run_all --version
+          "$WHEEL_PY" -m adjudicate --version
       - name: Entrypoint --help smoke
         run: python scan_cli_smoke.py
       - name: End-to-end self-audit (dogfood)

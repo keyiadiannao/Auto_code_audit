@@ -1542,6 +1542,9 @@ def test_adjudicate_false_positive_end_to_end(
     assert len(verdict_log["verdicts"]) == 1
     assert verdict_log["verdicts"][0]["disposition"] == "false positive"
     assert verdict_log["verdicts"][0]["suppressed"] is True
+    assert verdict_log["verdicts"][0]["target_id"] == "DEAD/pkg/lib/unused.py"
+    assert len(verdict_log["verdicts"][0]["evidence_hash"]) == 64
+    assert verdict_log["verdicts"][0]["suppression"][0]["section"] == "deadcode"
 
     # A second run resumes from the verdict log: no pending candidates.
     monkeypatch.setattr("builtins.input", lambda _prompt: (_ for _ in ()).throw(AssertionError("no input expected")))
@@ -1681,17 +1684,70 @@ def test_adjudicate_check_reports_pending_without_writing(
     assert not (project / "ignore.json").exists()
     assert not (project / "reports" / "verdicts.json").exists()
 
+    finding = adjudicate._flatten(json.loads(report_path.read_text(encoding="utf-8")))[0]
     (project / "reports" / "verdicts.json").write_text(
         json.dumps(
             {
                 "verdicts": [
-                    {"scanner": "deadcode", "signature": "DEAD/pkg/dead.py"}
+                    {
+                        "scanner": "deadcode",
+                        "signature": "DEAD/pkg/dead.py",
+                        "target_id": finding["target_id"],
+                        "evidence_hash": finding["evidence_hash"],
+                        "disposition": "false positive",
+                    }
                 ]
             }
         ),
         encoding="utf-8",
     )
     assert adjudicate.main(["--report", str(report_path), "--check"]) == 0
+
+
+def test_adjudicate_check_rejects_stale_evidence(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "audited-project"
+    report_path = project / "reports" / "latest.json"
+    report_path.parent.mkdir(parents=True)
+    report = {
+        "scanners": {
+            "deadcode": {
+                "candidates": [
+                    {
+                        "path": "pkg/dead.py",
+                        "status": "DEAD",
+                        "py_refs": [],
+                        "doc_refs": [],
+                    }
+                ]
+            }
+        }
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    finding = adjudicate._flatten(report)[0]
+    verdicts = project / "reports" / "verdicts.json"
+    verdicts.write_text(
+        json.dumps(
+            {
+                "verdicts": [
+                    {
+                        "scanner": "deadcode",
+                        "signature": finding["signature"],
+                        "target_id": finding["target_id"],
+                        "evidence_hash": finding["evidence_hash"],
+                        "disposition": "false positive",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert adjudicate.main(["--report", str(report_path), "--check"]) == 0
+
+    report["scanners"]["deadcode"]["candidates"][0]["status"] = "USED"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    assert adjudicate.main(["--report", str(report_path), "--check"]) == 1
 
 
 def test_run_all_report_records_state_paths(
@@ -1967,6 +2023,63 @@ def test_adjudicate_export_ignore_is_idempotent(
         )
     registry = json.loads(export_path.read_text(encoding="utf-8"))
     assert len(registry["deadcode"]) == 1
+
+
+def test_export_ignore_rebuilds_from_self_contained_verdicts(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "project"
+    verdicts = project / "reports" / "verdicts.json"
+    verdicts.parent.mkdir(parents=True)
+    verdicts.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "verdicts": [
+                    {
+                        "scanner": "deadcode",
+                        "signature": "DEAD/pkg/gone.py",
+                        "target_id": "DEAD/pkg/gone.py",
+                        "evidence_hash": "evidence-v1",
+                        "disposition": "false positive",
+                        "suppression": [
+                            {
+                                "section": "deadcode",
+                                "entry": {
+                                    "path": "pkg/gone.py",
+                                    "reason": "generated artifact",
+                                    "date": "2026-08-12",
+                                    "owner": "reviewer-a",
+                                },
+                            }
+                        ],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    export_path = project / "ignore.json"
+
+    assert adjudicate.main(
+        [
+            "--root",
+            str(project),
+            "--verdicts",
+            str(verdicts),
+            "--export-ignore",
+            str(export_path),
+        ]
+    ) == 0
+    registry = json.loads(export_path.read_text(encoding="utf-8"))
+    assert registry["deadcode"] == [
+        {
+            "path": "pkg/gone.py",
+            "reason": "generated artifact",
+            "date": "2026-08-12",
+            "owner": "reviewer-a",
+        }
+    ]
 
 
 def test_audit_config_warns_once_on_invalid_json(

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import subprocess
 import sys
@@ -51,11 +52,49 @@ def _flatten(report: dict) -> list[dict]:
                 {
                     "scanner": scanner,
                     "signature": signature,
+                    "target_id": signature,
+                    "evidence_hash": _evidence_hash(scanner, signature, detail),
                     "display": display,
                     "detail": detail,
                 }
             )
     return items
+
+
+def _evidence_hash(scanner: str, target_id: str, detail: dict) -> str:
+    """Hash the candidate evidence while keeping target identity separate."""
+    payload = json.dumps(
+        {"scanner": scanner, "target_id": target_id, "detail": detail},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _report_context(report: dict, root: Path) -> dict:
+    provenance = report.get("provenance")
+    provenance = provenance if isinstance(provenance, dict) else {}
+    git = provenance.get("git")
+    git = git if isinstance(git, dict) else {}
+    return {
+        "project_root": str(root),
+        "report_schema_version": report.get("schema_version"),
+        "git_head": git.get("head"),
+        "scanner_sha256": provenance.get("scanner_sha256", {}),
+    }
+
+
+def _verdict_record(item: dict, disposition: str, context: dict) -> dict:
+    return {
+        "scanner": item["scanner"],
+        "signature": item["signature"],
+        "target_id": item["target_id"],
+        "evidence_hash": item["evidence_hash"],
+        "disposition": disposition,
+        "reviewed_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        **context,
+    }
 
 
 def _render_detail(scanner: str, detail: dict) -> str:
@@ -367,13 +406,16 @@ def main(argv: list[str] | None = None) -> int:
         else root / "reports" / "latest.json"
     )
     if not report_path.is_file():
-        print(f"error: report not found: {report_path}", file=sys.stderr)
-        return 2
-    try:
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"error: cannot read report: {exc}", file=sys.stderr)
-        return 2
+        if args.export_ignore is None:
+            print(f"error: report not found: {report_path}", file=sys.stderr)
+            return 2
+        report = {}
+    else:
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: cannot read report: {exc}", file=sys.stderr)
+            return 2
 
     root = _project_root(report_path, report, args.root)
     owner = args.owner or _git_owner(root)
@@ -397,11 +439,8 @@ def main(argv: list[str] | None = None) -> int:
         root,
         report_path.parent / "verdicts.json",
     )
-
-    candidates = _flatten(report)
-    if not candidates:
-        print("ADJUDICATE ok candidates=0")
-        return 0
+    if args.export_ignore is not None:
+        args.export_ignore = args.export_ignore.resolve()
 
     if args.ignore.is_file():
         try:
@@ -419,30 +458,13 @@ def main(argv: list[str] | None = None) -> int:
     if "schema_version" not in registry:
         registry["schema_version"] = 1
     verdicts = _load_verdicts(args.verdicts) or {
+        "schema_version": 2,
         "scanner": "self-audit-adjudicate",
         "report": str(args.report.resolve()),
         "adjudicated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "verdicts": [],
     }
-    # ``skip`` is a session-level deferral, not a final decision: skipped
-    # candidates reappear on resume and still count as pending for --check.
-    decided = {
-        (item["scanner"], item["signature"])
-        for item in verdicts.get("verdicts", [])
-        if item.get("disposition") != "skip"
-    }
-
-    pending = [
-        item for item in candidates
-        if (item["scanner"], item["signature"]) not in decided
-    ]
-    if args.check:
-        if pending:
-            print(f"ADJUDICATE CHECK_FAIL pending={len(pending)}", file=sys.stderr)
-            return 1
-        print(f"ADJUDICATE CHECK_PASS candidates={len(candidates)}")
-        return 0
-
+    candidates = _flatten(report)
     if args.export_ignore is not None:
         candidates_by_key = {
             (item["scanner"], item["signature"]): item
@@ -461,24 +483,74 @@ def main(argv: list[str] | None = None) -> int:
         if "schema_version" not in export_registry:
             export_registry["schema_version"] = 1
         exported = 0
+        stale = 0
         for verdict in verdicts.get("verdicts", []):
             if verdict.get("disposition") != "false positive":
                 continue
-            key = (verdict["scanner"], verdict["signature"])
-            item = candidates_by_key.get(key)
-            if item is None:
-                continue
-            note = verdict.get("note", "exported from verdicts")
-            entries = _ignore_entries(
-                item["scanner"], item["detail"], note, owner=owner
-            )
+            stored = verdict.get("suppression")
+            if isinstance(stored, list) and all(
+                isinstance(item, dict)
+                and isinstance(item.get("section"), str)
+                and isinstance(item.get("entry"), dict)
+                for item in stored
+            ):
+                entries = [
+                    (item["section"], item["entry"])
+                    for item in stored
+                ]
+            else:
+                key = (verdict.get("scanner"), verdict.get("signature"))
+                item = candidates_by_key.get(key)
+                if item is None:
+                    stale += 1
+                    continue
+                note = verdict.get("note", "exported from verdicts")
+                entries = _ignore_entries(
+                    item["scanner"], item["detail"], note, owner=owner
+                )
             exported += _merge_ignore(export_registry, entries)
+        if stale:
+            print(
+                f"EXPORT_IGNORE CHECK_FAIL stale={stale}; "
+                "re-adjudicate legacy verdicts before exporting",
+                file=sys.stderr,
+            )
+            return 1
         args.export_ignore.parent.mkdir(parents=True, exist_ok=True)
         args.export_ignore.write_text(
             json.dumps(export_registry, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        print(f"EXPORT_IGNORE written={exported} path={args.export_ignore}")
+        print(
+            f"EXPORT_IGNORE written={exported} stale={stale} "
+            f"path={args.export_ignore}"
+        )
+        return 0
+
+    if not candidates:
+        print("ADJUDICATE ok candidates=0")
+        return 0
+
+    context = _report_context(report, root)
+    # ``skip`` is a session-level deferral, not a final decision: skipped
+    # candidates reappear on resume and still count as pending for --check.
+    decided = {
+        (item["scanner"], item["signature"], item.get("evidence_hash"))
+        for item in verdicts.get("verdicts", [])
+        if item.get("disposition") != "skip" and item.get("evidence_hash")
+    }
+
+    pending = [
+        item for item in candidates
+        if (
+            item["scanner"], item["signature"], item["evidence_hash"]
+        ) not in decided
+    ]
+    if args.check:
+        if pending:
+            print(f"ADJUDICATE CHECK_FAIL pending={len(pending)}", file=sys.stderr)
+            return 1
+        print(f"ADJUDICATE CHECK_PASS candidates={len(candidates)}")
         return 0
 
     for index, item in enumerate(pending, start=1):
@@ -503,23 +575,15 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 return 0
             if answer == "s":
-                record = {
-                    "scanner": item["scanner"],
-                    "signature": item["signature"],
-                    "display": item["display"],
-                    "disposition": "skip",
-                }
+                record = _verdict_record(item, "skip", context)
+                record["display"] = item["display"]
                 _upsert_verdict(verdicts, record)
                 _save_verdicts(args.verdicts, verdicts)
                 break
             if answer in DISPOSITIONS:
                 disposition, guidance = DISPOSITIONS[answer]
-                record = {
-                    "scanner": item["scanner"],
-                    "signature": item["signature"],
-                    "display": item["display"],
-                    "disposition": disposition,
-                }
+                record = _verdict_record(item, disposition, context)
+                record["display"] = item["display"]
                 if disposition == "false positive":
                     while True:
                         try:
@@ -533,6 +597,10 @@ def main(argv: list[str] | None = None) -> int:
                         if note:
                             break
                     entries = _ignore_entries(item["scanner"], item["detail"], note, owner=owner)
+                    record["suppression"] = [
+                        {"section": section, "entry": entry}
+                        for section, entry in entries
+                    ]
                     added = _merge_ignore(registry, entries)
                     args.ignore.parent.mkdir(parents=True, exist_ok=True)
                     args.ignore.write_text(
