@@ -142,6 +142,68 @@ def test_duplicate_min_chars_is_honored(mini_repo: Path, tmp_path: Path) -> None
     assert payload["functions_scanned"] == 0
 
 
+def test_duplicate_overload_stubs_do_not_collide_cluster_ids(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """Signature-only ``@overload`` stubs (body ``...``) must not enter the
+    function index.  Two records with the same ``path:qualname`` key make
+    distinct clusters hash to the same ``_cluster_id``."""
+    _write(
+        mini_repo / "pkg" / "experiments" / "x.py",
+        '''\
+from typing import overload
+
+
+class Group:
+    def command(self, func, *args, **kwargs):
+        total = 0
+        for item in args:
+            total += item
+        return total + 1
+
+    def group(self, func, *args, **kwargs):
+        total = 0
+        for item in args:
+            total += item
+        return total + 2
+
+    @overload
+    def command(self, __func): ...
+
+    @overload
+    def group(self, __func): ...
+''',
+    )
+    output = tmp_path / "duplicates.json"
+    assert (
+        scan_duplicates.main(
+            [
+                "--root",
+                str(mini_repo),
+                "--package",
+                "pkg",
+                "--min-chars",
+                "0",
+                "--json",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    ids = [item["id"] for item in payload["clusters"]]
+    assert len(ids) == len(set(ids)), f"cluster id collision: {ids}"
+    # Only the two real implementations cluster; the stubs are dropped.
+    assert len(payload["clusters"]) == 1
+    cluster = payload["clusters"][0]
+    assert [
+        (member["path"], member["qualname"]) for member in cluster["members"]
+    ] == [
+        ("experiments/x.py", "Group.command"),
+        ("experiments/x.py", "Group.group"),
+    ]
+
+
 def test_scanners_accept_utf8_bom_entrypoint(mini_repo: Path, tmp_path: Path) -> None:
     path = mini_repo / "pkg" / "experiments" / "bom_cli.py"
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -69,6 +69,24 @@ class _UnionFind:
             self.parent[max(ra, rb)] = min(ra, rb)
 
 
+def _is_signature_stub(node: ast.AST) -> bool:
+    """True for signature-only declarations whose body is exactly ``...``.
+
+    ``@typing.overload`` stubs (and bare ``...`` placeholders) declare a
+    signature but no implementation.  Keeping them in the index creates
+    multiple records with the same ``path:qualname`` key, so distinct
+    clusters can hash to the same ``_cluster_id``.
+    """
+    body = getattr(node, "body", None)
+    return bool(
+        body
+        and len(body) == 1
+        and isinstance(body[0], ast.Expr)
+        and isinstance(body[0].value, ast.Constant)
+        and body[0].value.value is Ellipsis
+    )
+
+
 def extract_functions(path: Path, min_chars: int) -> list[FunctionRecord]:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     tree = ast.parse(text)
@@ -76,6 +94,8 @@ def extract_functions(path: Path, min_chars: int) -> list[FunctionRecord]:
     records: list[FunctionRecord] = []
     for node, parents in _iter_functions(tree):
         cloned = _without_docstring(node)
+        if _is_signature_stub(cloned):
+            continue
         normalized_node = _Normalize().visit(cloned)
         ast.fix_missing_locations(normalized_node)
         normalized = " ".join(ast.unparse(normalized_node).split())

@@ -200,7 +200,7 @@ public functions, fork pairs that are intentional convenience wrappers,
 non-security digest hashes, every `duplicates` cluster emitted at the pinned
 commits, and the first region batch (all 21 shared/short clusters plus the 50
 highest-coverage `helper_not_reused` clusters and all 11 `twin_match`
-clusters). 423 of 605 candidates carry
+clusters). 412 of 594 candidates carry
 labels (the 182 unlabelled remainder are lower-coverage `regions` helper
 clusters).
 Sixteen clusters are `true_finding` — twelve
@@ -219,9 +219,9 @@ remaining clusters are false positives (intentional API-layer wrappers,
 sync/async dual-interface mirrors, boilerplate dunder families, parallel
 parsers with distinct grammars, and token-coincidence matches where the
 region never actually inline-copies the canonical named helper).
-Corpus totals at the pinned commits: precision 0.038 (16/423), review burden
-37.8 candidates per confirmed finding, 6.34 candidates per KLOC, runtime
-~0.3s per KLOC, unique-issue ratio 0.62 (10 unique issues per 16 labelled
+Corpus totals at the pinned commits: precision 0.039 (16/412), review burden
+37.1 candidates per confirmed finding, 6.22 candidates per KLOC, runtime
+~0.36s per KLOC, unique-issue ratio 0.62 (10 unique issues per 16 labelled
 findings), evidence per issue 1.6. The 16 labelled true findings collapse to
 10 unique issues:
 each corroborating twin label shares the issue id of the `duplicates`
@@ -229,12 +229,15 @@ finding it confirms (pytest's two plugin-pair defects, werkzeug's
 `mimetype_params` and `content_md5` copies), so the region twins add channel
 evidence without inflating the defect count. A label file whose `target_id`
 matches no candidate in the pinned commit is reported as `unmatched_labels`
-(stale scope), so label drift is visible rather than silent. Eleven entries
-are currently unmatched — seven `false_positive`
+(stale scope), so label drift is visible rather than silent. 24 entries are
+currently unmatched, none of them true findings: ten `duplicates`
+`false_positive` labels for `@overload` signature-stub clusters (the scanner
+now skips signature-only declarations whose body is `...`, so those clusters
+no longer exist), plus fourteen `regions` `false_positive`
 constructor/`__init__`-boilerplate or ASGI-idiom labels created before the
-`__init__`-canonical helper filter landed, plus four stale `regions` twin
-labels whose issues are still counted through their matched `duplicates`
-siblings, so no unique issue was lost.
+`__init__`-canonical helper filter landed; the twin labels' issues are still
+counted through their matched `duplicates` siblings, so no unique issue was
+lost.
 
 The regions scanner adds ~1.9 candidates per KLOC on the six pinned repos
 (184 clusters; helper-not-reused matches dominate at 152, plain
@@ -278,6 +281,31 @@ families — deliberate parallel families and token-coincidence matches — need
 semantic signals beyond token overlap; the 31 labelled survivors stay open
 for a second adjudication batch alongside the 116 remaining unlabelled
 helper clusters.
+
+### Evidence fusion (issue bundles)
+
+`benchmarks/evidence_fusion.py` quantifies the case for adjudicating *issues*
+instead of candidates: a defect is an issue, and an issue is *corroborated*
+when 2+ candidates signal it — ideally from 2+ scanners (a `duplicates`
+cluster confirmed by a `regions` twin for the same function pair).  Labels
+already carry an `issue_id`, so the experiment groups reproduced candidates
+into bundles without any heuristic merging (a label without an `issue_id` is
+its own single-signal issue):
+
+```powershell
+python -m benchmarks.evidence_fusion --json C:\Temp\issue_table.json
+```
+
+At the pinned commits the gap is stark: single-signal issues run at 1.5%
+precision (6 true out of 402), while corroborated issues run at 100%
+(4/4 — two pytest plugin-pair defects each with a duplicates cluster plus two
+region twins, and two werkzeug copies each with a duplicates cluster plus one
+region twin).  Every true corroborated issue spans both scanners.  The
+construction caveat is printed with every run: `issue_id` was assigned to
+true findings during adjudication, so corroborated issues in the label set
+are enriched by construction — the pipeline measures the gap and emits the
+per-issue evidence table a future LLM adjudicator will consume, but the gap
+itself is only validated by adjudicating unlabelled bundles.
 
 ### Mutation corpus (recall)
 

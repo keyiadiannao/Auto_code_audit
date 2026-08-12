@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from benchmarks.evidence_fusion import _issue_bundles, _summarize, main as fusion_main
 from benchmarks.run_benchmarks import (
     _aggregate_totals,
     _label_stats,
@@ -159,6 +160,121 @@ def test_label_stats_compute_precision_and_coverage() -> None:
             "true_candidates": ["deadcode/DEAD/lib/zzz.py"],
         },
     }
+
+
+def _fusion_report() -> dict:
+    """Minimal payloads; ``_candidate_signatures`` reads duplicates
+    ``clusters[].id`` and regions ``clusters[].id`` only."""
+    return {
+        "scanners": {
+            "duplicates": {
+                "clusters": [
+                    {"id": "abc123", "priority": "high"},
+                    {"id": "def456", "priority": "low"},
+                ]
+            },
+            "regions": {
+                "clusters": [
+                    {"id": "abc123", "priority": "high", "kind": "shared_capability"},
+                ]
+            },
+        }
+    }
+
+
+def _fusion_labels() -> dict:
+    return {
+        "schema_version": 1,
+        "project_id": "toy",
+        "commit": "0" * 40,
+        "labels": [
+            {
+                "scanner": "duplicates",
+                "target_id": "cluster/abc123",
+                "label": "true_finding",
+                "issue_id": "twin-pair",
+                "reason": "identical implementation",
+            },
+            {
+                "scanner": "regions",
+                "target_id": "region/abc123",
+                "label": "true_finding",
+                "issue_id": "twin-pair",
+                "reason": "region twin of the duplicate pair",
+            },
+            {
+                "scanner": "duplicates",
+                "target_id": "cluster/def456",
+                "label": "false_positive",
+                "reason": "coincidental structural similarity",
+            },
+            {
+                "scanner": "regions",
+                "target_id": "region/nothere",
+                "label": "true_finding",
+                "issue_id": "stale-issue",
+                "reason": "stale label, candidate not reproduced",
+            },
+        ],
+    }
+
+
+def test_evidence_fusion_bundles_shared_issue_signals() -> None:
+    bundles = _issue_bundles(_fusion_report(), _fusion_labels())
+    by_id = {bundle["issue_id"]: bundle for bundle in bundles}
+    twin = by_id["twin-pair"]
+    assert twin["signals"] == 2
+    assert twin["channels"] == ["duplicates", "regions"]
+    assert twin["true"] is True
+    single = by_id["duplicates/cluster/def456"]
+    assert single["signals"] == 1
+    assert single["channels"] == ["duplicates"]
+    assert single["true"] is False
+    # A stale label whose candidate is not reproduced contributes no issue.
+    assert "stale-issue" not in by_id
+
+
+def test_evidence_fusion_summarize_precision_gap() -> None:
+    bundles = [
+        {"issue_id": "a", "signals": 1, "channels": ["duplicates"], "true": True},
+        {"issue_id": "b", "signals": 1, "channels": ["duplicates"], "true": False},
+        {"issue_id": "c", "signals": 2, "channels": ["duplicates", "regions"], "true": True},
+    ]
+    stats = _summarize(bundles)
+    assert stats["issues"] == 3
+    assert stats["single_signal_precision"] == 0.5
+    assert stats["corroborated_precision"] == 1.0
+    assert stats["issues_per_finding"] == 1.5
+
+
+def test_evidence_fusion_cli_writes_issue_table(tmp_path: Path) -> None:
+    results = tmp_path / "results"
+    labels = tmp_path / "labels"
+    results.mkdir()
+    labels.mkdir()
+    (results / "toy.json").write_text(
+        json.dumps(_fusion_report()), encoding="utf-8"
+    )
+    (labels / "toy.json").write_text(
+        json.dumps(_fusion_labels()), encoding="utf-8"
+    )
+    out = tmp_path / "issues.json"
+    rc = fusion_main(
+        [
+            "--results-dir",
+            str(results),
+            "--labels-dir",
+            str(labels),
+            "--json",
+            str(out),
+        ]
+    )
+    assert rc == 0
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["stats"]["issues"] == 2
+    assert payload["stats"]["single_signal_precision"] == 0.0
+    assert payload["stats"]["corroborated_precision"] == 1.0
+    assert len(payload["issues"]) == 2
 
 
 def test_label_stats_counts_matched_issues_only(tmp_path: Path) -> None:
