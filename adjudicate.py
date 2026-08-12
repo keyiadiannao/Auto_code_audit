@@ -108,6 +108,19 @@ def _render_detail(scanner: str, detail: dict) -> str:
         return (
             f"priority={detail.get('priority')} reason={detail.get('priority_reason')}"
         )
+    if scanner == "regions":
+        canonical = detail.get("canonical")
+        canonical_s = (
+            f"{canonical['path']}:{canonical['qualname']}"
+            if canonical
+            else "none"
+        )
+        return (
+            f"kind={detail.get('kind')} priority={detail.get('priority')} "
+            f"risk={detail.get('semantic_risk')} "
+            f"signals={','.join(detail.get('risk_signals', [])) or '-'} "
+            f"canonical={canonical_s}"
+        )
     if scanner == "forks":
         left, right = detail["left"], detail["right"]
         return (

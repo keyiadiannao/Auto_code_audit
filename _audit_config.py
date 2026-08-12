@@ -17,6 +17,7 @@ Supported schema (all keys optional):
   "duplicates": {"threshold": 0.82, "min_chars": 120, "skip_names": [...]},
   "forks": {"threshold": 0.75, "min_lines": 40, "small_floor": 8,
             "small_threshold": 0.9, "include_tests": false},
+  "regions": {"threshold": 0.82, "helper_reuse_threshold": 0.6},
   "contracts": {"contract_sensitive_names": [...],
                 "source_locked_active_paths": {"path": "why locked"}},
   "capabilities": {"doc_threshold": 0.55, "top": 40},
@@ -66,6 +67,7 @@ def _validate_config(data: dict) -> list[str]:
         "duplicates",
         "forks",
         "contracts",
+        "regions",
         "capabilities",
         "hardcoded",
         "style",
@@ -153,6 +155,17 @@ def _validate_config(data: dict) -> list[str]:
             for key, reason in value.items()
         ):
             issues.append("contracts.source_locked_active_paths must map strings to strings")
+
+    regions = section("regions", {"threshold", "helper_reuse_threshold"})
+    if "threshold" in regions:
+        bounded_number(regions["threshold"], "regions.threshold", 0.0, 1.0)
+    if "helper_reuse_threshold" in regions:
+        bounded_number(
+            regions["helper_reuse_threshold"],
+            "regions.helper_reuse_threshold",
+            0.0,
+            1.0,
+        )
 
     capabilities = section("capabilities", {"doc_threshold", "top"})
     if "doc_threshold" in capabilities:

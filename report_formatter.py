@@ -10,6 +10,7 @@ from __future__ import annotations
 SCANNER_NAMES: dict[str, str] = {
     "deadcode": "dead code",
     "duplicates": "duplicate clusters",
+    "regions": "repeated code regions",
     "forks": "script-to-script forks",
     "contracts": "contract-boundary candidates",
     "capabilities": "capability overlap",
@@ -42,14 +43,18 @@ def _changes_markdown(block: dict | None) -> list[str]:
     lines.append("| scanner | previous | current | new | gone |")
     lines.append("|---|---:|---:|---:|---:|")
     for scanner in SCANNER_NAMES:
-        stats = block["per_scanner"][scanner]
+        stats = block["per_scanner"].get(
+            scanner, {"previous": 0, "current": 0, "new": [], "gone": []}
+        )
         lines.append(
             f"| {SCANNER_NAMES[scanner]} | {stats['previous']} | "
             f"{stats['current']} | {len(stats['new'])} | {len(stats['gone'])} |"
         )
     lines.append("")
     for scanner in SCANNER_NAMES:
-        stats = block["per_scanner"][scanner]
+        stats = block["per_scanner"].get(
+            scanner, {"previous": 0, "current": 0, "new": [], "gone": []}
+        )
         for label, items in (("New", stats["new"]), ("Gone", stats["gone"])):
             if not items:
                 continue
@@ -71,6 +76,7 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
     capabilities = payloads["capabilities"]
     hardcoded = payloads["hardcoded"]
     style = payloads["style"]
+    regions = payloads.get("regions", {})
     provenance = summary["provenance"]
 
     lines = [
@@ -115,6 +121,11 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
             f"{duplicates.get('priority_counts', {}).get('medium', 0)}/"
             f"{duplicates.get('priority_counts', {}).get('low', 0)}) | "
             f"{duplicates.get('elapsed_seconds', 0):.3f} |",
+            f"| repeated code regions | {len(regions.get('clusters', []))} "
+            f"(H/M/L: {regions.get('priority_counts', {}).get('high', 0)}/"
+            f"{regions.get('priority_counts', {}).get('medium', 0)}/"
+            f"{regions.get('priority_counts', {}).get('low', 0)}) | "
+            f"{regions.get('elapsed_seconds', 0):.3f} |",
             f"| script-to-script forks | {len(forks.get('pairs', []))} "
             f"(+{len(forks.get('small_function_pairs', []))} small) | "
             f"{forks.get('elapsed_seconds', 0):.3f} |",
@@ -171,6 +182,36 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
             lines.extend(["- Verdict:", ""])
     else:
         lines.extend(["No candidates.", ""])
+
+    lines.extend(["", "## Repeated code regions", ""])
+    if regions.get("clusters"):
+        lines.extend(
+            [
+                "Statement blocks inside functions that recur with similar inputs, "
+                "outputs, and API usage but have no named symbol: latent capabilities "
+                "that may deserve one shared implementation.",
+                "",
+            ]
+        )
+        for cluster in regions["clusters"]:
+            hints = ", ".join(f"`{hint}`" for hint in cluster.get("capability_hints", []))
+            lines.append(
+                f"### [{cluster['priority']}] `{cluster['id']}`: {cluster['size']} regions "
+                f"(edge similarity {cluster['min_edge_sim']:.3f}-{cluster['max_sim']:.3f})"
+                + (f"; hints: {hints}" if hints else "")
+            )
+            lines.append("")
+            lines.append(f"Reason: {cluster['priority_reason']}.")
+            lines.append("")
+            for member in cluster["members"]:
+                lines.append(
+                    f"- `{member['path']}:{member['qualname']}:"
+                    f"{member['start_line']}-{member['end_line']}` "
+                    f"({member['nstatements']} stmts, ext={member['extractability']})"
+                )
+            lines.extend(["- Verdict:", ""])
+    else:
+        lines.extend(["No region clusters.", ""])
 
     lines.extend(["", "## Script-to-script fork candidates", ""])
     if forks.get("pairs"):

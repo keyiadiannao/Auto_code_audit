@@ -254,6 +254,56 @@ def test_verdict_cross_field_validation() -> None:
         validate_verdict(reuse)
 
 
+def test_build_case_slices_region_snippets(tmp_path) -> None:
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "m.py").write_text(
+        "def run():\n    x = lib.load()\n    y = x + 1\n    z = lib.save(y)\n    return z\n",
+        encoding="utf-8",
+    )
+    detail = {
+        "members": [
+            {
+                "path": "m.py",
+                "qualname": "run",
+                "region_id": "m.py:run:2-4",
+                "start_line": 2,
+                "end_line": 4,
+            }
+        ]
+    }
+    bundle = build_case("p", "0" * 40, "regions", "region/abc", "d", detail, package)
+    assert bundle["snippets"][0]["code"].startswith("L2:     x = lib.load()")
+    assert bundle["evidence_hash"]
+
+
+def test_validate_case_accepts_regions_scanner() -> None:
+    bundle = {
+        "case_schema_version": CASE_SCHEMA_VERSION,
+        "project_id": "p",
+        "commit": "0" * 40,
+        "scanner": "regions",
+        "target_id": "region/abc",
+        "display": "x",
+        "evidence": {"members": [{"path": "m.py", "region_id": "r"}]},
+        "evidence_hash": "h",
+    }
+    assert validate_case(bundle)["scanner"] == "regions"
+
+
+def test_validate_verdict_accepts_unextracted_capability_code() -> None:
+    verdict = {
+        "disposition": "true_finding",
+        "confidence": 0.9,
+        "reason": "checkpoint normalization repeated in three functions",
+        "reason_codes": ["UNEXTRACTED_SHARED_CAPABILITY"],
+        "recommended_action": "extract_shared_component",
+        "reuse_target": "checkpoints.py::load_checkpoint",
+        "required_verification": ["re_audit"],
+    }
+    assert validate_verdict(verdict)["reason_codes"] == ["UNEXTRACTED_SHARED_CAPABILITY"]
+
+
 def test_load_cases_and_truth_files(tmp_path) -> None:
     bundle = {
         "evidence_hash": "abc",

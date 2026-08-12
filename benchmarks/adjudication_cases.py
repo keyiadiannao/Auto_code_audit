@@ -47,7 +47,10 @@ def _snippet_locations(detail: dict[str, Any]) -> list[tuple[str, str | None, in
     locations: list[tuple[str, str | None, int | None]] = []
     if "members" in detail:
         for member in detail["members"]:
-            locations.append((member["path"], member.get("qualname"), None))
+            if member.get("region_id"):
+                locations.append((member["path"], None, member.get("start_line")))
+            else:
+                locations.append((member["path"], member.get("qualname"), None))
     elif "left" in detail and "right" in detail:
         for side in ("left", "right"):
             locations.append(

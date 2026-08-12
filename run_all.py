@@ -25,6 +25,7 @@ import scan_contracts
 import scan_duplicates
 import scan_forks
 import scan_hardcoded
+import scan_regions
 import scan_style
 
 SKILL_DIR = Path(__file__).resolve().parent
@@ -44,6 +45,7 @@ PROFILE_SCANNERS = {
     "code": (
         "deadcode",
         "duplicates",
+        "regions",
         "forks",
         "contracts",
         "capabilities",
@@ -140,6 +142,24 @@ def _candidate_signatures(
             item,
         )
         for item in duplicates.get("clusters", [])
+    ]
+
+    regions = payloads.get("regions", {})
+    sigs["regions"] = [
+        (
+            f"region/{item['id']}",
+            f"`{item['id']}` [{item.get('priority', '?')}] "
+            f"{item.get('kind', 'shared_capability')}"
+            + (
+                f" canonical={item.get('canonical_symbol', '?')}"
+                if item.get("canonical_symbol")
+                else ""
+            )
+            + f" ({len(item.get('members', []))} regions, "
+            f"hints: {', '.join(item.get('capability_hints', [])[:3]) or '-'})",
+            item,
+        )
+        for item in regions.get("clusters", [])
     ]
 
     def fork_sigs(pairs: list[dict]) -> list[tuple[str, str, dict]]:
@@ -517,6 +537,7 @@ def main(argv: list[str] | None = None) -> int:
                         str(duplicate_min_chars),
                     ],
                 ),
+                "regions": (scan_regions, []),
                 "contracts": (scan_contracts, []),
                 "forks": (scan_forks, []),
                 "capabilities": (scan_capabilities, []),
@@ -605,6 +626,7 @@ def main(argv: list[str] | None = None) -> int:
         payloads["deadcode"].get("public_api_candidates", [])
     )
     duplicate_count = len(payloads["duplicates"]["clusters"])
+    region_count = len(payloads.get("regions", {}).get("clusters", []))
     capability_count = len(payloads["capabilities"].get("overlap", []))
     fork_count = len(payloads["forks"].get("pairs", []))
     hardcoded_count = sum(
@@ -616,7 +638,8 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"SELF_AUDIT_RUN_ALL package={args.package} dead={dead_count} "
         f"public_api={public_api_count} "
-        f"dup_clusters={duplicate_count} cap_overlap={capability_count} "
+        f"dup_clusters={duplicate_count} region_clusters={region_count} "
+        f"cap_overlap={capability_count} "
         f"forks={fork_count} "
         f"hardcoded={hardcoded_count} "
         f"style={style_count} seconds={summary['elapsed_seconds']:.3f}"

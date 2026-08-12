@@ -41,6 +41,7 @@ REASON_CODES: set[str] = {
     "CONTRACT_DRIFT",
     "ORPHANED_CODE",
     "DUPLICATED_OWNERSHIP",
+    "UNEXTRACTED_SHARED_CAPABILITY",
     "UNNECESSARY_REIMPLEMENTATION",
     "HARDCODED_CONSTANT",
     "ENV_MISUSE",
@@ -86,6 +87,16 @@ SCANNER_RUBRIC: dict[str, str] = {
         "boilerplate. It is a TRUE FINDING when near-identical logic drifts "
         "apart, could safely share one implementation, or silently re-implements "
         "a canonical helper."
+    ),
+    "regions": (
+        "Repeated code regions: statement blocks inside functions that recur with "
+        "similar inputs, outputs, and API usage but have no named symbol. TRUE "
+        "FINDING (UNEXTRACTED_SHARED_CAPABILITY) when the regions express the "
+        "same capability under the same ownership and no canonical shared "
+        "implementation exists, so a shared helper should be extracted. FALSE "
+        "POSITIVE when the regions are generic loop/validation skeletons, "
+        "boilerplate, already delegate to a shared core, or belong to separate "
+        "ownerships that should not be merged."
     ),
     "forks": (
         "Forked functions: same-name or structurally identical functions that "
@@ -243,6 +254,7 @@ def validate_case(bundle: dict[str, Any]) -> dict[str, Any]:
     if bundle["scanner"] not in {
         "deadcode",
         "duplicates",
+        "regions",
         "forks",
         "contracts",
         "capabilities",

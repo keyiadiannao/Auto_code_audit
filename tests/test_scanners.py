@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -20,6 +21,7 @@ import scan_deadcode
 import scan_duplicates
 import scan_forks
 import scan_hardcoded
+import scan_regions
 import scan_style
 
 
@@ -1283,7 +1285,7 @@ def test_adjudicate_ignore_entries_key_formats() -> None:
     """Suppression entries must match the keys each scanner reads."""
     date, owner = "2026-08-12", "reviewer-a"
     stamped = {"date": date, "owner": owner}
-    cases = [
+    cases: list[tuple[str, dict[str, str | int], str]] = [
         ("experiment_as_library", {"path": "e/a.py"}, "e/a.py"),
         ("forwarding_wrappers", {"path": "e/a.py", "line": 2, "name": "fwd"}, "e/a.py:2:fwd"),
         ("same_name_contracts", {"path": "e/a.py", "line": 3, "_name": "compute"}, "e/a.py:3:compute"),
@@ -1340,7 +1342,7 @@ def test_adjudicate_merge_ignore_dedupes_and_preserves() -> None:
     The dedupe ignores the date/owner stamps: re-suppressing the same
     candidate keeps the first suppression record with its original date.
     """
-    registry = {
+    registry: dict[str, Any] = {
         "schema_version": 1,
         "_notes": "keep me",
         "contracts": {"cli_without_bootstrap": [{"key": "a", "reason": "old"}]},
@@ -2196,3 +2198,208 @@ def test_audit_config_keeps_valid_typed_values(tmp_path: Path) -> None:
         "threshold": 0.91,
         "min_chars": 80,
     }
+
+
+CHECKPOINT_REGION = """    state = torch.load(config.path, map_location=device)
+    meta = state.get("meta", {})
+    cleaned = {}
+    for key, value in state.items():
+        if key.startswith("module."):
+            key = key[7:]
+        cleaned[key] = value
+    model.load_state_dict(cleaned, strict=True)
+"""
+
+
+def _checkpoint_fixture(mini_repo: Path) -> None:
+    _write(
+        mini_repo / "pkg" / "experiments" / "train.py",
+        "def train_model(config, data, model, logdir):\n"
+        "    device = resolve_device(config.device)\n"
+        "\n"
+        + CHECKPOINT_REGION
+        + "\n"
+        "    for epoch in range(config.epochs):\n"
+        "        metrics = run_epoch(model, data, device)\n"
+        "        log_metrics(logdir, epoch, metrics)\n"
+        "    return model\n",
+    )
+    _write(
+        mini_repo / "pkg" / "experiments" / "evaluate.py",
+        "def evaluate_model(config, model, data, outdir):\n"
+        "    device = resolve_device(config.device)\n"
+        "\n"
+        + CHECKPOINT_REGION
+        + "\n"
+        "    results = run_batch(model, data, device)\n"
+        "    dump_results(outdir, results, meta)\n"
+        "    return results\n",
+    )
+
+
+def test_region_scan_finds_latent_capability(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    _checkpoint_fixture(mini_repo)
+    output = tmp_path / "regions.json"
+    rc = scan_regions.main(
+        [
+            "--root", str(mini_repo),
+            "--package", "pkg",
+            "--threshold", "0.9",
+            "--json", str(output),
+        ]
+    )
+    assert rc == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    cluster = next(item for item in payload["clusters"] if item["size"] == 2)
+    assert cluster["file_count"] == 2
+    assert cluster["min_edge_sim"] == 1.0
+    assert "load_state_dict" in cluster["capability_hints"]
+    members = {m["path"] + ":" + m["qualname"] + ":" + str(m["start_line"]) + "-" + str(m["end_line"])
+               for m in cluster["members"]}
+    assert "experiments/train.py:train_model:4-11" in members
+    assert "experiments/evaluate.py:evaluate_model:4-11" in members
+    member = cluster["members"][0]
+    assert member["inputs"] == ["config", "device", "model"]
+    assert member["outputs"] == []
+    assert member["extractability"] >= 0.5
+    assert member["control_shape"] == "If1For1While0Try0With0"
+
+
+def test_region_scan_ignores_generic_loops_without_api_calls(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    body = """def calc(values, cap):
+    total = 0
+    count = 0
+    seen = frozenset(values)
+    for value in values:
+        if value < 0:
+            total -= value
+            count += 1
+        elif value == 0:
+            count += 1
+        else:
+            total += value
+            count += 1
+    return min(total, cap), count
+"""
+    _write(mini_repo / "pkg" / "experiments" / "a.py", body.replace("def calc", "def calc_a"))
+    _write(mini_repo / "pkg" / "experiments" / "b.py", body.replace("def calc", "def calc_b"))
+    output = tmp_path / "regions.json"
+    scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["clusters"] == []
+
+
+def test_region_scan_filters_highly_coupled_regions(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    params = ", ".join(chr(ord("a") + i) for i in range(10))
+    _write(
+        mini_repo / "pkg" / "experiments" / "couple.py",
+        f"def fat(fn, {params}):\n"
+        "    total = lib.one(a, b)\n"
+        "    total = lib.two(total, c, d)\n"
+        "    total = lib.three(total, e, f)\n"
+        "    total = lib.four(total, g, h)\n"
+        "    total = lib.five(total, i, j)\n"
+        "    return lib.finish(fn, total)\n",
+    )
+    output = tmp_path / "regions.json"
+    scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["regions_scanned"] == 0
+
+
+INLINE_VALIDATION = """    device, dtype = _model_device_dtype(model)
+    if tensor.device != device:
+        raise ValueError("device mismatch")
+    if tensor.dtype != dtype:
+        raise ValueError("dtype mismatch")
+"""
+
+
+def test_region_scan_finds_helper_not_reused(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    _write(
+        mini_repo / "pkg" / "lib" / "helper.py",
+        "def check(model, tensor):\n" + INLINE_VALIDATION,
+    )
+    _write(
+        mini_repo / "pkg" / "experiments" / "a.py",
+        "def run(model, tensor, scale):\n"
+        + INLINE_VALIDATION
+        + "    if scale <= 0:\n"
+        "        raise ValueError(\"scale must be positive\")\n"
+        "    if tuple(tensor.shape) != (2, 2):\n"
+        "        raise ValueError(\"unexpected shape\")\n"
+        "    return tensor.mul(scale)\n",
+    )
+    output = tmp_path / "regions.json"
+    rc = scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    )
+    assert rc == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 2
+    reports = [
+        item for item in payload["clusters"] if item["kind"] == "helper_not_reused"
+    ]
+    assert reports, "expected a helper_not_reused report"
+    cluster = reports[0]
+    assert cluster["canonical_symbol"] == "lib/helper.py:check"
+    assert cluster["priority"] == "high"
+    assert cluster["max_coverage"] == 1.0
+    member = cluster["members"][0]
+    assert member["path"] == "experiments/a.py"
+    assert member["qualname"] == "run"
+    assert member["canonical_referenced_in_parent"] is False
+
+
+def test_region_scan_short_risky_lookup_cluster(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    lookup = (
+        "def scores_from_prepared_tables(a, b, tables):\n"
+        "    per_head = []\n"
+        "    for key in tables:\n"
+        "        per_head.append(torch.stack([\n"
+        '            tables["S00"][a, a],\n'
+        '            tables["S01"][a, b],\n'
+        '            tables["S10"][b, a],\n'
+        '            tables["S11"][b, b],\n'
+        "        ]))\n"
+        "    return torch.stack(per_head)\n"
+        "\n"
+        "def mean_entropy_for_head(a, b, tables):\n"
+        "    scores = torch.stack([\n"
+        '        tables["S00"][a, a],\n'
+        '        tables["S01"][a, b],\n'
+        '        tables["S10"][b, a],\n'
+        '        tables["S11"][b, b],\n'
+        "    ])\n"
+        "    return scores\n"
+    )
+    _write(mini_repo / "pkg" / "experiments" / "lookup.py", lookup)
+    output = tmp_path / "regions.json"
+    rc = scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    )
+    assert rc == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    short = [
+        item for item in payload["clusters"] if item.get("short_block_cluster")
+    ]
+    assert short, "expected a short_risky signature cluster"
+    cluster = short[0]
+    assert "asymmetric_indexing" in cluster["risk_signals"]
+    assert cluster["semantic_risk"] >= 0.45
+    assert cluster["size"] >= 2
+    assert {m["path"] for m in cluster["members"]} == {"experiments/lookup.py"}
