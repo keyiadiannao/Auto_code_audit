@@ -4,6 +4,42 @@
   "commit": "398e5a3430eb1ddd33e1d48d766efe41426e231f",
   "labels": [
     {
+      "scanner": "contracts",
+      "target_id": "forwarding/middleware/gzip.py:221:_normalize_content_types",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/routing.py:89:get_name",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/status.py:210:__dir__",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/authentication.py:25:requires",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/concurrency.py:16:run_until_first_complete",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/convertors.py:88:register_url_convertor",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
       "scanner": "deadcode",
       "target_id": "DEAD/config.py",
       "label": "false_positive",
@@ -76,46 +112,46 @@
       "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
     },
     {
-      "scanner": "contracts",
-      "target_id": "forwarding/middleware/gzip.py:221:_normalize_content_types",
+      "scanner": "duplicates",
+      "target_id": "cluster/1425764c496b",
       "label": "false_positive",
-      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
-    },
-    {
-      "scanner": "contracts",
-      "target_id": "forwarding/routing.py:89:get_name",
-      "label": "false_positive",
-      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
-    },
-    {
-      "scanner": "contracts",
-      "target_id": "forwarding/status.py:210:__dir__",
-      "label": "false_positive",
-      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
-    },
-    {
-      "scanner": "contracts",
-      "target_id": "unreferenced/authentication.py:25:requires",
-      "label": "false_positive",
-      "reason": "public API surface (or runtime/duck-typed use), not dead code"
-    },
-    {
-      "scanner": "contracts",
-      "target_id": "unreferenced/concurrency.py:16:run_until_first_complete",
-      "label": "false_positive",
-      "reason": "public API surface (or runtime/duck-typed use), not dead code"
-    },
-    {
-      "scanner": "contracts",
-      "target_id": "unreferenced/convertors.py:88:register_url_convertor",
-      "label": "false_positive",
-      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+      "reason": "testclient HTTP method family (deliberate per-method wrappers)"
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/8e45063553bb",
+      "target_id": "cluster/26be96e8a6bb",
       "label": "false_positive",
-      "reason": "facade delegation (Starlette proxies host/mount/add_websocket_route to Router); bodies differ by design"
+      "reason": "4L __eq__ dunder"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/28ec7a78910e",
+      "label": "false_positive",
+      "reason": "route-type matches() family with different dispatch logic"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/37b43b1caf81",
+      "label": "true_finding",
+      "reason": "identical 10-line url_path_for on Route and WebSocketRoute differing only by protocol string"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/40a2878e86c2",
+      "label": "false_positive",
+      "reason": "small app-property variants"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/449e61d5e270",
+      "label": "false_positive",
+      "reason": "property-accessor boilerplate (headers/query_params/url)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/51c15ec9de35",
+      "label": "false_positive",
+      "reason": "receive_bytes/receive_text accessor pair"
     },
     {
       "scanner": "duplicates",
@@ -137,39 +173,9 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/449e61d5e270",
+      "target_id": "cluster/8e45063553bb",
       "label": "false_positive",
-      "reason": "property-accessor boilerplate (headers/query_params/url)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/d1ddd659096c",
-      "label": "false_positive",
-      "reason": "testclient HTTP method family (deliberate per-method wrappers)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/1425764c496b",
-      "label": "false_positive",
-      "reason": "testclient HTTP method family (deliberate per-method wrappers)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/28ec7a78910e",
-      "label": "false_positive",
-      "reason": "route-type matches() family with different dispatch logic"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/f9cff382a22a",
-      "label": "false_positive",
-      "reason": "3-5L __call__ boilerplate"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/c08251a10331",
-      "label": "false_positive",
-      "reason": "2-line __eq__ dunder"
+      "reason": "facade delegation (Starlette proxies host/mount/add_websocket_route to Router); bodies differ by design"
     },
     {
       "scanner": "duplicates",
@@ -179,33 +185,9 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/37b43b1caf81",
-      "label": "true_finding",
-      "reason": "identical 10-line url_path_for on Route and WebSocketRoute differing only by protocol string"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/40a2878e86c2",
+      "target_id": "cluster/c08251a10331",
       "label": "false_positive",
-      "reason": "small app-property variants"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/51c15ec9de35",
-      "label": "false_positive",
-      "reason": "receive_bytes/receive_text accessor pair"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/c850a9d438c4",
-      "label": "false_positive",
-      "reason": "6L send-callback helpers in unrelated modules"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/d45af3a05515",
-      "label": "false_positive",
-      "reason": "multipart callback boilerplate (on_field_data/on_field_name)"
+      "reason": "2-line __eq__ dunder"
     },
     {
       "scanner": "duplicates",
@@ -215,15 +197,87 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/26be96e8a6bb",
+      "target_id": "cluster/c850a9d438c4",
       "label": "false_positive",
-      "reason": "4L __eq__ dunder"
+      "reason": "6L send-callback helpers in unrelated modules"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d1ddd659096c",
+      "label": "false_positive",
+      "reason": "testclient HTTP method family (deliberate per-method wrappers)"
     },
     {
       "scanner": "duplicates",
       "target_id": "cluster/d412030b078e",
       "label": "false_positive",
       "reason": "2L multipart callbacks (on_header_field/on_header_value)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d45af3a05515",
+      "label": "false_positive",
+      "reason": "multipart callback boilerplate (on_field_data/on_field_name)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f9cff382a22a",
+      "label": "false_positive",
+      "reason": "3-5L __call__ boilerplate"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/044570a0c9d2",
+      "label": "false_positive",
+      "reason": "self-pair artifact: requires matched against itself; repeated-constant idiom is intra-function"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/0f05bfe19d3f",
+      "label": "false_positive",
+      "reason": "Route/WebSocketRoute __init__: parallel route classes share a small partial-unwrap idiom; not a skipped named helper"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/1d8faaeb0ec3",
+      "label": "false_positive",
+      "reason": "canonical _TemplateResponse.__init__ vs __init__ boilerplate family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/5886af6c7002",
+      "label": "false_positive",
+      "reason": "canonical AuthenticationMiddleware.__init__ vs __init__ boilerplate family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/90916ddc0271",
+      "label": "false_positive",
+      "reason": "canonical _TestClientTransport.__init__ vs __init__/state-init boilerplate family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/90b5a332cd63",
+      "label": "false_positive",
+      "reason": "canonical HTTPException.__init__ vs __init__ boilerplate family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c2cb3bbd3898",
+      "label": "false_positive",
+      "reason": "Request/WebSocket __init__ boilerplate — ASGI connection classes are deliberately parallel"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/d4ec6785bbbb",
+      "label": "false_positive",
+      "reason": "canonical WSGIMiddleware.__call__; members are connection __init__s sharing only the scope-type assert"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/e293be52257c",
+      "label": "false_positive",
+      "reason": "assert scope type + store receive/send is the ASGI endpoint idiom; WebSocketEndpoint/Request/WebSocket are deliberate parallel classes"
     }
   ]
 }

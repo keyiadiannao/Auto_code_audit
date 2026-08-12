@@ -281,6 +281,7 @@ def _metrics(report: dict[str, Any]) -> dict[str, Any]:
     contracts = scanners.get("contracts", {})
     deadcode = scanners.get("deadcode", {})
     totals = deadcode.get("totals", {})
+    region_clusters = scanners.get("regions", {}).get("clusters", [])
     return {
         "dead": totals.get("DEAD", 0),
         "public_api_candidates": totals.get("PUBLIC_API_CANDIDATE", 0),
@@ -293,6 +294,18 @@ def _metrics(report: dict[str, Any]) -> dict[str, Any]:
         "capability_overlap": len(scanners.get("capabilities", {}).get("overlap", [])),
         "hardcoded_hits": sum(
             len(items) for items in scanners.get("hardcoded", {}).get("hits", {}).values()
+        ),
+        "region_clusters": len(region_clusters),
+        "region_helper_not_reused": sum(
+            1 for cluster in region_clusters if cluster.get("kind") == "helper_not_reused"
+        ),
+        "region_shared_capability": sum(
+            1
+            for cluster in region_clusters
+            if cluster.get("kind") == "shared_capability"
+        ),
+        "region_short_block": sum(
+            1 for cluster in region_clusters if cluster.get("short_block_cluster")
         ),
         "elapsed_seconds": report.get("elapsed_seconds"),
     }

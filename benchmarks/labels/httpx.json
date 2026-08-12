@@ -47,6 +47,12 @@
     },
     {
       "scanner": "contracts",
+      "target_id": "forwarding/_urlparse.py:478:PERCENT",
+      "label": "false_positive",
+      "reason": "vendored urllib3 compat shim (deliberate vendoring of a small parser helper)"
+    },
+    {
+      "scanner": "contracts",
       "target_id": "unreferenced/_api.py:210:options",
       "label": "false_positive",
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
@@ -82,28 +88,10 @@
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
     },
     {
-      "scanner": "forks",
-      "target_id": "fork/_api.py:stream|_client.py:Client.stream",
-      "label": "false_positive",
-      "reason": "intentional public convenience wrapper delegating to the full implementation"
-    },
-    {
-      "scanner": "forks",
-      "target_id": "fork/_api.py:stream|_client.py:AsyncClient.stream",
-      "label": "false_positive",
-      "reason": "intentional public convenience wrapper delegating to the full implementation"
-    },
-    {
       "scanner": "duplicates",
-      "target_id": "cluster/fdfcf4bfefb9",
+      "target_id": "cluster/021adc5a5675",
       "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (delete/get/head/options Client/AsyncClient)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/139de50a7338",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (patch/post/put Client/AsyncClient)"
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (async_auth_flow/sync_auth_flow Auth internal)"
     },
     {
       "scanner": "duplicates",
@@ -113,15 +101,33 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/ff30fa1a558d",
+      "target_id": "cluster/08063ab543b5",
       "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (patch/post/put _api.py wrappers)"
+      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aiter_lines/iter_lines)"
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/fd1e7b870c4f",
+      "target_id": "cluster/0878a28de735",
       "label": "false_positive",
-      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (_normalize_header_key/to_bytes/to_str)"
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (handle_request default transport)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0a9a6e86e61b",
+      "label": "false_positive",
+      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (__getstate__)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0ac814a57dee",
+      "label": "false_positive",
+      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (copy_add_param/copy_set_param)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0de021fe177c",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_init_transport Client/AsyncClient)"
     },
     {
       "scanner": "duplicates",
@@ -131,15 +137,9 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/8da4c2c76771",
+      "target_id": "cluster/139de50a7338",
       "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__init__ Client/AsyncClient)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/6ce5df3a114e",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (request Client/AsyncClient)"
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (patch/post/put Client/AsyncClient)"
     },
     {
       "scanner": "duplicates",
@@ -155,78 +155,6 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/d7ff4ecbdc56",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_send_handling_redirects Client/AsyncClient)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/94c142d45a23",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_send_single_request Client/AsyncClient)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/a31f7f441221",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_send_handling_auth Client/AsyncClient)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/0878a28de735",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (handle_request default transport)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/4048e6aa8e29",
-      "label": "false_positive",
-      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aiter_raw/iter_raw)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/021adc5a5675",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (async_auth_flow/sync_auth_flow Auth internal)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/99f6ed5ea0f6",
-      "label": "false_positive",
-      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aiter_bytes/iter_bytes)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/cb6dad265e4b",
-      "label": "false_positive",
-      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (decode)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/0de021fe177c",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_init_transport Client/AsyncClient)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/9d81b2982a3c",
-      "label": "false_positive",
-      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aiter_text/iter_text)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/4809e5e75af1",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_init_proxy_transport Client/AsyncClient)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/e23bc2331620",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__enter__/__aenter__ Client)"
-    },
-    {
-      "scanner": "duplicates",
       "target_id": "cluster/2afeb63133bd",
       "label": "false_positive",
       "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (handle_request mock transport)"
@@ -239,87 +167,27 @@
     },
     {
       "scanner": "duplicates",
+      "target_id": "cluster/4048e6aa8e29",
+      "label": "false_positive",
+      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aiter_raw/iter_raw)"
+    },
+    {
+      "scanner": "duplicates",
       "target_id": "cluster/46ac2f1718b4",
       "label": "false_positive",
       "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (items/values)"
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/bbf747ac1466",
+      "target_id": "cluster/46f7d5e83341",
       "label": "false_positive",
-      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (add/set)"
+      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (flush)"
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/7dc60f916200",
+      "target_id": "cluster/4809e5e75af1",
       "label": "false_positive",
-      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aread/read)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/83263fb03c6f",
-      "label": "false_positive",
-      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aclose/close)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/baf95dd64d21",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__exit__/__aexit__ Client)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/924ad11ed3ed",
-      "label": "false_positive",
-      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (items/values)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/c8db63912522",
-      "label": "false_positive",
-      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (_merge_cookies/_merge_queryparams)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/d7035179921d",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (close/aclose Client)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/e6028367ff43",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_transport_for_url Client/AsyncClient)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/08063ab543b5",
-      "label": "false_positive",
-      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aiter_lines/iter_lines)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/a95d36ecfb7a",
-      "label": "false_positive",
-      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__exit__/__aexit__ default transport)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/abfbafb80f66",
-      "label": "false_positive",
-      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aread/read)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/c81a4670087d",
-      "label": "false_positive",
-      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (http_version/reason_phrase)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/0a9a6e86e61b",
-      "label": "false_positive",
-      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (__getstate__)"
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_init_proxy_transport Client/AsyncClient)"
     },
     {
       "scanner": "duplicates",
@@ -335,27 +203,33 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/cfc23cf3ed72",
+      "target_id": "cluster/6ce5df3a114e",
       "label": "false_positive",
-      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (__setstate__)"
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (request Client/AsyncClient)"
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/ff7e0c3bcadb",
+      "target_id": "cluster/7dc60f916200",
+      "label": "false_positive",
+      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aread/read)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/83263fb03c6f",
+      "label": "false_positive",
+      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aclose/close)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/8da4c2c76771",
       "label": "false_positive",
       "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__init__ Client/AsyncClient)"
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/46f7d5e83341",
+      "target_id": "cluster/924ad11ed3ed",
       "label": "false_positive",
-      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (flush)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/b911955c90a5",
-      "label": "false_positive",
-      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (flush)"
+      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (items/values)"
     },
     {
       "scanner": "duplicates",
@@ -365,9 +239,63 @@
     },
     {
       "scanner": "duplicates",
+      "target_id": "cluster/94c142d45a23",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_send_single_request Client/AsyncClient)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/99f6ed5ea0f6",
+      "label": "false_positive",
+      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aiter_bytes/iter_bytes)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/9d81b2982a3c",
+      "label": "false_positive",
+      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aiter_text/iter_text)"
+    },
+    {
+      "scanner": "duplicates",
       "target_id": "cluster/9e762c727e6a",
       "label": "false_positive",
       "reason": "tiny same-file boilerplate/pickling shims with distinct logic (_build_auth_header)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a31f7f441221",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_send_handling_auth Client/AsyncClient)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a95d36ecfb7a",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__exit__/__aexit__ default transport)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/abfbafb80f66",
+      "label": "false_positive",
+      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (aread/read)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b911955c90a5",
+      "label": "false_positive",
+      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (flush)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/baf95dd64d21",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__exit__/__aexit__ Client)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/bbf747ac1466",
+      "label": "false_positive",
+      "reason": "async/sync twin methods in one class; deliberate dual-interface pattern (add/set)"
     },
     {
       "scanner": "duplicates",
@@ -377,15 +305,57 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/0ac814a57dee",
-      "label": "false_positive",
-      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (copy_add_param/copy_set_param)"
-    },
-    {
-      "scanner": "duplicates",
       "target_id": "cluster/bf34ae584f5e",
       "label": "false_positive",
       "reason": "distinct public entry points (_api.request vs _api.stream); partial shared skeleton"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/c81a4670087d",
+      "label": "false_positive",
+      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (http_version/reason_phrase)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/c8db63912522",
+      "label": "false_positive",
+      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (_merge_cookies/_merge_queryparams)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/cb6dad265e4b",
+      "label": "false_positive",
+      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (decode)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/cfc23cf3ed72",
+      "label": "false_positive",
+      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (__setstate__)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d7035179921d",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (close/aclose Client)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d7ff4ecbdc56",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_send_handling_redirects Client/AsyncClient)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/e23bc2331620",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__enter__/__aenter__ Client)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/e6028367ff43",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (_transport_for_url Client/AsyncClient)"
     },
     {
       "scanner": "duplicates",
@@ -394,10 +364,100 @@
       "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__exit__/__aexit__ base transport)"
     },
     {
-      "scanner": "contracts",
-      "target_id": "forwarding/_urlparse.py:478:PERCENT",
+      "scanner": "duplicates",
+      "target_id": "cluster/fd1e7b870c4f",
       "label": "false_positive",
-      "reason": "vendored urllib3 compat shim (deliberate vendoring of a small parser helper)"
+      "reason": "tiny same-file boilerplate/pickling shims with distinct logic (_normalize_header_key/to_bytes/to_str)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/fdfcf4bfefb9",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (delete/get/head/options Client/AsyncClient)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/ff30fa1a558d",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (patch/post/put _api.py wrappers)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/ff7e0c3bcadb",
+      "label": "false_positive",
+      "reason": "sync/async dual-API mirror pair; deliberate httpx dual-interface design (__init__ Client/AsyncClient)"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/_api.py:stream|_client.py:AsyncClient.stream",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/_api.py:stream|_client.py:Client.stream",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/0db19c16f3c4",
+      "label": "false_positive",
+      "reason": "Client/AsyncClient _send_single_request are a deliberate sync/async mirror pair"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/13733a84bd3e",
+      "label": "false_positive",
+      "reason": "canonical QueryParams.remove is a public API method; members share generic dict-pop idioms only"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/565d0c40bbd3",
+      "label": "false_positive",
+      "reason": "canonical handle_async_request matched against unrelated members; token coincidence"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/6afe3627fade",
+      "label": "false_positive",
+      "reason": "self-pair artifact: WSGITransport.handle_request matched against itself; asymmetric-index idiom is intra-function, no cross-location duplication"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/710b6750045a",
+      "label": "false_positive",
+      "reason": "print_request_headers/print_response_headers are symmetric print helpers with distinct contracts"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/8d1f9d0b9b78",
+      "label": "false_positive",
+      "reason": "canonical ZStandardDecoder.__init__ vs constructor boilerplate family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/9c7d8de39e59",
+      "label": "false_positive",
+      "reason": "canonical ZStandardDecoder.flush is a decoder impl; members unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/af923dd586c6",
+      "label": "false_positive",
+      "reason": "canonical MockTransport.handle_request matched against unrelated members (sync/async mirror family); no member inline-copies the canonical"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/ea633aa5377e",
+      "label": "false_positive",
+      "reason": "canonical QueryParams.add matched against unrelated members; generic insertion idioms"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/ed9ab5ba3551",
+      "label": "false_positive",
+      "reason": "encode_html/encode_text are parallel content encoders with distinct grammars"
     }
   ]
 }

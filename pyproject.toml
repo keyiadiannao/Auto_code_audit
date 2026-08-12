@@ -30,6 +30,7 @@ dev = ["pytest>=7", "mypy>=1.10"]
 [project.scripts]
 auto-code-audit = "run_all:main"
 auto-code-adjudicate = "adjudicate:main"
+auto-code-verify = "run_verify:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "run_all.__version__"}
@@ -38,6 +39,7 @@ version = {attr = "run_all.__version__"}
 py-modules = [
     "run_all",
     "adjudicate",
+    "run_verify",
     "_audit_config",
     "_scanner_common",
     "report_formatter",

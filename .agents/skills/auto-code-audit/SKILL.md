@@ -60,8 +60,12 @@ capabilities, then for each:
 1. Run the audit: `python run_all.py --root . --package <pkg> --profile code --no-doc-channel --json report.json --markdown report.md` (add `--all-py` for whole-repo scope).
 2. Query the index for existing implementations: duplicate clusters and
    capability overlaps in `report.json` (sections `duplicates/clusters`,
-   `capabilities/overlap`), plus same-name contract candidates
-   (`contracts/same_name_contracts`).
+   `capabilities/overlap`), same-name contract candidates
+   (`contracts/same_name_contracts`), and latent implementations
+   (`regions/clusters`): a `helper_not_reused` cluster is a named helper the
+   region already duplicates inline — prefer `reuse`; a `shared_capability`
+   cluster is repeated capability across blocks — consider
+   `extract_shared_component`.
 3. Answer per capability as structured JSON:
    `{"capability": ..., "existing_candidates": [{"symbol": "path::qualname", "confidence": ..., "callers": ...}], "recommendation": "reuse" | "extract_shared_component" | "new_implementation"}`.
 4. Never recommend "extract shared component" from structural similarity
@@ -95,7 +99,7 @@ a bug assertion.
 | `disposition` | `true_finding`, `false_positive` |
 | `confidence` | number 0..1 |
 | `reason` | non-empty string |
-| `reason_codes` | `INTENTIONAL_DUPLICATION`, `PUBLIC_API_SURFACE`, `PLATFORM_ADAPTATION`, `BOILERPLATE`, `OVERRIDE_FAMILY`, `CONTRACT_DRIFT`, `ORPHANED_CODE`, `DUPLICATED_OWNERSHIP`, `UNNECESSARY_REIMPLEMENTATION`, `HARDCODED_CONSTANT`, `ENV_MISUSE`, `UNSAFE_REFACTOR`, `OTHER` |
+| `reason_codes` | `INTENTIONAL_DUPLICATION`, `PUBLIC_API_SURFACE`, `PLATFORM_ADAPTATION`, `BOILERPLATE`, `OVERRIDE_FAMILY`, `CONTRACT_DRIFT`, `ORPHANED_CODE`, `DUPLICATED_OWNERSHIP`, `UNEXTRACTED_SHARED_CAPABILITY`, `UNNECESSARY_REIMPLEMENTATION`, `HARDCODED_CONSTANT`, `ENV_MISUSE`, `UNSAFE_REFACTOR`, `OTHER` |
 | `recommended_action` | `none`, `delete_dead_code`, `extract_shared_component`, `reuse_existing`, `fix_contract_drift`, `replace_with_library`, `externalize_config`, `investigate` |
 | `reuse_target` | string or null |
 | `required_verification` | subset of `unit_tests`, `integration_tests`, `type_check`, `lint`, `re_audit` |
@@ -110,13 +114,18 @@ After the user (or you) applies a patch for an accepted true finding:
 
 1. Tests: run the project's test suite; all must pass.
 2. Re-audit: re-run the full scan on the same scope.
-3. Check deterministically:
-   - the finding's `target_id` no longer appears in the report;
-   - no new high-risk candidate appeared where the patch touched
-     (duplicates clusters, contract drift, dead code);
-   - contract scanner clean for the touched modules;
-   - `evidence_hash` of the old finding no longer recomputes (evidence
-     changed by the patch).
+3. Run the engine-owned gate (replaces the manual checklist):
+
+   ```text
+   python run_verify.py --report <post-fix report.json> \
+     --verdicts <verdicts.json> --previous <pre-fix report.json> \
+     --scope <path substring the patch touched>
+   ```
+
+   It fails when a code-action verdict's `target_id` still appears in the
+   new report, when a still-present finding's `evidence_hash` recomputes
+   unchanged, or when the patch scope gained a high/medium candidate that
+   was absent before the patch. Exit code 0 = acceptance.
 4. Only then mark the finding remediated and, if the outcome is a lasting
    project convention, append one line to `LESSONS.md`.
 

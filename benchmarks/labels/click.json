@@ -59,25 +59,13 @@
     },
     {
       "scanner": "contracts",
-      "target_id": "unreferenced/decorators.py:28:pass_context",
-      "label": "false_positive",
-      "reason": "public API surface (or runtime/duck-typed use), not dead code"
-    },
-    {
-      "scanner": "contracts",
-      "target_id": "unreferenced/decorators.py:39:pass_obj",
-      "label": "false_positive",
-      "reason": "public API surface (or runtime/duck-typed use), not dead code"
-    },
-    {
-      "scanner": "contracts",
-      "target_id": "unreferenced/decorators.py:51:make_pass_decorator",
-      "label": "false_positive",
-      "reason": "public API surface (or runtime/duck-typed use), not dead code"
-    },
-    {
-      "scanner": "contracts",
       "target_id": "unreferenced/decorators.py:100:pass_meta_key",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/decorators.py:28:pass_context",
       "label": "false_positive",
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
     },
@@ -95,6 +83,12 @@
     },
     {
       "scanner": "contracts",
+      "target_id": "unreferenced/decorators.py:39:pass_obj",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
       "target_id": "unreferenced/decorators.py:404:password_option",
       "label": "false_positive",
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
@@ -102,6 +96,12 @@
     {
       "scanner": "contracts",
       "target_id": "unreferenced/decorators.py:421:version_option",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/decorators.py:51:make_pass_decorator",
       "label": "false_positive",
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
     },
@@ -185,87 +185,9 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/5c3ee0f439c3",
-      "label": "false_positive",
-      "reason": "public decorator API helpers plus an unrelated util; structural coincidence"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/3352f6468bbd",
-      "label": "false_positive",
-      "reason": "module-level __init__ shims for different purposes (_compat vs shell_completion)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/a3ec2eea1fc3",
-      "label": "false_positive",
-      "reason": "decorator overload family (command/group) with distinct parameter handling"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/7bd2e02f7bf8",
-      "label": "true_finding",
-      "reason": "identical 11-line env-var parsing in Bash/Zsh/PowerShell get_completion_args; could share a base implementation"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/1f46935932ed",
-      "label": "false_positive",
-      "reason": "test-helper accessor family in testing.py"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/833b36278b73",
-      "label": "true_finding",
-      "reason": "stdin/stderr/stdout win-console stream trio sharing identical construction logic"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/336dd7c215cf",
-      "label": "false_positive",
-      "reason": "5-line platform stream-getter family; boilerplate"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/f5f9621b4e6b",
-      "label": "false_positive",
-      "reason": "different methods in core.py (command vs group bodies); partial structural similarity"
-    },
-    {
-      "scanner": "duplicates",
       "target_id": "cluster/0347d4ec8533",
       "label": "false_positive",
       "reason": "decorator factory pair (argument/option) sharing the skeleton; distinct semantics"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/ccb0048b99ad",
-      "label": "false_positive",
-      "reason": "different option decorators (confirmation/help); shared skeleton only"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/e7e987cbf349",
-      "label": "false_positive",
-      "reason": "exception __init__ boilerplate (two exception classes)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/8b0fc5ec2cfd",
-      "label": "true_finding",
-      "reason": "reader/writer twin helpers with byte-identical 16-line bodies differing only in predicate name"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/7615c95f1d16",
-      "label": "false_positive",
-      "reason": "shell-specific format_completion implementations with different output formats"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/32b6626b9b44",
-      "label": "true_finding",
-      "reason": "reader/writer twin helpers with identical 14-line bodies differing only in predicate name"
     },
     {
       "scanner": "duplicates",
@@ -275,21 +197,45 @@
     },
     {
       "scanner": "duplicates",
+      "target_id": "cluster/1f46935932ed",
+      "label": "false_positive",
+      "reason": "test-helper accessor family in testing.py"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/32b6626b9b44",
+      "label": "true_finding",
+      "reason": "reader/writer twin helpers with identical 14-line bodies differing only in predicate name"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/3352f6468bbd",
+      "label": "false_positive",
+      "reason": "module-level __init__ shims for different purposes (_compat vs shell_completion)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/336dd7c215cf",
+      "label": "false_positive",
+      "reason": "5-line platform stream-getter family; boilerplate"
+    },
+    {
+      "scanner": "duplicates",
       "target_id": "cluster/59d919de5386",
       "label": "false_positive",
       "reason": "to_info_dict boilerplate on different param types"
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/b8f755a5a971",
+      "target_id": "cluster/5c3ee0f439c3",
       "label": "false_positive",
-      "reason": "tiny same-class getters (get_help/get_usage)"
+      "reason": "public decorator API helpers plus an unrelated util; structural coincidence"
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/d5548cb5eaef",
+      "target_id": "cluster/7615c95f1d16",
       "label": "false_positive",
-      "reason": "clamp helpers on different types"
+      "reason": "shell-specific format_completion implementations with different output formats"
     },
     {
       "scanner": "duplicates",
@@ -299,9 +245,39 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/d96347512e97",
+      "target_id": "cluster/7bd2e02f7bf8",
+      "label": "true_finding",
+      "reason": "identical 11-line env-var parsing in Bash/Zsh/PowerShell get_completion_args; could share a base implementation"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/833b36278b73",
+      "label": "true_finding",
+      "reason": "stdin/stderr/stdout win-console stream trio sharing identical construction logic"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/8b0fc5ec2cfd",
+      "label": "true_finding",
+      "reason": "reader/writer twin helpers with byte-identical 16-line bodies differing only in predicate name"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/94cb8dc67250",
       "label": "false_positive",
-      "reason": "tiny same-file edit() variants"
+      "reason": "tiny same-class lookups (lookup_default/get_default)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a3ec2eea1fc3",
+      "label": "false_positive",
+      "reason": "decorator overload family (command/group) with distinct parameter handling"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b8f755a5a971",
+      "label": "false_positive",
+      "reason": "tiny same-class getters (get_help/get_usage)"
     },
     {
       "scanner": "duplicates",
@@ -311,9 +287,87 @@
     },
     {
       "scanner": "duplicates",
-      "target_id": "cluster/94cb8dc67250",
+      "target_id": "cluster/ccb0048b99ad",
       "label": "false_positive",
-      "reason": "tiny same-class lookups (lookup_default/get_default)"
+      "reason": "different option decorators (confirmation/help); shared skeleton only"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d5548cb5eaef",
+      "label": "false_positive",
+      "reason": "clamp helpers on different types"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d96347512e97",
+      "label": "false_positive",
+      "reason": "tiny same-file edit() variants"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/e7e987cbf349",
+      "label": "false_positive",
+      "reason": "exception __init__ boilerplate (two exception classes)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f5f9621b4e6b",
+      "label": "false_positive",
+      "reason": "different methods in core.py (command vs group bodies); partial structural similarity"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/0a9c8d79d87d",
+      "label": "false_positive",
+      "reason": "canonical get_text_stderr; members are console IO and command registration, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/0ce71079f43b",
+      "label": "false_positive",
+      "reason": "canonical _mask_hidden_input; the get_completion_args member trio is a genuine near-duplicate already covered by the duplicates channel, but no member inline-copies this canonical"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/29439e4e8dda",
+      "label": "false_positive",
+      "reason": "canonical Option.get_error_hint vs MissingParameter.format_message: both format error text but are distinct methods with distinct roles; f-string coincidence"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/2e596853892f",
+      "label": "false_positive",
+      "reason": "canonical Result.__init__ vs __init__ boilerplate family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/39c59b735170",
+      "label": "false_positive",
+      "reason": "canonical _nullpager pager loop matched against unrelated members (env parsing, console IO); token coincidence"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/6203a29308ce",
+      "label": "false_positive",
+      "reason": "canonical get_best_encoding; members are shell-completion env parsing, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/9f6f410cefc3",
+      "label": "false_positive",
+      "reason": "canonical CompletionItem.__init__ vs __init__ boilerplate family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/faf8d039c438",
+      "label": "false_positive",
+      "reason": "custom_version_option/help_option/version_option are parallel public decorator factories with distinct names and help text; deliberate family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/fe02d3a20d3f",
+      "label": "false_positive",
+      "reason": "canonical Command.make_parser; members are Windows console IO and shell-completion env parsing, unrelated"
     }
   ]
 }

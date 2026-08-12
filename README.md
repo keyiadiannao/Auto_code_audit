@@ -61,6 +61,7 @@ additionally installs two console commands wrapping the same entrypoints:
 ```text
 auto-code-audit --root /work/foo --package src
 auto-code-adjudicate --report /work/foo/reports/latest.json
+auto-code-verify --report /work/foo/reports/latest.json --verdicts /work/foo/reports/verdicts.json
 ```
 
 ## Quick start
@@ -73,8 +74,12 @@ python run_all.py --root /work/foo --package src
 # root, not the toolkit checkout
 python adjudicate.py --report /work/foo/reports/latest.json
 
-# Layer 3: run the audited project's tests and provenance gates
+# Layer 3: run the audited project's tests, provenance gates, and the
+# engine-owned acceptance gate after a fix
 python -m pytest /work/foo/tests -q
+python run_verify.py --report /work/foo/reports/latest.json \
+  --verdicts /work/foo/reports/verdicts.json --previous /work/foo/reports/pre.json \
+  --scope src/lib
 ```
 
 Runs all scanners against the package under the current directory (override
@@ -174,19 +179,25 @@ project, plus corpus totals:
 The label set covers the channels most reliably adjudicated on public
 packages: dead-`public`-`API` candidates, forwarding wrappers, unreferenced
 public functions, fork pairs that are intentional convenience wrappers,
-non-security digest hashes, and every `duplicates` cluster emitted at the
-pinned commits. 355 of 620 candidates carry labels (the 199 unlabelled
-newcomers are `regions` clusters, which postdate the label set). Ten clusters
-are `true_finding` — near-verbatim copies inside the pytest thread/unraisable
+non-security digest hashes, every `duplicates` cluster emitted at the pinned
+commits, and the first region batch (all 21 shared/short clusters plus the 50
+highest-coverage `helper_not_reused` clusters). 426 of 620 candidates carry
+labels (the 194 unlabelled remainder are lower-coverage `regions` helper
+clusters awaiting a later batch). Twelve clusters are `true_finding` — ten
+from `duplicates`: near-verbatim copies inside the pytest thread/unraisable
 plugin pair, werkzeug's Request/Response deprecation wrappers
 (`content_md5`, `pragma`), `is_json`, and the `mimetype_params` copied from
 `Response` into `EnvironBuilder`, plus click's twin reader/writer helpers and
 shell-completion env parsing and starlette's `Route`/`WebSocketRoute`
-`url_path_for` — while the remaining clusters are false positives
-(intentional API-layer wrappers, sync/async dual-interface mirrors,
-boilerplate dunder families, parallel parsers with distinct grammars).
-Corpus totals at the pinned commits: precision 0.028 (10/355), review burden
-62.0 candidates per confirmed finding, 6.5 candidates per KLOC, runtime 0.3s
+`url_path_for`; and two from `regions`, both halves of the same pytest plugin
+pair: the `collect_thread_exception`/`collect_unraisable` hooks and the
+`pytest_configure` wiring that each plugin copies from its twin. The
+remaining clusters are false positives (intentional API-layer wrappers,
+sync/async dual-interface mirrors, boilerplate dunder families, parallel
+parsers with distinct grammars, and token-coincidence matches where the
+region never actually inline-copies the canonical named helper).
+Corpus totals at the pinned commits: precision 0.028 (12/426), review burden
+51.7 candidates per confirmed finding, 6.5 candidates per KLOC, runtime 0.3s
 per KLOC. A label file whose `target_id` matches no candidate in the pinned
 commit is reported as `unmatched_labels` (stale scope), so label drift is
 visible rather than silent.
@@ -194,8 +205,20 @@ visible rather than silent.
 The regions scanner adds ~2.1 candidates per KLOC on the six pinned repos
 (199 clusters; helper-not-reused matches dominate at 178, shared-capability
 12, short-block 9), so the review burden grew from 42.1 to 62.0 once regions
-entered the profile. None of the region clusters are labelled yet — first
-adjudication of that cohort is the next benchmark milestone.
+entered the profile. First-batch adjudication of that cohort found 2
+`true_finding` clusters out of 71 labelled: the pytest thread/unraisable
+plugin pair duplicates both its collect hook and its configure wiring (the
+same copy-paste the `duplicates` channel flags). The remaining 69 labelled
+clusters are false positives in four families: constructor/`__init__`
+attribute-assignment boilerplate (`check_ispytest`-style), deliberate
+parallel families (xunit setup fixtures, sync/async mirrors, ASGI connection
+classes, capture `snap` variants), token-coincidence matches where the
+canonical is a nested span or an unrelated member, and `short_risky`
+self-pairs where the same function is matched against itself. The labelled
+`regions` precision is 0.028 (2/71), dominated by the `helper_not_reused`
+channel's token-level matching; lowering that false-positive rate is the next
+region milestone. The 194 unlabelled lower-coverage helper clusters remain
+open for a second batch.
 
 ### Mutation corpus (recall)
 
@@ -229,6 +252,7 @@ scanner recall as well as precision on the corpus.
 | `scan_duplicates.py` | structurally similar function component | symmetric experiment arms, intentionally separate intervention boundaries |
 | `scan_forks.py` | cross-file callables sharing a large common skeleton with diverged bodies (>= 40 lines, >= 75% token similarity) | deliberate specialization forks with distinct contracts, same-file symmetric helpers |
 | `scan_contracts.py` | modules used as libraries, forwarding wrappers, repeated contract-sensitive names, unreferenced top-level functions, env-handoff and load-strictness violations | a valuable adapter, dynamic entrypoint, or intentionally independent audit implementation |
+| `scan_regions.py` | repeated capability blocks: inline copies of an existing named helper (`helper_not_reused`), shared-capability blocks across files, and short high-semantic-density blocks (asymmetric indexing, contract kwargs) | parallel branches with genuinely distinct contracts, single-occurrence boilerplate |
 | `scan_hardcoded.py` | syntax known to drift from shared behavior | a distinct hash contract or an intentional frozen-forward implementation |
 | `scan_capabilities.py` | script-local reimplementations of library functions | thin role-specific wrappers with real contracts |
 | `scan_style.py` | AI-typical writing signals in TeX prose (semicolon chains, template openers, em-dash rate, burstiness, excess vocabulary, bare `\pm`) | technical enumeration, section-map lists, statistics-context "robust/significant" |
@@ -243,6 +267,12 @@ Highlights worth knowing before you interpret a report:
   AST fingerprints cannot see: `env_written_not_read`,
   `generation_path_without_env`, `cli_without_bootstrap`, and
   `defensive_param_loosening`.
+- **`scan_regions.py`** extracts every capability block in the package and
+  emits three cluster kinds: `helper_not_reused` (an inline copy of an
+  existing named function — carries the `canonical_symbol` and per-member
+  coverage), `shared_capability` (repeated blocks across files or functions),
+  and short high-semantic-density blocks (`short_block_cluster: true`, e.g.
+  asymmetric `S00[a, a]`-style table lookups too short for region matching).
 - **`scan_style.py`** strips TeX to prose span-preservingly, so reported line
   numbers match the source exactly; it scans `--tex-dir` (default `docs`)
   recursively, skipping archive/frozen/legacy directories.
@@ -277,8 +307,17 @@ provenance gate.
 python -m pytest tests -q          # this toolkit's fixtures
 python -m pytest <package>/tests -q   # the target package
 python <package>/verify/... --quick   # the package verifier, if one exists
+python run_verify.py --report <new> --verdicts <verdicts.json> --previous <old>
 git diff --check
 ```
+
+`run_verify.py` is the engine-owned Layer-3 acceptance gate (SKILL.md Phase 3).
+It re-audits after a fix and fails when a code-action verdict's `target_id`
+still appears in the new report, when a still-present finding's
+`evidence_hash` recomputes unchanged, or when the patch scope gained a
+high/medium candidate that was absent before the patch. Exit code 0 means
+acceptance; `--scope` limits the new-candidate check to the path the patch
+touched.
 
 ## Continuous integration
 
@@ -292,6 +331,7 @@ wheel build/import smoke, and a whitespace check.
 ```text
 run_all.py              one-command orchestration + summary report + report diff
 adjudicate.py           resumable Layer-2 semantic candidate review
+run_verify.py           engine-owned deterministic acceptance gate (post-fix)
 scan_*.py               the deterministic scanners (deadcode, duplicates,
                         regions, forks, contracts, capabilities, hardcoded,
                         style)

@@ -575,6 +575,7 @@ def main(argv: list[str] | None = None) -> int:
         Path(scan_duplicates.__file__),
         Path(scan_forks.__file__),
         Path(scan_hardcoded.__file__),
+        Path(scan_regions.__file__),
         Path(scan_style.__file__),
         Path(__file__),
     ]

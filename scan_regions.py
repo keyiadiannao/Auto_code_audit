@@ -81,6 +81,9 @@ class RegionRecord:
     control_shape: str
     inputs: tuple[str, ...]
     outputs: tuple[str, ...]
+    outputs_used_after: tuple[str, ...]
+    external_effects: tuple[str, ...]
+    control_exits: tuple[str, ...]
     extractability: float
     risk: float
     risk_signals: tuple[str, ...]
@@ -179,6 +182,68 @@ def _region_metrics(
     inputs = sorted(loaded & fn_locals - defined)
     outputs = list(dict.fromkeys(mutated))
     return tuple(inputs), tuple(outputs), tuple(calls), escape, has_yield, has_await
+
+
+def _external_effects(
+    block: list[ast.stmt], fn_locals: set[str]
+) -> tuple[str, ...]:
+    """Calls that escape the region's own state: module-level functions
+    (``torch.stack``, ``load_state``) and methods on names that are neither
+    region-defined nor function-local (``tensor`` is local, ``torch`` is not).
+    """
+    defined: set[str] = set()
+    effects: list[str] = []
+
+    def walk(node: ast.AST) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            defined.add(node.id)
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute):
+                if isinstance(func.value, ast.Name) and func.value.id not in fn_locals:
+                    effects.append(func.attr)
+            elif isinstance(func, ast.Name) and func.id not in fn_locals:
+                effects.append(func.id)
+        for child in ast.iter_child_nodes(node):
+            walk(child)
+
+    for stmt in block:
+        walk(stmt)
+    return tuple(sorted(set(effects)))
+
+
+def _control_exits(block: list[ast.stmt]) -> tuple[str, ...]:
+    """Non-local control exits inside the region (break/continue/return)."""
+    exits: set[str] = set()
+    for node in ast.walk(ast.Module(body=block, type_ignores=[])):
+        if isinstance(node, ast.Break):
+            exits.add("break")
+        elif isinstance(node, ast.Continue):
+            exits.add("continue")
+        elif isinstance(node, (ast.Return, ast.Yield, ast.YieldFrom, ast.Await)):
+            exits.add(
+                "yield"
+                if isinstance(node, (ast.Yield, ast.YieldFrom))
+                else "await"
+                if isinstance(node, ast.Await)
+                else "return"
+            )
+    return tuple(sorted(exits))
+
+
+def _outputs_used_after(
+    block: list[ast.stmt], after_loads: set[str]
+) -> tuple[str, ...]:
+    """Names defined inside the region and later loaded by the parent function."""
+    stored: set[str] = set()
+    for node in ast.walk(ast.Module(body=block, type_ignores=[])):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            stored.add(node.id)
+    return tuple(sorted(stored & after_loads))
 
 
 def _extractability(
@@ -471,6 +536,21 @@ def extract_regions(path: Path) -> tuple[list[RegionRecord], list[FunctionRecord
         parent_tokens = tuple(
             TOKEN_RE.findall(ast.unparse(ast.Module(body=body, type_ignores=[])))
         )
+
+        def _after_loads(end_line: int) -> set[str]:
+            """Names loaded by parent-function statements after ``end_line``."""
+            loads: set[str] = set()
+            for stmt in body:
+                if (getattr(stmt, "lineno", 0) or 0) > end_line:
+                    for child in ast.walk(
+                        ast.Module(body=[stmt], type_ignores=[])
+                    ):
+                        if isinstance(child, ast.Name) and isinstance(
+                            child.ctx, ast.Load
+                        ):
+                            loads.add(child.id)
+            return loads
+
         spans: dict[tuple[int, int], list[ast.stmt]] = {}
         for block in _blocks_of(node.body):
             if block:
@@ -488,15 +568,37 @@ def extract_regions(path: Path) -> tuple[list[RegionRecord], list[FunctionRecord
             spans.setdefault(_span_key([stmt]), [stmt])
         kept_blocks = _drop_contained_spans(spans)
         for block in kept_blocks:
-            record = _region_record(path, parent, fn_locals, block, parent_tokens, None)
+            block_end = (
+                getattr(block[-1], "end_lineno", block[-1].lineno)
+                or block[-1].lineno
+            )
+            record = _region_record(
+                path,
+                parent,
+                fn_locals,
+                block,
+                parent_tokens,
+                None,
+                _after_loads(block_end),
+            )
             if record is not None:
                 records.append(record)
         kept_spans = {_span_key(block) for block in kept_blocks}
         for span, block in spans.items():
             if span in kept_spans:
                 continue
+            block_end = (
+                getattr(block[-1], "end_lineno", block[-1].lineno)
+                or block[-1].lineno
+            )
             record = _region_record(
-                path, parent, fn_locals, block, parent_tokens, {"short_risky", "helper"}
+                path,
+                parent,
+                fn_locals,
+                block,
+                parent_tokens,
+                {"short_risky", "helper"},
+                _after_loads(block_end),
             )
             if record is not None:
                 records.append(record)
@@ -555,6 +657,7 @@ def _region_record(
     block: list[ast.stmt],
     parent_tokens: tuple[str, ...],
     allowed_channels: set[str] | None,
+    after_loads: set[str] | None = None,
 ) -> RegionRecord | None:
     """Route one block to the shared / helper / short_risky channel."""
     nstatements = len(block)
@@ -618,6 +721,11 @@ def _region_record(
         control_shape=_control_shape(block),
         inputs=inputs,
         outputs=tuple(outputs),
+        outputs_used_after=(
+            _outputs_used_after(block, after_loads) if after_loads is not None else ()
+        ),
+        external_effects=_external_effects(block, fn_locals),
+        control_exits=_control_exits(block),
         extractability=score,
         risk=risk,
         risk_signals=risk_signals,
@@ -753,6 +861,9 @@ def main(argv: list[str] | None = None) -> int:
                     control_shape=item.control_shape,
                     inputs=item.inputs,
                     outputs=item.outputs,
+                    outputs_used_after=item.outputs_used_after,
+                    external_effects=item.external_effects,
+                    control_exits=item.control_exits,
                     extractability=item.extractability,
                     risk=item.risk,
                     risk_signals=item.risk_signals,
@@ -865,6 +976,10 @@ def main(argv: list[str] | None = None) -> int:
                     "nlines": region.nlines,
                     "inputs": list(region.inputs),
                     "outputs": list(region.outputs),
+                    "outputs_used_after": list(region.outputs_used_after),
+                    "mutated_inputs": list(region.outputs),
+                    "external_effects": list(region.external_effects),
+                    "control_exits": list(region.control_exits),
                     "calls": list(region.calls),
                     "effects": {"mutates": list(region.outputs)},
                     "control_shape": region.control_shape,
@@ -1015,6 +1130,10 @@ def main(argv: list[str] | None = None) -> int:
                     "nlines": member.nlines,
                     "inputs": list(member.inputs),
                     "outputs": list(member.outputs),
+                    "outputs_used_after": list(member.outputs_used_after),
+                    "mutated_inputs": list(member.outputs),
+                    "external_effects": list(member.external_effects),
+                    "control_exits": list(member.control_exits),
                     "calls": list(member.calls),
                     "effects": {"mutates": list(member.outputs)},
                     "control_shape": member.control_shape,

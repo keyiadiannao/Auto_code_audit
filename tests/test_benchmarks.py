@@ -296,6 +296,13 @@ def test_benchmark_metrics_summarize_scanner_payloads() -> None:
             "contracts": {"counts": {"x": 2, "y": 1}},
             "capabilities": {"overlap": [{"local": {}}]},
             "hardcoded": {"hits": {"one": [{"path": "x.py"}]}},
+            "regions": {
+                "clusters": [
+                    {"kind": "helper_not_reused", "id": "h1"},
+                    {"kind": "shared_capability", "id": "s1"},
+                    {"kind": "shared_capability", "id": "s2", "short_block_cluster": True},
+                ]
+            },
         },
     }
     assert _metrics(report) == {
@@ -307,6 +314,10 @@ def test_benchmark_metrics_summarize_scanner_payloads() -> None:
         "contract_candidates": 3,
         "capability_overlap": 1,
         "hardcoded_hits": 1,
+        "region_clusters": 3,
+        "region_helper_not_reused": 1,
+        "region_shared_capability": 2,
+        "region_short_block": 1,
         "elapsed_seconds": 1.25,
     }
 

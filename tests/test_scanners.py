@@ -799,6 +799,7 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
         "scan_duplicates.py",
         "scan_forks.py",
         "scan_hardcoded.py",
+        "scan_regions.py",
         "scan_style.py",
     }
     assert "candidate list" in output_md.read_text(encoding="utf-8")

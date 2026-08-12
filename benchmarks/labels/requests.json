@@ -5,18 +5,6 @@
   "labels": [
     {
       "scanner": "contracts",
-      "target_id": "forwarding/api.py:74:get",
-      "label": "false_positive",
-      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
-    },
-    {
-      "scanner": "contracts",
-      "target_id": "forwarding/api.py:90:options",
-      "label": "false_positive",
-      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
-    },
-    {
-      "scanner": "contracts",
       "target_id": "forwarding/api.py:117:post",
       "label": "false_positive",
       "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
@@ -36,6 +24,18 @@
     {
       "scanner": "contracts",
       "target_id": "forwarding/api.py:171:delete",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:74:get",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:90:options",
       "label": "false_positive",
       "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
     },
@@ -65,12 +65,6 @@
     },
     {
       "scanner": "contracts",
-      "target_id": "unreferenced/api.py:90:options",
-      "label": "false_positive",
-      "reason": "public API surface (or runtime/duck-typed use), not dead code"
-    },
-    {
-      "scanner": "contracts",
       "target_id": "unreferenced/api.py:102:head",
       "label": "false_positive",
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
@@ -90,6 +84,12 @@
     {
       "scanner": "contracts",
       "target_id": "unreferenced/api.py:171:delete",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/api.py:90:options",
       "label": "false_positive",
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
     },
@@ -148,8 +148,50 @@
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
     },
     {
+      "scanner": "duplicates",
+      "target_id": "cluster/1592b9b56b70",
+      "label": "false_positive",
+      "reason": "intentional API-layer forwarding wrappers (requests.api convenience vs Session methods); per-method semantics differ"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/3b9c8699c4ea",
+      "label": "false_positive",
+      "reason": "dunder boilerplate (identical __eq__ on two auth classes), not consolidated code"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/5d1e37779cc7",
+      "label": "false_positive",
+      "reason": "small same-file cookie helpers with distinct behaviors (domain/path list filtering)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b112f3bc200c",
+      "label": "false_positive",
+      "reason": "intentional API-layer forwarding wrappers (head/options); per-method semantics differ"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/c87df69fd84e",
+      "label": "false_positive",
+      "reason": "one-line algorithm helpers differing only in hash algorithm; idiomatic, not duplication"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d56529b68d45",
+      "label": "false_positive",
+      "reason": "dunder boilerplate (__getstate__ pickle shims on distinct objects)"
+    },
+    {
       "scanner": "forks",
-      "target_id": "fork/api.py:post|sessions.py:Session.post",
+      "target_id": "fork/api.py:head|sessions.py:Session.head",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/api.py:head|sessions.py:Session.options",
       "label": "false_positive",
       "reason": "intentional public convenience wrapper delegating to the full implementation"
     },
@@ -167,6 +209,12 @@
     },
     {
       "scanner": "forks",
+      "target_id": "fork/api.py:post|sessions.py:Session.post",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "forks",
       "target_id": "fork/api.py:put|sessions.py:Session.patch",
       "label": "false_positive",
       "reason": "intentional public convenience wrapper delegating to the full implementation"
@@ -178,58 +226,34 @@
       "reason": "intentional public convenience wrapper delegating to the full implementation"
     },
     {
-      "scanner": "forks",
-      "target_id": "fork/api.py:head|sessions.py:Session.head",
-      "label": "false_positive",
-      "reason": "intentional public convenience wrapper delegating to the full implementation"
-    },
-    {
-      "scanner": "forks",
-      "target_id": "fork/api.py:head|sessions.py:Session.options",
-      "label": "false_positive",
-      "reason": "intentional public convenience wrapper delegating to the full implementation"
-    },
-    {
       "scanner": "hardcoded",
       "target_id": "hard/manual_sha256/auth.py:195",
       "label": "false_positive",
       "reason": "hash used for hashing/IDs, not security; pattern is a false positive"
     },
     {
-      "scanner": "duplicates",
-      "target_id": "cluster/1592b9b56b70",
+      "scanner": "regions",
+      "target_id": "region/0028c2740fab",
       "label": "false_positive",
-      "reason": "intentional API-layer forwarding wrappers (requests.api convenience vs Session methods); per-method semantics differ"
+      "reason": "canonical Response.__setstate__ is a pickle hook; members are unrelated functions, match is token-level"
     },
     {
-      "scanner": "duplicates",
-      "target_id": "cluster/b112f3bc200c",
+      "scanner": "regions",
+      "target_id": "region/0222acdc45d9",
       "label": "false_positive",
-      "reason": "intentional API-layer forwarding wrappers (head/options); per-method semantics differ"
+      "reason": "canonical _resolve_char_detection is a charset-detection helper; members are unrelated call sites matched on token coincidence"
     },
     {
-      "scanner": "duplicates",
-      "target_id": "cluster/c87df69fd84e",
+      "scanner": "regions",
+      "target_id": "region/1062c7f9dab5",
       "label": "false_positive",
-      "reason": "one-line algorithm helpers differing only in hash algorithm; idiomatic, not duplication"
+      "reason": "canonical get_cookie_header is nested in a larger function; members (decode_dsn-style helpers) share only generic tokens, no actual inline copy of the canonical"
     },
     {
-      "scanner": "duplicates",
-      "target_id": "cluster/5d1e37779cc7",
+      "scanner": "regions",
+      "target_id": "region/21b5f0a00731",
       "label": "false_positive",
-      "reason": "small same-file cookie helpers with distinct behaviors (domain/path list filtering)"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/3b9c8699c4ea",
-      "label": "false_positive",
-      "reason": "dunder boilerplate (identical __eq__ on two auth classes), not consolidated code"
-    },
-    {
-      "scanner": "duplicates",
-      "target_id": "cluster/d56529b68d45",
-      "label": "false_positive",
-      "reason": "dunder boilerplate (__getstate__ pickle shims on distinct objects)"
+      "reason": "canonical from_key_val_list is a public util; members share generic list/dict idioms but do not reimplement the canonical"
     }
   ]
 }

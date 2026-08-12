@@ -17,7 +17,7 @@ jobs:
       - name: Type-check with mypy (blocking)
         run: |
           python -m pip install --quiet mypy
-          python -m mypy run_all.py adjudicate.py _audit_config.py _scanner_common.py report_formatter.py scan_regions.py scan_capabilities.py scan_contracts.py scan_deadcode.py scan_duplicates.py scan_forks.py scan_hardcoded.py scan_style.py scan_cli_smoke.py
+          python -m mypy run_all.py adjudicate.py run_verify.py _audit_config.py _scanner_common.py report_formatter.py scan_regions.py scan_capabilities.py scan_contracts.py scan_deadcode.py scan_duplicates.py scan_forks.py scan_hardcoded.py scan_style.py scan_cli_smoke.py
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -40,6 +40,7 @@ jobs:
           python -m pip install --quiet -e .
           auto-code-audit --version
           auto-code-adjudicate --version
+          auto-code-verify --version
       - name: Build and verify wheel
         shell: bash
         run: |
@@ -58,6 +59,7 @@ jobs:
           "$WHEEL_PY" -c "import report_formatter, run_all; print(run_all.__version__)"
           "$WHEEL_PY" -m run_all --version
           "$WHEEL_PY" -m adjudicate --version
+          "$WHEEL_PY" -m run_verify --version
       - name: Entrypoint --help smoke
         run: python scan_cli_smoke.py
       - name: End-to-end self-audit (dogfood)
@@ -69,9 +71,41 @@ jobs:
           printf 'def dead_a():\n    return 1\n' > dogfood/pkg/lib/unused.py
           python run_all.py --root dogfood --package pkg \
             --json dogfood/audit.json --markdown dogfood/audit.md --no-doc-channel
+          cp dogfood/audit.json dogfood/pre.json
           printf 'def dead_b():\n    return 1\n' > dogfood/pkg/lib/unused2.py
           python run_all.py --root dogfood --package pkg \
             --json dogfood/audit.json --markdown dogfood/audit.md --no-doc-channel
           grep -q "## Changes since last run" dogfood/audit.md
+          python - <<'PY'
+          import json, sys
+          sys.path.insert(0, ".")
+          from run_all import _candidate_signatures
+          from adjudicate import _evidence_hash
+          report = json.load(open("dogfood/audit.json", encoding="utf-8"))
+          dead = [
+              (scanner, signature, detail)
+              for scanner, triples in _candidate_signatures(report.get("scanners", {})).items()
+              for signature, _, detail in triples
+              if scanner == "deadcode" and signature.endswith("unused2.py")
+          ]
+          verdicts = {"verdicts": [
+              {"scanner": s, "target_id": sig, "evidence_hash": _evidence_hash(s, sig, det),
+               "disposition": "true duplicate"}
+              for s, sig, det in dead
+          ]}
+          json.dump(verdicts, open("dogfood/verdicts.json", "w"), indent=2)
+          PY
+          python run_verify.py --report dogfood/audit.json --verdicts dogfood/verdicts.json \
+            && { echo "verify should have rejected the still-present finding"; exit 1; } || true
+          python - <<'PY'
+          import json
+          verdicts = json.load(open("dogfood/verdicts.json", encoding="utf-8"))
+          for verdict in verdicts["verdicts"]:
+              verdict["target_id"] = verdict["target_id"] + ".ghost"
+              verdict["evidence_hash"] = "0" * 64
+          json.dump(verdicts, open("dogfood/verdicts.json", "w"), indent=2)
+          PY
+          python run_verify.py --report dogfood/audit.json --verdicts dogfood/verdicts.json \
+            --previous dogfood/pre.json
       - name: Whitespace hygiene
         run: git diff --check
