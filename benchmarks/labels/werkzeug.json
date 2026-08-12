@@ -89,9 +89,105 @@
     },
     {
       "scanner": "contracts",
+      "target_id": "unreferenced/http.py:1080:_parse_etags",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
       "target_id": "unreferenced/http.py:1279:remove_hop_by_hop_headers",
       "label": "false_positive",
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:375:_dump_csp_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:731:_parse_accept_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:735:_parse_accept_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:738:_parse_accept_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:778:_parse_cache_control_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:785:_parse_cache_control_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:792:_parse_cache_control_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:839:_parse_csp_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:846:_parse_csp_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:853:_parse_csp_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:892:_parse_set_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:936:_parse_if_range_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:960:_parse_range_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:985:_parse_content_range_header",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/routing/rules.py:87:_find",
+      "label": "false_positive",
+      "reason": "active internal helper referenced by the public parse_* wrapper in the same module (scanner reachability misses the reference; overload stub records inflate the count), not dead code"
     },
     {
       "scanner": "contracts",
@@ -391,6 +487,42 @@
       "reason": "deprecation-property family on Response (same-file)"
     },
     {
+      "scanner": "forks",
+      "target_id": "fork/datastructures/cache_control.py:_CacheControl.from_header|datastructures/structures.py:HeaderSet.from_header",
+      "label": "false_positive",
+      "reason": "4-line classmethod parsers delegating to different parse helpers (parse_dict_header vs parse_list_header) for different header types, not drift"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/datastructures/file_storage.py:FileStorage.mimetype|sansio/request.py:Request.mimetype",
+      "label": "false_positive",
+      "reason": "identical 2-line mimetype idiom whose shared logic is already extracted into each class's _parse_content_type, not a missed helper"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/datastructures/headers.py:Headers.get|datastructures/structures.py:TypeConversionDict.get",
+      "label": "false_positive",
+      "reason": "deliberate parallel implementation of the same dict.get idiom in different container classes (multi-value headers vs typed conversion), each semantically distinct"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/sansio/request.py:Request.content_md5|sansio/response.py:Response.content_md5",
+      "label": "false_positive",
+      "reason": "deliberate parallel deprecated compat properties (same deprecation wrapper, different header semantics), not drift"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/sansio/request.py:Request.pragma|sansio/response.py:Response.content_md5",
+      "label": "false_positive",
+      "reason": "deliberate parallel deprecated compat properties with distinct header semantics, not drift"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/sansio/response.py:Response.mimetype_params|test.py:EnvironBuilder.mimetype_params",
+      "label": "false_positive",
+      "reason": "deliberate parallel mimetype_params idiom in sansio Response and test builder, shared parse_options_header already extracted, not drift"
+    },
+    {
       "scanner": "regions",
       "target_id": "region/00ffb8d7305e",
       "label": "false_positive",
@@ -404,9 +536,35 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/106e6dae78a6",
+      "label": "true_finding",
+      "reason": "mimetype_params is a verbatim copy from Response into EnvironBuilder (on_update + parse_options_header + CallbackDict), versionadded 0.5 vs 0.14; already a duplicates true_finding",
+      "issue_id": "mimetype-params-copy"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/148411ef571a",
+      "label": "false_positive",
+      "reason": "canonical interactive console compile (code registration); members _CacheControl._get_cache_value / _RangeWrapper.__init__ matched on guard/assignment shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/2c1b96b3fda8",
       "label": "false_positive",
       "reason": "member utils.redirect is unrelated to Response.content_md5; the real Request/Response content_md5 pair is a duplicates-channel finding, not this cluster"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/2e42aca702a1",
+      "label": "false_positive",
+      "reason": "canonical RequestedRangeNotSatisfiable.get_headers (Content-Range header); member WSGIRequestHandler.make_environ matched on environ construction shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/33ded048685c",
+      "label": "true_finding",
+      "reason": "Request/Response content_md5 are a verbatim deprecation-wrapper pair; already a duplicates true_finding",
+      "issue_id": "deprecation-wrapper-properties"
     },
     {
       "scanner": "regions",
@@ -422,9 +580,45 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/5cc4ea3f62bb",
+      "label": "false_positive",
+      "reason": "canonical dump_age (timedelta formatting); member IfRange.from_header matched on guard shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/657cdfa89f12",
       "label": "false_positive",
       "reason": "repr-generator helpers in the debug module; parallel repr families with distinct output shapes"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/685e26a05db1",
+      "label": "false_positive",
+      "reason": "canonical ImmutableDictMixin.fromkeys (classmethod constructor); members BaseWSGIServer.__init__ / iri_to_uri matched on assignment shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/6dc2fa24ffb3",
+      "label": "false_positive",
+      "reason": "canonical append_slash_redirect (redirect construction); member uri_to_iri matched on urlsplit/parse shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/71795d93883e",
+      "label": "false_positive",
+      "reason": "canonical _str_header_value (newline rejection); members IfRange.from_header / ProxyFix._get_real_value matched on guard shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/80734dcdd97d",
+      "label": "false_positive",
+      "reason": "canonical Rule._get_func_code (exec-based builder fetch); member Rule.__init__ matched on attribute-assignment boilerplate, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/83903cbf77e3",
+      "label": "false_positive",
+      "reason": "canonical parse_date (rfc2822 date parse); member parse_age is the sibling http parser in the same module, matched on None-guard return shape, not a missed shared helper"
     },
     {
       "scanner": "regions",
@@ -446,6 +640,30 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/a40881fa3733",
+      "label": "false_positive",
+      "reason": "Headers.__or__ re-implements the inherited MultiDict.__or__ body with type-narrowed signature; deliberate typing override, not copy-paste drift"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a453876da40b",
+      "label": "false_positive",
+      "reason": "canonical Response.set_data (payload encoding); member sansio Response.__init__ matched on isinstance-branch shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a99108ae2f5c",
+      "label": "false_positive",
+      "reason": "cache_control/content_security_policy/report_only are the pervasive header-property idiom (on_update closure + from_header); deliberate pattern, not accidental copy"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/b053f32c43bc",
+      "label": "false_positive",
+      "reason": "canonical Headers.add (header tuple append); members IfRange.from_header / make_ssl_devcert / BaseWSGIServer.__init__ matched on if/assignment shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/b6fd01881b08",
       "label": "false_positive",
       "reason": "canonical Aborter.__init__; members are cache-control and range parsing, unrelated"
@@ -464,6 +682,30 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/c1139d4e335e",
+      "label": "false_positive",
+      "reason": "Headers.__ior__ re-implements the inherited MultiDict.__ior__ body with type-narrowed signature; deliberate typing override, not copy-paste drift"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c2351897f4a6",
+      "label": "false_positive",
+      "reason": "canonical regex_repr (debug HTML repr); member redirect matched on html-escape shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c5405d50a916",
+      "label": "false_positive",
+      "reason": "canonical load_ssl_context (SSL context builder); members IfRange.from_header / stream_encode_multipart / redirect matched on guard and construction shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c80d9dcb4cc8",
+      "label": "false_positive",
+      "reason": "canonical ImmutableListMixin.__hash__ (hash cache); members _CacheControl._get_cache_value / IfRange.from_header matched on guard shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/ceda663aebe7",
       "label": "false_positive",
       "reason": "self-pair artifact: run_wsgi_app matched against itself (x3)"
@@ -476,9 +718,9 @@
     },
     {
       "scanner": "regions",
-      "target_id": "region/a99108ae2f5c",
+      "target_id": "region/df41cfeffda6",
       "label": "false_positive",
-      "reason": "cache_control/content_security_policy/report_only are the pervasive header-property idiom (on_update closure + from_header); deliberate pattern, not accidental copy"
+      "reason": "canonical Response.get_wsgi_response (WSGI tuple emission); member iri_to_uri matched on docstring/tuple shape, unrelated"
     },
     {
       "scanner": "regions",
@@ -488,29 +730,21 @@
     },
     {
       "scanner": "regions",
-      "target_id": "region/106e6dae78a6",
-      "label": "true_finding",
-      "reason": "mimetype_params is a verbatim copy from Response into EnvironBuilder (on_update + parse_options_header + CallbackDict), versionadded 0.5 vs 0.14; already a duplicates true_finding",
-      "issue_id": "mimetype-params-copy"
-    },
-    {
-      "scanner": "regions",
-      "target_id": "region/33ded048685c",
-      "label": "true_finding",
-      "reason": "Request/Response content_md5 are a verbatim deprecation-wrapper pair; already a duplicates true_finding",
-      "issue_id": "deprecation-wrapper-properties"
-    },
-    {
-      "scanner": "regions",
-      "target_id": "region/a40881fa3733",
+      "target_id": "region/f43a14795591",
       "label": "false_positive",
-      "reason": "Headers.__or__ re-implements the inherited MultiDict.__or__ body with type-narrowed signature; deliberate typing override, not copy-paste drift"
+      "reason": "canonical TypeConversionDict.get (typed dict lookup); members _CacheControl._get_cache_value / Range.range_for_length (x2) / parse_age matched on if-chain guard shapes, unrelated"
     },
     {
       "scanner": "regions",
-      "target_id": "region/c1139d4e335e",
+      "target_id": "region/f8443f6e1bb9",
       "label": "false_positive",
-      "reason": "Headers.__ior__ re-implements the inherited MultiDict.__ior__ body with type-narrowed signature; deliberate typing override, not copy-paste drift"
+      "reason": "canonical Request._get_stream_for_parsing (cached stream rebuild); member _CacheControl._get_cache_value matched on getattr/None shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/f9147aa23355",
+      "label": "false_positive",
+      "reason": "canonical generate_password_hash (password hashing); members Range.range_for_length (x2) matched on guard shapes, unrelated"
     }
   ]
 }

@@ -256,6 +256,258 @@
       "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
     },
     {
+      "scanner": "contracts",
+      "target_id": "unreferenced/_io/pprint.py:61:_safe_tuple",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/assertion/__init__.py:89:register_assert_rewrite",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/assertion/rewrite.py:446:_format_assertmsg",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/assertion/rewrite.py:468:_should_repr_global_name",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/assertion/rewrite.py:479:_format_boolop",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/assertion/rewrite.py:484:_call_reprcompare",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/assertion/rewrite.py:504:_call_assertion_pass",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/assertion/rewrite.py:509:_check_if_assertion_pass_impl",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/assertion/util.py:42:format_explanation",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/capture.py:1007:capsys",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/capture.py:1035:capteesys",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/capture.py:1070:capsysbinary",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/capture.py:1098:capfd",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/capture.py:1126:capfdbinary",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/config/__init__.py:271:console_main",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/config/__init__.py:383:get_plugin_manager",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/config/findpaths.py:275:load_config_dict_from_file",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/doctest.py:472:_patch_unwrap_mock_aware",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/doctest.py:733:doctest_namespace",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/fixtures.py:1609:yield_fixture",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/fixtures.py:1636:pytestconfig",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/freeze_support.py:10:freeze_includes",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/hookspec.py:792:pytest_report_to_serializable",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/hookspec.py:813:pytest_report_from_serializable",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/junitxml.py:280:record_property",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/junitxml.py:303:record_xml_attribute",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/junitxml.py:341:record_testsuite_property",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/pathlib.py:517:symlink_or_skip",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/pytester.py:216:get_public_names",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/pytester.py:461:linecomp",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/pytester.py:468:LineMatcher_fixture",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/pytester.py:495:_sys_snapshot",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/pytester.py:504:_config_for_test",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/recwarn.py:37:recwarn",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/recwarn.py:49:deprecated_call",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/recwarn.py:55:deprecated_call",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/recwarn.py:58:deprecated_call",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/reports.py:516:pytest_report_to_serializable",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/reports.py:527:pytest_report_from_serializable",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/subtests.py:136:subtests",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/subtests.py:345:pytest_report_to_serializable",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/subtests.py:351:pytest_report_from_serializable",
+      "label": "false_positive",
+      "reason": "public API surface (fixture entry point, hookspec declaration, or documented plugin API) referenced from __init__/hook registration or runtime, not dead code"
+    },
+    {
       "scanner": "deadcode",
       "target_id": "DEAD/assertion/truncate.py",
       "label": "false_positive",
@@ -582,10 +834,28 @@
       "reason": "different collectors (directory walk vs module tree); verified bodies differ"
     },
     {
+      "scanner": "forks",
+      "target_id": "fork/threadexception.py:collect_thread_exception|unraisableexception.py:collect_unraisable",
+      "label": "false_positive",
+      "reason": "deliberate sibling plugins (ThreadExceptionPlugin vs UnraisableExceptionPlugin) sharing hook shape for different exception mechanisms, not drift"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/threadexception.py:thread_exception_hook|unraisableexception.py:unraisable_hook",
+      "label": "false_positive",
+      "reason": "deliberate sibling plugins (ThreadExceptionPlugin vs UnraisableExceptionPlugin) sharing hook shape for different exception mechanisms, not drift"
+    },
+    {
       "scanner": "hardcoded",
       "target_id": "hard/manual_sha256/python.py:1064",
       "label": "false_positive",
       "reason": "hash used for hashing/IDs, not security; pattern is a false positive"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/06d44a99db5c",
+      "label": "false_positive",
+      "reason": "canonical MockAwareDocTestFinder._find_lineno (property unwrap for doctest); members Visitor.__init__ / FixtureFunctionMarker.__call__ / LoggingPlugin.__init__ matched on isinstance/option plumbing, unrelated"
     },
     {
       "scanner": "regions",
@@ -602,9 +872,117 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/0842c09b7539",
+      "label": "false_positive",
+      "reason": "canonical PytestPdbWrapper.do_quit (super().do_quit + exit); member _load_custom_toml matched on the None-guard early-return shape"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/0c25ba67b423",
+      "label": "false_positive",
+      "reason": "canonical _get_prog_name (argv basename logic); member get_fslocation_from_item matched on getattr/early-return shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/121249f42812",
+      "label": "false_positive",
+      "reason": "canonical Node.listchain (collector chain walk); members importorskip / TerminalReporter.__init__ matched on while/getattr shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/141856696bc2",
+      "label": "false_positive",
+      "reason": "canonical PytestPluginManager.pytest_configure (hookimpl registration); members Config.__init__ / RunResult.__init__ matched on __init__ attribute-assignment boilerplate, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/14fbc108c127",
+      "label": "false_positive",
+      "reason": "canonical Pytester.runitem (getitem to getrunner delegation); members conftest setup, doctest collect, and async-call check are unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/16d4b18fb419",
+      "label": "false_positive",
+      "reason": "canonical _get_config_loader (config loader dispatch); members ApproxScalar.tolerance / capture pytest_load_initial_conftests / _load_custom_toml / SubRequest._format_fixturedef_line matched on if-chain and getattr shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/1a75de7c819c",
+      "label": "false_positive",
+      "reason": "canonical Module._register_setup_module_fixture (xunit setUpModule autouse fixture); member Class._register_setup_method_fixture is the sibling method-scoped twin, same idiom, not a missed helper"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/1a82310535fb",
+      "label": "false_positive",
+      "reason": "canonical ExceptionInfo.from_exception (exception wrapping); member LogXML.node_reporter matched on getattr key shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/21bbdd165394",
+      "label": "false_positive",
+      "reason": "canonical getrawcode (code-object extraction); members importorskip / resolve_pkg_root_and_module_name / _register_unittest_setup_class_fixture matched on getattr/try-except shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/21e779a50c50",
+      "label": "false_positive",
+      "reason": "canonical AssertionRewriter.visit_Starred (AST rewriting); member _load_custom_toml matched on None-guard early-return shape, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/2376fa318cf0",
       "label": "false_positive",
       "reason": "canonical LineMatcher._getlines; members matched on isinstance-pattern tokens"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/2630ade5b4d8",
+      "label": "false_positive",
+      "reason": "canonical Function._getobj (instance attribute fetch); member resolve_pkg_root_and_module_name matched on assignment-flow shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/26d4337f142f",
+      "label": "false_positive",
+      "reason": "canonical tmpdir pytest_configure (MonkeyPatch/cleanup wiring); member FixtureFunctionMarker.__call__ matched on isinstance+raise validation shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/28464180019a",
+      "label": "false_positive",
+      "reason": "canonical AssertionRewriter.helper (AST helper call builder); member LogXML.node_reporter matched on attr/call construction shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/293539aca00c",
+      "label": "false_positive",
+      "reason": "canonical SafeRepr.repr_instance (try/except repr to _format_repr_exception); members MonkeyPatch.setattr import-path parsing and pkg-root resolution are unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/30af14d4f0c5",
+      "label": "false_positive",
+      "reason": "canonical Stat.owner (pwd uid lookup); member Source.__getitem__ matched on raise-guard shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/319c13b23d8f",
+      "label": "false_positive",
+      "reason": "canonical ExceptionInfo.match (regexp match on exception text); member TerminalReporter.report_collect matched on f-string building shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/31a82da08cd1",
+      "label": "false_positive",
+      "reason": "canonical Function.repr_failure (tbstyle dispatch); members RunResult.__init__ / report_collect matched on try/getoption and f-string shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/32f0aa82ddc3",
+      "label": "false_positive",
+      "reason": "canonical Code.path (source path resolution); members importorskip matched on getattr/raise shapes, unrelated"
     },
     {
       "scanner": "regions",
@@ -614,9 +992,130 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/33b739405bc3",
+      "label": "false_positive",
+      "reason": "canonical debugging pytest_addoption (--pdb option group); member logging pytest_addoption matched on addoption plumbing family, separate option domains, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/355c5e25c86a",
+      "label": "false_positive",
+      "reason": "canonical Pytester.getitem (in-process item collection); member _load_custom_toml matched on None-guard early-return shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/374b7f41103b",
+      "label": "false_positive",
+      "reason": "canonical get_real_func (inspect.unwrap + partial.func); members deindent, truncation, conftest load, toml config are unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/3899db02cd68",
+      "label": "false_positive",
+      "reason": "canonical _eval_scope_callable (scope callable dispatch); member FixtureFunctionMarker.__call__ matched on isinstance+raise validation shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/3d70eefcb965",
+      "label": "false_positive",
+      "reason": "canonical LogXML.add_global_property (append + bin_xml_escape); members node_reporter dict memoization and importorskip version check are unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/3fd6c41b0e95",
+      "label": "false_positive",
+      "reason": "canonical faulthandler pytest_addoption (timeout options); members Config.__init__ / RunResult.__init__ matched on __init__ assignment boilerplate, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/44e2756c9fe0",
+      "label": "false_positive",
+      "reason": "canonical make_numbered_dir_with_cleanup (numbered dir creation); member _get_line_with_reprcrash_message matched on try/isinstance shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/483528ec6c88",
+      "label": "false_positive",
+      "reason": "canonical pytester pytest_addoption (--lsof FD check); member logging pytest_addoption (--log-cli-*) matched on addoption plumbing family, separate option domains, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/4af07c55aee8",
+      "label": "false_positive",
+      "reason": "canonical Source.deindent; Source.__getitem__ shares only the copy-lines-into-new-Source tail as a sibling slicing method; Pytester.__init__ is check_ispytest boilerplate"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/4c0f4993b037",
+      "label": "false_positive",
+      "reason": "canonical MoreQuietAction.__call__ (argparse action); member LoggingPlugin.__init__ matched on option-ini plumbing shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/4cbb16dd7e62",
+      "label": "false_positive",
+      "reason": "canonical _get_truncation_parameters (verbosity/CI truncation decision); member _truncate_explanation is the sibling truncation helper it already consults, matched on early-return guard shape, not a missed helper"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/4d40293005af",
+      "label": "true_finding",
+      "reason": "pytest_configure is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (excepthook vs unraisablehook wiring)",
+      "issue_id": "exception-hook-plugin-pair"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/4f24cde4a3f8",
+      "label": "false_positive",
+      "reason": "canonical LogXML.finalize (junit finalization); member LogXML.node_reporter is the sibling reporter it calls, matched on nodeid/workernode key shape, not a missed helper"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/559eb62e7117",
+      "label": "false_positive",
+      "reason": "canonical HookRecorder.getcall (single-call lookup); member bestrelpath matched on assert shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/5786cbae635b",
+      "label": "false_positive",
+      "reason": "canonical _is_bool (numpy-aware bool check); member FixtureFunctionMarker.__call__ matched on isinstance guard shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/5a66337f5be5",
+      "label": "false_positive",
+      "reason": "canonical Frame.eval (frame locals evaluation); member SubRequest._format_fixturedef_line matched on locals/dict shape, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/5a750a13f6d2",
       "label": "false_positive",
       "reason": "self-pair artifact: Traceback.recursionindex matched against itself"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/5caa9d241938",
+      "label": "false_positive",
+      "reason": "canonical SafeRepr.repr (exception-safe repr); member resolve_pkg_root_and_module_name matched on assignment-flow shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/5ef7f18a517a",
+      "label": "false_positive",
+      "reason": "canonical setuponly pytest_addoption (option registration); member deserialize_repr_entry matched on if-data-attr dict-building shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/60797e94fde3",
+      "label": "false_positive",
+      "reason": "canonical Pytester.inline_genitems (in-process collection); member LogXML.node_reporter matched on getattr key shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/60ffcd0d1c0b",
+      "label": "false_positive",
+      "reason": "canonical MonkeyPatch.delattr vs member MonkeyPatch.setattr: sibling methods sharing dotted-name resolution, but del vs set are distinct operations both required, not a missed shared helper"
     },
     {
       "scanner": "regions",
@@ -632,9 +1131,39 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/6c0748317476",
+      "label": "false_positive",
+      "reason": "canonical tee_write (pastebin stream tee); member SubRequest._format_fixturedef_line matched on isinstance-guard shape, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/6d69de8b0f0d",
       "label": "false_positive",
       "reason": "member is the sibling _register_setup_method_fixture — deliberate parallel xunit registration with distinct fixture scopes"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/718e6d81341a",
+      "label": "false_positive",
+      "reason": "canonical get_reraise_exceptions (exception policy tuple); members TracebackEntry.ishidden / get_fslocation_from_item / importorskip matched on getattr+early-return shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/71c351dec343",
+      "label": "false_positive",
+      "reason": "canonical ExceptionInfoFormatter._getentrysource (traceback source deindent); members ApproxNumpy._repr_compare / cacheshow / _load_custom_toml / SubRequest._format_fixturedef_line / importorskip matched on generic guard shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/725a8e4abf77",
+      "label": "false_positive",
+      "reason": "canonical Node.warn (warning dispatch); member MonkeyPatch.setattr matched on isinstance+raise TypeError guard shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/72e9b16ca803",
+      "label": "false_positive",
+      "reason": "canonical deprecated_call (public warnings assertion API); six members matched on generic guard/bisect/StringIO shapes, unrelated"
     },
     {
       "scanner": "regions",
@@ -644,9 +1173,69 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/7371ec7dd14b",
+      "label": "false_positive",
+      "reason": "canonical FSHookProxy.__getattr__ (hook caller subset); members deselect_by_mark / pytest_pyfunc_call matched on getattr/matcher shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/755f2e511e22",
+      "label": "false_positive",
+      "reason": "canonical post_mortem (pdb interaction); member LogXML.node_reporter matched on getattr/call shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/7b4ecbd4da30",
+      "label": "false_positive",
+      "reason": "canonical LocalPath.mkdtemp (tempdir creation); member resolve_pkg_root_and_module_name matched on assignment-flow shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/7b99979fdc9b",
+      "label": "false_positive",
+      "reason": "canonical Stat.group (grp gid lookup); member Source.__getitem__ matched on raise-guard shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/7bf2f9b21521",
+      "label": "false_positive",
+      "reason": "canonical SysCaptureBase.start (state machine assert); member LogXML.node_reporter matched on nodeid key-shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/7cbf547068e4",
+      "label": "false_positive",
+      "reason": "canonical Scope.next_lower (scope ordinal stepping); members get_statement_startend2 / SafeRepr.repr_dict / _load_custom_toml / WarningsChecker.__exit__ matched on index/bisect and guard shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/7ce798bea36a",
       "label": "false_positive",
       "reason": "canonical reportinfo; members matched on generic getattr/tuple-return tokens"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/815664eb3b64",
+      "label": "false_positive",
+      "reason": "canonical FixtureRequest.getfixturevalue (cached_result access); member ApproxNumpy._repr_compare matched on the assert-is-not-None shape"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/842b50edb8f8",
+      "label": "false_positive",
+      "reason": "canonical Node.from_parent public constructor indirection; members PrettyPrinter.__init__ validation checks matched on if-x-less-than-0-raise-ValueError shape"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/87a989e9c88c",
+      "label": "false_positive",
+      "reason": "canonical LogXML.pytest_internalerror (junit error reporting); member LoggingPlugin.__init__ matched on option plumbing shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/88acbf1e1f55",
+      "label": "false_positive",
+      "reason": "canonical store_mark (mark registration); member FixtureFunctionMarker.__call__ matched on assert/isinstance validation shape, unrelated"
     },
     {
       "scanner": "regions",
@@ -662,6 +1251,30 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/8bc925f7ee4a",
+      "label": "false_positive",
+      "reason": "canonical get_log_level_for_setting (option/ini fallback loop); member resolve_pkg_root_and_module_name matched on loop/assignment shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/8cf7e69aa943",
+      "label": "false_positive",
+      "reason": "canonical _NodeReporter._add_simple (XML element append); members SubRequest._format_fixturedef_line / bestrelpath / RunResult.__init__ matched on assignment/slice shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/8e9a5e4ea2d3",
+      "label": "false_positive",
+      "reason": "canonical Source.indent (source transformation); members Source.__getitem__ / pytest_pyfunc_call matched on newsource/lines slicing and funcargs dict shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/8ec1af4d09b1",
+      "label": "false_positive",
+      "reason": "canonical IdMaker._idval_from_value_required (id fallback error); member FixtureFunctionMarker.__call__ matched on isinstance+raise shape, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/8f6ae1a391ce",
       "label": "false_positive",
       "reason": "four snap methods in the capture module — deliberate parallel (fd vs sys, text vs binary) capture family"
@@ -674,9 +1287,33 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/92e3252b3f48",
+      "label": "false_positive",
+      "reason": "canonical SubtestReport._from_json (subtest report deserialization); member _load_custom_toml matched on if-None-return shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/931fc35afa9f",
+      "label": "false_positive",
+      "reason": "canonical AssertionRewriter.variable (counter-based placeholder naming); members capture pytest_load_initial_conftests / RunResult.__init__ / _register_setup_method_fixture matched on attribute-assignment shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/95a45457e7cd",
       "label": "false_positive",
       "reason": "canonical resolve_from_str; members are unrelated (toml loading, node reporters)"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/963ac0f1c4e8",
+      "label": "false_positive",
+      "reason": "xunit setup fixture registration family (class/function/module); same shape differing only in scope and name lookup, the corpus's canonical deliberate-parallel family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/965c085ad648",
+      "label": "false_positive",
+      "reason": "canonical explanation_param (%-format placeholder naming); member SafeRepr.repr_dict matched on counter/dict shape, unrelated"
     },
     {
       "scanner": "regions",
@@ -692,9 +1329,99 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/9c9f97711536",
+      "label": "false_positive",
+      "reason": "canonical TestCaseFunction.setup (unittest setup caching); member PytestPluginManager.__init__ matched on attribute-assignment boilerplate, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/9e1fb372f34f",
       "label": "false_positive",
       "reason": "self-pair artifact: call_fixture_func matched against itself"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a0df720312cc",
+      "label": "false_positive",
+      "reason": "canonical LocalPath._fastjoin (path string join); member Source.indent matched on object-construction shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a1d7fa109ade",
+      "label": "false_positive",
+      "reason": "canonical pytest_collect_directory (pkginit detection); member LogXML.node_reporter matched on try/getattr shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a2c5f659c67f",
+      "label": "false_positive",
+      "reason": "canonical LocalPath.parts (ancestor walk); member SysCaptureBase.__init__ matched on getattr/while shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a3fba3e63cb3",
+      "label": "false_positive",
+      "reason": "canonical _get_plugin_specs_as_list (plugin spec parsing); member resolve_pkg_root_and_module_name matched on assignment-flow shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a4358f910ace",
+      "label": "false_positive",
+      "reason": "canonical Module._register_setup_function_fixture (xunit setup_function autouse-fixture registration); member Class._register_setup_method_fixture is the sibling setup_method twin, same xunit idiom, not a missed shared helper"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/a49dff79de1e",
+      "label": "false_positive",
+      "reason": "canonical Config._checkversion; version-check idiom (lazy packaging import + Version compare + raise) shared only in shape, contracts differ (minversion vs module __version__)"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/b7d92d5c1e1b",
+      "label": "false_positive",
+      "reason": "canonical serialize_repr_traceback (report serialization); members Source.indent / LogXML.node_reporter matched on list/dict-building shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/b8aeeb041390",
+      "label": "false_positive",
+      "reason": "canonical wcswidth (unicode width loop); members TracebackEntry.ishidden / LogXML.node_reporter matched on for/getattr shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/bb6b293476c8",
+      "label": "false_positive",
+      "reason": "canonical Package.setup (xunit module setUpModule fixture); members Class._register_setup_method_fixture / UnitTestCase._register_unittest_setup_class_fixture are the sibling xunit setup-family registrations, same idiom, not a missed shared helper"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/bde9c13abb81",
+      "label": "false_positive",
+      "reason": "canonical all_kwargs (mark-expression scanner); member SubRequest._format_fixturedef_line matched on list/dict-building shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c049bc53e9e5",
+      "label": "false_positive",
+      "reason": "canonical PytestDoctestRunner.report_unexpected_exception (doctest exc re-raise); member FixtureFunctionMarker.__call__ matched on isinstance+raise validation shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c0beaa083731",
+      "label": "false_positive",
+      "reason": "canonical ApproxDecimal.__repr__ (tolerance formatting); members ApproxTimedelta.__init__ (sibling approx class) / TerminalReporter.report_collect matched on isinstance-raise and f-string shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c14f5de4d14f",
+      "label": "false_positive",
+      "reason": "canonical Config._warn_or_fail_if_strict (getini/issue_config_time_warning); members are unrelated validation idioms (pprint param checks, approx tolerance, fslocation extraction, importorskip version check, unittest teardown) matched on the conditional-raise shape"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/ca049fe1c75c",
+      "label": "false_positive",
+      "reason": "canonical getfixtureclosure.getfixturedefs (fixture lookup dispatch); members ApproxScalar.tolerance / materialize_with_truncation / resolve_pkg_root_and_module_name matched on if-chain and assignment shapes, unrelated"
     },
     {
       "scanner": "regions",
@@ -704,9 +1431,58 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/cdf033d5cafd",
+      "label": "false_positive",
+      "reason": "canonical _pretty_fixture_path (path relativization); member LoggingPlugin.__init__ matched on option-ini plumbing shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/d04e475cd883",
+      "label": "false_positive",
+      "reason": "canonical hasinit (getattr __init__ vs object.__init__); members _load_custom_toml / deselect_by_mark / importorskip / bestrelpath / _register_setup_method_fixture matched on getattr-key shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/d5f70807c547",
+      "label": "false_positive",
+      "reason": "canonical TerminalReporter.write_line (bytes decode + _tw.line); member FixtureFunctionMarker.__call__ mark validation matched on isinstance+raise tokens"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/df095a6c4ebe",
+      "label": "false_positive",
+      "reason": "canonical MarkMatcher.from_markers (mark grouping); member pytest_pyfunc_call matched on dict/loop shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/dfab0110b285",
+      "label": "true_finding",
+      "reason": "collect hook is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (collect_thread_exception vs collect_unraisable)",
+      "issue_id": "collect-hook-plugin-pair"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/e0804fd26e39",
+      "label": "false_positive",
+      "reason": "canonical Cache.mkdir (path creation helper); members FixtureFunctionMarker.__call__ / MonkeyPatch.setattr matched on isinstance+raise validation shape, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/e1a568b99031",
       "label": "false_positive",
       "reason": "self-pair artifact: _patch_unwrap_mock_aware matched against itself"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/e1eaf3257b26",
+      "label": "false_positive",
+      "reason": "canonical Pytester.inline_runsource (makepyfile + inline_run delegation); members caret computation, bisect lookup, toml config, fixturedef line formatting are unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/e527c34efea6",
+      "label": "false_positive",
+      "reason": "canonical _call_with_optional_argument (co_argcount introspection); member pytest_pyfunc_call matched on funcargs building shape, unrelated"
     },
     {
       "scanner": "regions",
@@ -717,9 +1493,39 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/e8621bde0832",
+      "label": "false_positive",
+      "reason": "canonical fixture (public fixture decorator entry point); member resolve_pkg_root_and_module_name matched on assignment-flow shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/e96a9fd633c0",
+      "label": "false_positive",
+      "reason": "canonical LocalPath.common (common-path prefix); member _truncate_by_char_count matched on for-loop/accumulator shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/e9d6d6192ad3",
+      "label": "false_positive",
+      "reason": "FDCapture/SysCapture snap are the deliberate text/bytes mirror pair in a structured inheritance hierarchy; the binary twins are verbatim but design-parallel, no drift bug"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/ea04637ce2fc",
       "label": "false_positive",
       "reason": "self-pair artifact: Item.__init__ matched against itself"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/ec2e220fded9",
+      "label": "false_positive",
+      "reason": "canonical hasnew (getattr __new__ vs object.__new__); same member set as hasinit twin, matched on getattr-key shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/f3d7bf8e5e92",
+      "label": "false_positive",
+      "reason": "canonical SysCaptureBase.suspend (state machine + sys attr swap); member _report_unserialization_failure matched on setattr/StringIO shapes, unrelated"
     },
     {
       "scanner": "regions",
@@ -735,6 +1541,12 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/f8d9e190afaf",
+      "label": "false_positive",
+      "reason": "canonical IdMaker._get_long_str_strategy (getini validation); member importorskip matched on getattr+raise shape, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/f906c244f1a0",
       "label": "false_positive",
       "reason": "xunit_setup_module_fixture family with unrelated token-coincident members"
@@ -747,29 +1559,9 @@
     },
     {
       "scanner": "regions",
-      "target_id": "region/e9d6d6192ad3",
+      "target_id": "region/fd65f883a0ff",
       "label": "false_positive",
-      "reason": "FDCapture/SysCapture snap are the deliberate text/bytes mirror pair in a structured inheritance hierarchy; the binary twins are verbatim but design-parallel, no drift bug"
-    },
-    {
-      "scanner": "regions",
-      "target_id": "region/963ac0f1c4e8",
-      "label": "false_positive",
-      "reason": "xunit setup fixture registration family (class/function/module); same shape differing only in scope and name lookup, the corpus's canonical deliberate-parallel family"
-    },
-    {
-      "scanner": "regions",
-      "target_id": "region/4d40293005af",
-      "label": "true_finding",
-      "reason": "pytest_configure is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (excepthook vs unraisablehook wiring)",
-      "issue_id": "exception-hook-plugin-pair"
-    },
-    {
-      "scanner": "regions",
-      "target_id": "region/dfab0110b285",
-      "label": "true_finding",
-      "reason": "collect hook is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (collect_thread_exception vs collect_unraisable)",
-      "issue_id": "collect-hook-plugin-pair"
+      "reason": "canonical is_fully_escaped (regex metacharacter scan); members SafeRepr.repr_dict / LogXML.node_reporter / LoggingPlugin.__init__ matched on dict/attr-access shapes, unrelated"
     }
   ]
 }

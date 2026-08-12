@@ -219,11 +219,14 @@ remaining clusters are false positives (intentional API-layer wrappers,
 sync/async dual-interface mirrors, boilerplate dunder families, parallel
 parsers with distinct grammars, and token-coincidence matches where the
 region never actually inline-copies the canonical named helper).
-Corpus totals at the pinned commits: precision 0.039 (16/412), review burden
+Corpus totals at the pinned commits: precision 0.027 (16/594), review burden
 37.1 candidates per confirmed finding, 6.22 candidates per KLOC, runtime
-~0.36s per KLOC, unique-issue ratio 0.62 (10 unique issues per 16 labelled
-findings), evidence per issue 1.6. The 16 labelled true findings collapse to
-10 unique issues:
+~0.32s per KLOC, unique-issue ratio 0.62 (10 unique issues per 16 labelled
+findings), evidence per issue 1.6. Every candidate in the corpus is now
+adjudicated (594/594 labelled — the final 182 low-coverage helper candidates
+were all false positives in the established shape-match families), so the
+precision figure is no longer partial. The 16 labelled true findings collapse
+to 10 unique issues:
 each corroborating twin label shares the issue id of the `duplicates`
 finding it confirms (pytest's two plugin-pair defects, werkzeug's
 `mimetype_params` and `content_md5` copies), so the region twins add channel
@@ -296,8 +299,10 @@ its own single-signal issue):
 python -m benchmarks.evidence_fusion --json C:\Temp\issue_table.json
 ```
 
-At the pinned commits the gap is stark: single-signal issues run at 1.5%
-precision (6 true out of 402), while corroborated issues run at 100%
+At the pinned commits the gap is stark: single-signal issues run at 1.0%
+precision (6 true out of 584 — the denominator grew as the final unlabelled
+candidates, all false positives, entered the bundle set), while corroborated
+issues run at 100%
 (4/4 — two pytest plugin-pair defects each with a duplicates cluster plus two
 region twins, and two werkzeug copies each with a duplicates cluster plus one
 region twin).  Every true corroborated issue spans both scanners.  The

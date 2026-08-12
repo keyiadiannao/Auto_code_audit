@@ -333,6 +333,12 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/126361481321",
+      "label": "false_positive",
+      "reason": "canonical _get_text_stream (deprecated stream helper); member _WindowsConsoleReader.readinto (winconsole family) matched on guard shape, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/29439e4e8dda",
       "label": "false_positive",
       "reason": "canonical Option.get_error_hint vs MissingParameter.format_message: both format error text but are distinct methods with distinct roles; f-string coincidence"
@@ -345,9 +351,27 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/364754fd5191",
+      "label": "false_positive",
+      "reason": "canonical option decorator (param declaration); member _guess_type matched on param-decl handling shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/391ef448f5de",
+      "label": "false_positive",
+      "reason": "canonical get_text_stdin (stream helper); members _WindowsConsoleReader.readinto / _WindowsConsoleWriter.write (winconsole family siblings) / Group.add_command matched on guard shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/39c59b735170",
       "label": "false_positive",
       "reason": "canonical _nullpager pager loop matched against unrelated members (env parsing, console IO); token coincidence"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/478011375862",
+      "label": "false_positive",
+      "reason": "canonical _translate_ch_to_exc (Ctrl+C/D/Z mapping); member CliRunner.__init__ matched on raise-validation shape, unrelated"
     },
     {
       "scanner": "regions",
@@ -357,9 +381,51 @@
     },
     {
       "scanner": "regions",
+      "target_id": "region/6eec1b2954f6",
+      "label": "false_positive",
+      "reason": "canonical get_text_stdout (stream helper); same member set as stdin twin, matched on guard shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/71cc58edb2d7",
+      "label": "false_positive",
+      "reason": "canonical pass_meta_key.decorator.new_func (meta-injecting wrapper); members Bash/Zsh/PowerShell get_completion_args are a per-shell adapter family sharing env-parsing shape, canon unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/82cf11f6caee",
+      "label": "false_positive",
+      "reason": "canonical argument decorator (param declaration); member _guess_type matched on param-decl handling shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/84b6d97b8a05",
+      "label": "false_positive",
+      "reason": "canonical ConsoleStream.write (stream dispatch); member _is_incomplete_option matched on isinstance/early-return shapes, unrelated"
+    },
+    {
+      "scanner": "regions",
       "target_id": "region/9f6f410cefc3",
       "label": "false_positive",
       "reason": "canonical CompletionItem.__init__ vs __init__ boilerplate family"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c1c05c5e466d",
+      "label": "false_positive",
+      "reason": "canonical _patched_pdb_init (pdb stdin/stdout override); member Context.__init__ matched on attribute-assignment boilerplate, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/c818c859e240",
+      "label": "false_positive",
+      "reason": "canonical Group.add_command (command registration); member _WindowsConsoleReader.readinto matched on guard shape, unrelated"
+    },
+    {
+      "scanner": "regions",
+      "target_id": "region/e173e0d9b78f",
+      "label": "false_positive",
+      "reason": "canonical _get_binary_stream (deprecated stream helper); member _WindowsConsoleReader.readinto (winconsole family) matched on guard shape, unrelated"
     },
     {
       "scanner": "regions",
