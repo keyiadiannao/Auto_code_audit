@@ -122,8 +122,11 @@ def _license_path(repo: Path, project: dict[str, Any]) -> str | None:
 def _metrics(report: dict[str, Any]) -> dict[str, Any]:
     scanners = report.get("scanners", {})
     contracts = scanners.get("contracts", {})
+    deadcode = scanners.get("deadcode", {})
+    totals = deadcode.get("totals", {})
     return {
-        "dead": len(scanners.get("deadcode", {}).get("candidates", [])),
+        "dead": totals.get("DEAD", 0),
+        "public_api_candidates": totals.get("PUBLIC_API_CANDIDATE", 0),
         "duplicate_clusters": len(scanners.get("duplicates", {}).get("clusters", [])),
         "fork_pairs": len(scanners.get("forks", {}).get("pairs", [])),
         "small_fork_pairs": len(
@@ -166,6 +169,8 @@ def _run_project(
     ]
     if project.get("all_py", True):
         command.append("--all-py")
+    if project.get("public_api", False):
+        command.append("--public-api")
     started = time.perf_counter()
     try:
         with log_path.open("w", encoding="utf-8", newline="\n") as handle:
@@ -236,6 +241,8 @@ def run_benchmarks(
             ]
             if project.get("all_py", True):
                 command.append("--all-py")
+            if project.get("public_api", False):
+                command.append("--public-api")
             results.append({"id": project["id"], "status": "planned", "command": command})
             continue
         repo = _checkout(project, workspace, refresh=refresh)

@@ -94,6 +94,8 @@ Useful options:
   research TeX style channel (default: `research`)
 - `--all-py` — scan every Python file recursively; use this for flat or `src/`
   package layouts instead of the configured `lib/experiments` subdirectories
+- `--public-api` — classify importable public-package modules with no internal
+  references as `PUBLIC_API_CANDIDATE` instead of `DEAD`; review them manually
 - `--duplicate-threshold` / `--duplicate-min-chars` — duplicate sensitivity
 - `--ignore ignore.json` — approved suppression registry (Layer-2 output)
 - `--cli-smoke` — run `--help` on every scanner entrypoint first; abort the

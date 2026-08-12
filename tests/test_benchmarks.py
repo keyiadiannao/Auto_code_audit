@@ -61,7 +61,10 @@ def test_benchmark_metrics_summarize_scanner_payloads() -> None:
     report = {
         "elapsed_seconds": 1.25,
         "scanners": {
-            "deadcode": {"candidates": [{"path": "dead.py"}]},
+            "deadcode": {
+                "candidates": [{"path": "dead.py"}],
+                "totals": {"DEAD": 1, "PUBLIC_API_CANDIDATE": 2},
+            },
             "duplicates": {"clusters": [{"id": "a"}]},
             "forks": {
                 "pairs": [{"left": {}, "right": {}}],
@@ -74,6 +77,7 @@ def test_benchmark_metrics_summarize_scanner_payloads() -> None:
     }
     assert _metrics(report) == {
         "dead": 1,
+        "public_api_candidates": 2,
         "duplicate_clusters": 1,
         "fork_pairs": 1,
         "small_fork_pairs": 1,

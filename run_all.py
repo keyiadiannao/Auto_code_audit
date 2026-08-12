@@ -438,6 +438,11 @@ def main(argv: list[str] | None = None) -> int:
         help="scan all .py files under --package recursively, ignoring "
              "PY_SUBDIRS (use for flat-layout projects without lib/experiments/etc.)",
     )
+    ap.add_argument(
+        "--public-api",
+        action="store_true",
+        help="classify importable public-package modules as review candidates, not dead",
+    )
     ap.add_argument("--no-doc-channel", action="store_true")
     ap.add_argument("--duplicate-threshold", type=float, default=None)
     ap.add_argument("--duplicate-min-chars", type=int, default=None)
@@ -522,6 +527,9 @@ def main(argv: list[str] | None = None) -> int:
                 for name, (module, extra) in scanner_specs.items():
                     if name != "style":  # style is TeX-based, not Python
                         scanner_specs[name] = (module, extra + ["--subdirs", "."])
+            if args.public_api:
+                module, extra = scanner_specs["deadcode"]
+                scanner_specs["deadcode"] = (module, extra + ["--public-api"])
             selected = set(PROFILE_SCANNERS[args.profile])
             payloads = {}
             for name in _SCANNER_NAMES:
@@ -558,6 +566,7 @@ def main(argv: list[str] | None = None) -> int:
         "configuration": {
             "document_channel": not args.no_doc_channel,
             "profile": args.profile,
+            "public_api": bool(args.public_api),
             "duplicate_threshold": duplicate_threshold,
             "duplicate_min_chars": duplicate_min_chars,
             "ignore_file": str(args.ignore.resolve()) if args.ignore else None,
@@ -592,6 +601,9 @@ def main(argv: list[str] | None = None) -> int:
     dead_count = sum(
         item["status"] == "DEAD" for item in payloads["deadcode"]["candidates"]
     )
+    public_api_count = len(
+        payloads["deadcode"].get("public_api_candidates", [])
+    )
     duplicate_count = len(payloads["duplicates"]["clusters"])
     capability_count = len(payloads["capabilities"].get("overlap", []))
     fork_count = len(payloads["forks"].get("pairs", []))
@@ -603,6 +615,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(
         f"SELF_AUDIT_RUN_ALL package={args.package} dead={dead_count} "
+        f"public_api={public_api_count} "
         f"dup_clusters={duplicate_count} cap_overlap={capability_count} "
         f"forks={fork_count} "
         f"hardcoded={hardcoded_count} "

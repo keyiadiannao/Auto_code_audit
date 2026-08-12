@@ -1823,6 +1823,35 @@ def test_run_all_all_py_scans_flat_package_layout(
     assert any(item["path"] == "root_module.py" for item in modules)
 
 
+def test_deadcode_public_api_modules_are_review_candidates(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    _write(mini_repo / "pkg" / "__init__.py", "")
+    _write(mini_repo / "pkg" / "public_module.py", "def api():\n    return 1\n")
+    output = tmp_path / "deadcode.json"
+    assert (
+        scan_deadcode.main(
+            [
+                "--root",
+                str(mini_repo),
+                "--package",
+                "pkg",
+                "--subdirs",
+                ".",
+                "--public-api",
+                "--no-doc-channel",
+                "--json",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    row = next(item for item in payload["modules"] if item["path"] == "public_module.py")
+    assert row["status"] == "PUBLIC_API_CANDIDATE"
+    assert payload["public_api_candidates"] == [row]
+
+
 def test_stale_ignore_entries_flags_gone_targets(
     mini_repo: Path, tmp_path: Path
 ) -> None:

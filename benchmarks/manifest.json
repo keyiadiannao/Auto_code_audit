@@ -8,7 +8,8 @@
       "commit": "8068356288978c4f54661ae6f95afe0e0831885e",
       "package": "src/requests",
       "license": "Apache-2.0",
-      "all_py": true
+      "all_py": true,
+      "public_api": true
     },
     {
       "id": "click",
@@ -16,7 +17,8 @@
       "commit": "9c4dfdaebe0e6b2aabc566eb81f6f10eb5cd6ea1",
       "package": "src/click",
       "license": "BSD-3-Clause",
-      "all_py": true
+      "all_py": true,
+      "public_api": true
     },
     {
       "id": "httpx",
@@ -24,7 +26,8 @@
       "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
       "package": "httpx",
       "license": "BSD-3-Clause",
-      "all_py": true
+      "all_py": true,
+      "public_api": true
     },
     {
       "id": "pytest",
@@ -32,7 +35,8 @@
       "commit": "0d6fbdeffa57c796123f62f81f7dd370d9b7ecdc",
       "package": "src/_pytest",
       "license": "MIT",
-      "all_py": true
+      "all_py": true,
+      "public_api": false
     },
     {
       "id": "werkzeug",
@@ -40,7 +44,8 @@
       "commit": "218a653fd952b0a7fde05657dff00c40be5b8291",
       "package": "src/werkzeug",
       "license": "BSD-3-Clause",
-      "all_py": true
+      "all_py": true,
+      "public_api": true
     },
     {
       "id": "starlette",
@@ -48,7 +53,8 @@
       "commit": "398e5a3430eb1ddd33e1d48d766efe41426e231f",
       "package": "starlette",
       "license": "BSD-3-Clause",
-      "all_py": true
+      "all_py": true,
+      "public_api": true
     }
   ]
 }

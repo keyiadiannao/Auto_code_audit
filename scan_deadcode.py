@@ -312,6 +312,16 @@ def _references(
     return sorted(set(hits))
 
 
+def _is_public_api_module(path: Path, package_root: Path) -> bool:
+    """Treat importable public-package modules as review candidates, not dead."""
+    relative = path.relative_to(package_root)
+    if not (package_root / "__init__.py").is_file():
+        return False
+    if package_root.name.startswith("_") or path.name == "__init__.py":
+        return False
+    return all(not part.startswith("_") for part in relative.parts)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
@@ -329,6 +339,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--ignore", type=Path, default=None)
     ap.add_argument("--no-doc-channel", action="store_true")
+    ap.add_argument(
+        "--public-api",
+        action="store_true",
+        help="classify importable public-package modules as review candidates, not dead",
+    )
     args = ap.parse_args(argv)
 
     repo = args.root.resolve()
@@ -496,6 +511,8 @@ def main(argv: list[str] | None = None) -> int:
             status = "ENTRYPOINT"
         elif doc_refs:
             status = "DOC-ONLY"
+        elif args.public_api and _is_public_api_module(path, pkg):
+            status = "PUBLIC_API_CANDIDATE"
         else:
             status = "DEAD"
         report.append(
@@ -507,7 +524,8 @@ def main(argv: list[str] | None = None) -> int:
                 "dynamic_edges": dyn_edges,
                 "dynamic_refs": dynamic_refs[:12],
                 "doc_refs": doc_refs[:12],
-                "has_main_guard": entrypoints[path],
+            "has_main_guard": entrypoints[path],
+            "public_api_candidate": status == "PUBLIC_API_CANDIDATE",
             }
         )
 
@@ -531,7 +549,11 @@ def main(argv: list[str] | None = None) -> int:
         "candidates": [
             item
             for item in report
-            if item["status"] in {"DEAD", "DOC-ONLY", "PARSE-ERROR"}
+            if item["status"]
+            in {"DEAD", "DOC-ONLY", "PARSE-ERROR", "PUBLIC_API_CANDIDATE"}
+        ],
+        "public_api_candidates": [
+            item for item in report if item["status"] == "PUBLIC_API_CANDIDATE"
         ],
         "entrypoints": [item for item in report if item["status"] == "ENTRYPOINT"],
         "parse_failures": parse_failures,
@@ -546,7 +568,9 @@ def main(argv: list[str] | None = None) -> int:
         f"USED={totals.get('USED', 0)} ENTRYPOINT={totals.get('ENTRYPOINT', 0)} "
         f"PACKAGE={totals.get('PACKAGE', 0)} "
         f"PARSE_ERROR={totals.get('PARSE-ERROR', 0)} "
-        f"DOC_ONLY={totals.get('DOC-ONLY', 0)} DEAD={totals.get('DEAD', 0)} "
+        f"DOC_ONLY={totals.get('DOC-ONLY', 0)} "
+        f"PUBLIC_API={totals.get('PUBLIC_API_CANDIDATE', 0)} "
+        f"DEAD={totals.get('DEAD', 0)} "
         f"TEST={totals.get('TEST', 0)} DYNAMIC_EDGES={len(all_dynamic_edges)} "
         f"skipped={len(skipped)}"
     )
