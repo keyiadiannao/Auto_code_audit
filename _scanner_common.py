@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import ast
 import copy
+import hashlib
 import json
 from pathlib import Path
+from typing import Iterator
 
 # ---------------------------------------------------------------------------
 # Directory / exclusion constants
@@ -201,3 +203,42 @@ def extract_imports(path: Path, package_root: Path) -> set[str]:
                 if alias.name != "*":
                     imports.add(".".join(part for part in (base, alias.name) if part))
     return imports
+
+
+# ---------------------------------------------------------------------------
+# Function walker  (was duplicated verbatim in scan_duplicates and scan_forks)
+# ---------------------------------------------------------------------------
+
+def iter_functions(
+    node: ast.AST,
+    parents: tuple[str, ...] = (),
+) -> Iterator[tuple[ast.FunctionDef | ast.AsyncFunctionDef, tuple[str, ...]]]:
+    """Yield ``(function_node, parent_qualname_parts)`` for every nested def.
+
+    Walks the AST depth-first, descending into classes and nested functions.
+    *parents* accumulates the enclosing class/function names so the caller can
+    build a qualified name like ``ClassName.method_name.inner``.
+    """
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            yield child, parents
+            yield from iter_functions(child, parents + (child.name,))
+        elif isinstance(child, ast.ClassDef):
+            yield from iter_functions(child, parents + (child.name,))
+        else:
+            yield from iter_functions(child, parents)
+
+
+# ---------------------------------------------------------------------------
+# Short identifier hash  (was duplicated in scan_hardcoded, scan_style,
+#                         scan_duplicates with identical [:12] truncation)
+# ---------------------------------------------------------------------------
+
+def short_hash(*parts: str) -> str:
+    """Return a 12-char hex digest from the concatenation of *parts*.
+
+    Used for stable candidate/cluster identifiers that only need to avoid
+    collisions within a single scan report, not cryptographic strength.
+    """
+    raw = "\n".join(parts).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:12]

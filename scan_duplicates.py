@@ -24,7 +24,9 @@ from _scanner_common import (
     EXCLUDE_PARTS,
     PY_SUBDIRS,
     NormalizeAST as _Normalize,
+    iter_functions as _iter_functions,
     load_ignore,
+    short_hash as _short_hash,
     without_docstring as _without_docstring,
     write_json as _write_json,
 )
@@ -70,18 +72,8 @@ def extract_functions(path: Path, min_chars: int) -> list[FunctionRecord]:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     tree = ast.parse(text)
 
-    def iter_functions(node: ast.AST, parents: tuple[str, ...] = ()):
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                yield child, parents
-                yield from iter_functions(child, parents + (child.name,))
-            elif isinstance(child, ast.ClassDef):
-                yield from iter_functions(child, parents + (child.name,))
-            else:
-                yield from iter_functions(child, parents)
-
     records: list[FunctionRecord] = []
-    for node, parents in iter_functions(tree):
+    for node, parents in _iter_functions(tree):
         cloned = _without_docstring(node)
         normalized_node = _Normalize().visit(cloned)
         ast.fix_missing_locations(normalized_node)
@@ -150,8 +142,7 @@ def _candidate_pairs(records: list[FunctionRecord]) -> set[tuple[int, int]]:
 
 
 def _cluster_id(members: list[FunctionRecord]) -> str:
-    key = "\n".join(sorted(member.key for member in members))
-    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+    return _short_hash(*sorted(member.key for member in members))
 
 
 def main(argv: list[str] | None = None) -> int:

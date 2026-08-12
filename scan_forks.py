@@ -49,6 +49,7 @@ from _scanner_common import (
     PY_SUBDIRS,
     NormalizeAST as _Normalize,
     extract_imports,
+    iter_functions as _iter_functions,
     load_ignore,
     matches_module as _matches_module,
     module_name as _module_name,
@@ -91,18 +92,8 @@ def extract_callables(path: Path) -> list[CallableRecord]:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     tree = ast.parse(text)
 
-    def iter_functions(node: ast.AST, parents: tuple[str, ...] = ()):
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                yield child, parents
-                yield from iter_functions(child, parents + (child.name,))
-            elif isinstance(child, ast.ClassDef):
-                yield from iter_functions(child, parents + (child.name,))
-            else:
-                yield from iter_functions(child, parents)
-
     records: list[CallableRecord] = []
-    for node, parents in iter_functions(tree):
+    for node, parents in _iter_functions(tree):
         cloned = _without_docstring(node)
         normalized_node = _Normalize().visit(cloned)
         ast.fix_missing_locations(normalized_node)

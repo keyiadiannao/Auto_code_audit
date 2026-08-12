@@ -29,13 +29,12 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import hashlib
 import re
 import sys
 from pathlib import Path
 
 import _audit_config
-from _scanner_common import load_ignore, write_json as _write_json
+from _scanner_common import load_ignore, short_hash as _short_hash, write_json as _write_json
 
 EXCESS_VOCAB = [
     "additionally",
@@ -241,8 +240,7 @@ def _mean_std(values: list[float]) -> tuple[float, float]:
 
 
 def _candidate_id(metric: str, path: str, text: str) -> str:
-    raw = f"{metric}\n{path}\n{text}".encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()[:12]
+    return _short_hash(metric, path, text)
 
 
 def analyze_prose(

@@ -41,36 +41,31 @@ VERSION_MODULES = (
 )
 
 
-def smoke(extra_modules: tuple[str, ...] = ()) -> list[tuple[str, int]]:
-    """Run ``--help`` on each module; return [(module, rc)] for failures."""
-    failures: list[tuple[str, int]] = []
-    for name in SCANNERS + extra_modules:
-        module = importlib.import_module(name)
-        try:
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                rc = module.main(["--help"])
-        except SystemExit as exc:
-            rc = exc.code
-        if rc != 0:
-            failures.append((name, rc))
-    return failures
-
-
-def version_smoke(
-    modules: tuple[str, ...] = VERSION_MODULES,
-) -> list[tuple[str, int]]:
-    """Run ``--version`` on each module; return [(module, rc)] for failures."""
+def _flag_smoke(modules: tuple[str, ...], flag: str) -> list[tuple[str, int]]:
+    """Run *flag* on each module; return [(module, rc)] for failures."""
     failures: list[tuple[str, int]] = []
     for name in modules:
         module = importlib.import_module(name)
         try:
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                rc = module.main(["--version"])
+                rc = module.main([flag])
         except SystemExit as exc:
             rc = exc.code
         if rc != 0:
             failures.append((name, rc))
     return failures
+
+
+def smoke(extra_modules: tuple[str, ...] = ()) -> list[tuple[str, int]]:
+    """Run ``--help`` on each scanner; return [(module, rc)] for failures."""
+    return _flag_smoke(SCANNERS + extra_modules, "--help")
+
+
+def version_smoke(
+    modules: tuple[str, ...] = VERSION_MODULES,
+) -> list[tuple[str, int]]:
+    """Run ``--version`` on each version-capable module; return failures."""
+    return _flag_smoke(modules, "--version")
 
 
 def main(argv: list[str] | None = None) -> int:

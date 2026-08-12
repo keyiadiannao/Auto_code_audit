@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import hashlib
 import json
 import re
 import sys
 from pathlib import Path
 
 import _audit_config
-from _scanner_common import load_ignore, write_json as _write_json
+from _scanner_common import load_ignore, short_hash as _short_hash, write_json as _write_json
 
 # Pattern list: tune per project. `exclude_paths` ships empty — canonical
 # implementations that legitimately own the pattern belong there (or in
@@ -59,8 +58,7 @@ DEFAULT_EXCLUDE_PARTS = {"frozen_source", "tests", "self-audit", "__pycache__"}
 
 
 def _candidate_id(pattern: str, path: str, line: int, code: str) -> str:
-    raw = f"{pattern}\n{path}\n{line}\n{code}".encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()[:12]
+    return _short_hash(pattern, path, str(line), code)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -244,6 +244,5 @@ def as_string_list(value, default):
 
 def as_string_set(value, default):
     """Coerce a config value to a set[str] or fall back to ``default``."""
-    if isinstance(value, list) and all(isinstance(item, str) for item in value):
-        return set(value)
-    return default
+    result = as_string_list(value, None)
+    return set(result) if result is not None else default
