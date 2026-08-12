@@ -188,9 +188,10 @@ packages: dead-`public`-`API` candidates, forwarding wrappers, unreferenced
 public functions, fork pairs that are intentional convenience wrappers,
 non-security digest hashes, every `duplicates` cluster emitted at the pinned
 commits, and the first region batch (all 21 shared/short clusters plus the 50
-highest-coverage `helper_not_reused` clusters). 407 of 591 candidates carry
-labels (the 184 unlabelled remainder are lower-coverage `regions` helper
-clusters awaiting a later batch). Twelve clusters are `true_finding` — ten
+highest-coverage `helper_not_reused` clusters). 407 of 602 candidates carry
+labels (the 195 unlabelled remainder are lower-coverage `regions` helper
+clusters and the unlabelled `twin_match` clusters awaiting a later batch).
+Twelve clusters are `true_finding` — ten
 from `duplicates`: near-verbatim copies inside the pytest thread/unraisable
 plugin pair, werkzeug's Request/Response deprecation wrappers
 (`content_md5`, `pragma`), `is_json`, and the `mimetype_params` copied from
@@ -204,15 +205,16 @@ sync/async dual-interface mirrors, boilerplate dunder families, parallel
 parsers with distinct grammars, and token-coincidence matches where the
 region never actually inline-copies the canonical named helper).
 Corpus totals at the pinned commits: precision 0.029 (12/407), review burden
-49.2 candidates per confirmed finding, 6.2 candidates per KLOC, runtime 0.31s
-per KLOC. A label file whose `target_id` matches no candidate in the pinned
-commit is reported as `unmatched_labels` (stale scope), so label drift is
-visible rather than silent.
+50.2 candidates per confirmed finding, 6.31 candidates per KLOC, runtime
+0.299s per KLOC. A label file whose `target_id` matches no candidate in the
+pinned commit is reported as `unmatched_labels` (stale scope), so label drift
+is visible rather than silent.
 
 The regions scanner adds ~1.8 candidates per KLOC on the six pinned repos
-(170 clusters; helper-not-reused matches dominate at 149, shared-capability
-12, short-block 9); once regions entered the profile the review burden rose
-from 42.1, and the helper-FP filters below brought it back to 49.2.
+(181 clusters; helper-not-reused matches dominate at 149, shared-capability
+12, short-block 9, function-twin 11); once regions entered the profile the
+review burden rose from 42.1, and the helper-FP filters below brought it back
+to 49.2, with the twin channel now adding the 11 unlabelled clusters to 50.2.
 First-batch adjudication of that cohort found 2
 `true_finding` clusters out of 71 labelled: the pytest thread/unraisable
 plugin pair duplicates both its collect hook and its configure wiring (the
@@ -254,11 +256,13 @@ python benchmarks\run_mutation.py
 Recall is exact target matching, not count matching: a channel that fires on
 the wrong target (or reports the right count for unrelated reasons) is a
 miss. The v2 corpus covers all seven code scanners and now also injects a
-`hardcoded` mutant (a hand-written SHA-256 hexdigest) and three region
+`hardcoded` mutant (a hand-written SHA-256 hexdigest) and four region
 mutants (a checkpoint block in the `shared` channel, an inline validation
-re-implementing a lib helper in `helper_not_reused`, and asymmetric
-`S00`/`S01`/`S10`/`S11` table lookups in `short_risky`). Current corpus: 24
-injected targets, 24 matched, recall 1.000; the runner exits nonzero when
+re-implementing a lib helper in `helper_not_reused`, asymmetric
+`S00`/`S01`/`S10`/`S11` table lookups in `short_risky`, and a gauge-style
+provider builder duplicated between lib and experiments in the
+function-twin channel). Current corpus: 25 injected targets, 25 matched,
+recall 1.000; the runner exits nonzero when
 any channel misses expected detections, so the regression gate covers
 scanner recall as well as precision on the corpus.
 
@@ -270,7 +274,7 @@ scanner recall as well as precision on the corpus.
 | `scan_duplicates.py` | structurally similar function component | symmetric experiment arms, intentionally separate intervention boundaries |
 | `scan_forks.py` | cross-file callables sharing a large common skeleton with diverged bodies (>= 40 lines, >= 75% token similarity) | deliberate specialization forks with distinct contracts, same-file symmetric helpers |
 | `scan_contracts.py` | modules used as libraries, forwarding wrappers, repeated contract-sensitive names, unreferenced top-level functions, env-handoff and load-strictness violations | a valuable adapter, dynamic entrypoint, or intentionally independent audit implementation |
-| `scan_regions.py` | repeated capability blocks: inline copies of an existing named helper (`helper_not_reused`), shared-capability blocks across files, and short high-semantic-density blocks (asymmetric indexing, contract kwargs) | parallel branches with genuinely distinct contracts, single-occurrence boilerplate |
+| `scan_regions.py` | repeated capability blocks: inline copies of an existing named helper (`helper_not_reused`), shared-capability blocks across files, short high-semantic-density blocks (asymmetric indexing, contract kwargs), and near-identical whole functions carrying API calls (`twin_match`) | parallel branches with genuinely distinct contracts, single-occurrence boilerplate |
 | `scan_hardcoded.py` | syntax known to drift from shared behavior | a distinct hash contract or an intentional frozen-forward implementation |
 | `scan_capabilities.py` | script-local reimplementations of library functions | thin role-specific wrappers with real contracts |
 | `scan_style.py` | AI-typical writing signals in TeX prose (semicolon chains, template openers, em-dash rate, burstiness, excess vocabulary, bare `\pm`) | technical enumeration, section-map lists, statistics-context "robust/significant" |
@@ -286,11 +290,15 @@ Highlights worth knowing before you interpret a report:
   `generation_path_without_env`, `cli_without_bootstrap`, and
   `defensive_param_loosening`.
 - **`scan_regions.py`** extracts every capability block in the package and
-  emits three cluster kinds: `helper_not_reused` (an inline copy of an
+  emits four cluster kinds: `helper_not_reused` (an inline copy of an
   existing named function — carries the `canonical_symbol` and per-member
   coverage), `shared_capability` (repeated blocks across files or functions),
-  and short high-semantic-density blocks (`short_block_cluster: true`, e.g.
-  asymmetric `S00[a, a]`-style table lookups too short for region matching).
+  short high-semantic-density blocks (`short_block_cluster: true`, e.g.
+  asymmetric `S00[a, a]`-style table lookups too short for region matching),
+  and function twins (`twin_match: true`): near-identical whole functions
+  whose bodies carry attribute API calls — invisible to the other channels,
+  because the `helper` channel only accepts API-free blocks and fully
+  covered bodies are excluded from the canonical function index.
 - **`scan_style.py`** strips TeX to prose span-preservingly, so reported line
   numbers match the source exactly; it scans `--tex-dir` (default `docs`)
   recursively, skipping archive/frozen/legacy directories.

@@ -223,6 +223,19 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
                         f"({member['nstatements']} stmts, ext={member['extractability']}, "
                         f"coverage={member['coverage']:.3f}){referenced}"
                     )
+            elif cluster.get("twin_match"):
+                lines.append(
+                    f"{cluster['size']} functions across {cluster['file_count']} files "
+                    f"(edge similarity {cluster['min_edge_sim']:.3f}-{cluster['max_sim']:.3f}); "
+                    "near-identical API-ful bodies"
+                )
+                lines.append("")
+                for member in cluster["members"]:
+                    lines.append(
+                        f"- `{member['path']}:{member['qualname']}:"
+                        f"{member['start_line']}` "
+                        f"({member['nstatements']} stmts, coverage={member['coverage']:.3f})"
+                    )
             else:
                 hints = ", ".join(
                     f"`{hint}`" for hint in cluster.get("capability_hints", [])

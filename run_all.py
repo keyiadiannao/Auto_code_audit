@@ -213,8 +213,12 @@ def _candidate_signatures(
                 if item.get("canonical_symbol")
                 else ""
             )
-            + f" ({len(item.get('members', []))} regions, "
-            f"hints: {', '.join(item.get('capability_hints', [])[:3]) or '-'})",
+            + (
+                f" ({len(item.get('members', []))} functions, "
+                if item.get("twin_match")
+                else f" ({len(item.get('members', []))} regions, "
+            )
+            + f"hints: {', '.join(item.get('capability_hints', [])[:3]) or '-'})",
             item,
         )
         for item in regions.get("clusters", [])

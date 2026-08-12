@@ -25,6 +25,7 @@
     { "scanner": "hardcoded", "target_id": "hard/manual_sha256/experiments/hash_use.py:4", "defect": "manual SHA-256 hashing" },
     { "scanner": "regions", "target_id": "region/262cdee403c9", "defect": "checkpoint restore block repeated in lib and experiments (shared channel)" },
     { "scanner": "regions", "target_id": "region/739c5a5d97f7", "defect": "inline device/dtype validation re-implements lib helper check (helper_not_reused)" },
-    { "scanner": "regions", "target_id": "region/5387ebc329d1", "defect": "S00/S01/S10/S11 asymmetric table lookups in two parents (short_risky)" }
+    { "scanner": "regions", "target_id": "region/5387ebc329d1", "defect": "S00/S01/S10/S11 asymmetric table lookups in two parents (short_risky)" },
+    { "scanner": "regions", "target_id": "region/f348a6fa840b", "defect": "gauge provider builder duplicated across lib and experiments (function-twin channel)" }
   ]
 }

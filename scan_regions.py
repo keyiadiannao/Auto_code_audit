@@ -19,6 +19,15 @@ Three extraction channels feed different clusterings:
 - ``short_risky`` (1-4 statements, semantic-risk density): blocks whose
   raw AST shows asymmetric indexing, contract keyword args, or repeated
   non-trivial constants are clustered by their subscript-pattern signature.
+- ``twin`` (named functions, coverage >= ``--twin-threshold``): whole
+  function bodies are matched against each other to find near-identical
+  named functions that carry attribute API calls.  These are invisible to
+  the ``helper`` channel (which only accepts API-free blocks) and to region
+  clustering (fully covered bodies are excluded from the canonical
+  function index); a twin pair such as two provider builders with
+  different contracts is exactly the duplication that drifts silently.
+  Same-file pairs are deliberate mirrors visible in one place, so only
+  cross-file twins or larger twin families are reported.
 
 It deliberately does not decide whether two regions express the same
 capability; adjudication does.  The scanner only claims: "these regions look
@@ -35,7 +44,7 @@ import hashlib
 import re
 import sys
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -104,6 +113,16 @@ class FunctionRecord:
     start_line: int
     nstatements: int
     tokens: tuple[str, ...]
+    #: True when the whole function body was extracted as a region (the
+    #: canonical index excludes these to avoid double counting, but the
+    #: function-twin channel still compares them: an API-ful twin builder
+    #: whose body is a region never matched any canonical otherwise).
+    covered: bool = False
+    #: True when the body contains an attribute call (``model.load``,
+    #: ``torch.stack``).  The twin channel only matches API-ful functions;
+    #: API-free twins (pure arithmetic, stdlib name calls) are simple
+    #: enough to compare by eye and stay out of the report.
+    api_calls: bool = False
 
 
 class _UnionFind:
@@ -623,6 +642,9 @@ def extract_regions(path: Path) -> tuple[list[RegionRecord], list[FunctionRecord
                         start_line=node.lineno,
                         nstatements=nstmts,
                         tokens=tokens,
+                        api_calls=any(
+                            _stmt_has_api_call(stmt) for stmt in body
+                        ),
                     )
                 )
     covered = {
@@ -630,7 +652,7 @@ def extract_regions(path: Path) -> tuple[list[RegionRecord], list[FunctionRecord
         for record in records
         if body_spans.get(record.parent) == (record.start_line, record.end_line)
     }
-    functions = [fn for fn in function_candidates if fn.qualname not in covered]
+    functions = [replace(fn, covered=fn.qualname in covered) for fn in function_candidates]
     return records, functions
 
 
@@ -814,6 +836,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--subdirs", nargs="*", default=None)
     ap.add_argument("--threshold", type=float, default=None)
     ap.add_argument("--helper-reuse-threshold", type=float, default=None)
+    ap.add_argument("--twin-threshold", type=float, default=None)
     ap.add_argument("--json", type=Path, default=None)
     ap.add_argument("--ignore", type=Path, default=None)
     args = ap.parse_args(argv)
@@ -836,6 +859,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     if not 0.0 <= helper_reuse_threshold <= 1.0:
         print("error: --helper-reuse-threshold must be in [0, 1]", file=sys.stderr)
+        return 2
+    twin_threshold = _audit_config.pick(
+        args.twin_threshold, region_cfg, "twin_threshold", 0.85
+    )
+    if not 0.0 <= twin_threshold <= 1.0:
+        print("error: --twin-threshold must be in [0, 1]", file=sys.stderr)
         return 2
 
     records: list[RegionRecord] = []
@@ -890,6 +919,8 @@ def main(argv: list[str] | None = None) -> int:
                     start_line=item.start_line,
                     nstatements=item.nstatements,
                     tokens=item.tokens,
+                    covered=item.covered,
+                    api_calls=item.api_calls,
                 )
                 for item in indexed
             )
@@ -956,9 +987,11 @@ def main(argv: list[str] | None = None) -> int:
     helper_reports: list[dict[str, Any]] = []
     helper_matches: list[tuple[int, int, float, bool]] = []
     helper_indices = [i for i, record in enumerate(records) if "helper" in record.channel]
+    canonical_indices = [fi for fi, fn in enumerate(functions) if not fn.covered]
     for qi in helper_indices:
         region = records[qi]
-        for fi, fn in enumerate(functions):
+        for fi in canonical_indices:
+            fn = functions[fi]
             if fn.path == region.path and (
                 fn.qualname == region.parent
                 or region.parent.startswith(fn.qualname + ".")
@@ -1167,6 +1200,145 @@ def main(argv: list[str] | None = None) -> int:
         if short_block_cluster:
             report["short_block_cluster"] = True
         reports.append(report)
+
+    # Function-twin channel: near-identical named functions whose bodies
+    # carry attribute API calls.  These are invisible to the helper channel
+    # (API-free blocks only) and to region clustering (covered bodies are
+    # excluded from the canonical index); a twin pair such as two provider
+    # builders with different contracts is exactly the duplication that
+    # drifts silently (the gauge_interventions / gauge_fixed provider
+    # families in a real repo).  Similarity is matched tokens over the
+    # longer body (symmetric): containment -- one body merely containing the
+    # other's shape -- scores low, so chains of generic short wrappers do
+    # not merge into one mega-cluster.  Same-file pairs are deliberate
+    # mirrors visible in one place; only cross-file twins or larger twin
+    # families are emitted.
+    twin_uf = _UnionFind(len(functions))
+    twin_edges: dict[tuple[int, int], float] = {}
+    twin_buckets: dict[int, list[int]] = defaultdict(list)
+    twin_counts: dict[int, dict[str, int]] = {}
+    for fi, fn in enumerate(functions):
+        if not fn.api_calls or fn.qualname.endswith("__init__"):
+            continue
+        twin_buckets[fn.nstatements // 8].append(fi)
+        twin_counts[fi] = Counter(fn.tokens)
+    for twin_bucket in sorted(twin_buckets):
+        candidates: list[int] = []
+        for offset in (twin_bucket - 1, twin_bucket, twin_bucket + 1):
+            candidates.extend(twin_buckets.get(offset, []))
+        unique = sorted(set(candidates))
+        for pos, left in enumerate(unique):
+            fa = functions[left]
+            for right in unique[pos + 1 :]:
+                fb = functions[right]
+                if fa.path == fb.path and (
+                    fa.qualname == fb.qualname
+                    or fa.qualname.startswith(fb.qualname + ".")
+                    or fb.qualname.startswith(fa.qualname + ".")
+                ):
+                    continue
+                divisor = max(len(fa.tokens), len(fb.tokens))
+                if min(len(fa.tokens), len(fb.tokens)) / divisor < twin_threshold:
+                    continue
+                # Sound prefilter: matched blocks sum is bounded by the token
+                # multiset intersection, so a pair whose intersection is below
+                # the threshold can never reach it.  SequenceMatcher is the
+                # dominant cost on normalized (highly repetitive) code, so this
+                # gate prunes the pairwise explosion before any matcher runs.
+                counts_a, counts_b = twin_counts[left], twin_counts[right]
+                smaller, larger = (
+                    (counts_a, counts_b)
+                    if len(counts_a) <= len(counts_b)
+                    else (counts_b, counts_a)
+                )
+                intersection = sum(
+                    min(count, larger.get(token, 0))
+                    for token, count in smaller.items()
+                )
+                if intersection / divisor < twin_threshold:
+                    continue
+                coverage = _coverage(fa.tokens, fb.tokens, divisor)
+                if coverage >= twin_threshold:
+                    twin_uf.union(left, right)
+                    twin_edges[(left, right)] = coverage
+    twin_components: dict[int, list[int]] = defaultdict(list)
+    for fi in range(len(functions)):
+        twin_components[twin_uf.find(fi)].append(fi)
+    for member_indices in twin_components.values():
+        if len(member_indices) < 2:
+            continue
+        fn_members = [functions[fi] for fi in member_indices]
+        member_files = {fn.path for fn in fn_members}
+        if len(member_indices) == 2 and len(member_files) == 1:
+            continue
+        index_set = set(member_indices)
+        component_edges = [
+            score
+            for (left, right), score in twin_edges.items()
+            if left in index_set and right in index_set
+        ]
+        twin_members: list[dict[str, Any]] = []
+        for fi in member_indices:
+            fn = functions[fi]
+            best = max(
+                score
+                for (left, right), score in twin_edges.items()
+                if left == fi or right == fi
+            )
+            twin_members.append(
+                {
+                    "path": fn.path,
+                    "qualname": fn.qualname,
+                    "start_line": fn.start_line,
+                    "nstatements": fn.nstatements,
+                    "coverage": round(best, 4),
+                }
+            )
+        twin_members.sort(key=lambda item: (item["path"], item["qualname"]))
+        cluster_id = _short_hash(
+            *sorted(f"{fn.path}:{fn.qualname}" for fn in fn_members)
+        )
+        if cluster_id in ignored_ids:
+            ignored.append(
+                {
+                    "id": cluster_id,
+                    "members": sorted(
+                        f"{fn.path}:{fn.qualname}" for fn in fn_members
+                    ),
+                }
+            )
+            continue
+        cross_file = len(member_files) >= 2
+        priority = (
+            "high"
+            if cross_file or len(member_indices) >= 3
+            else "medium"
+        )
+        priority_reason = (
+            "near-identical function bodies across files "
+            "(same shape, possibly different contracts)"
+            if cross_file
+            else "near-identical function bodies in one file family"
+        )
+        reports.append(
+            {
+                "id": cluster_id,
+                "kind": "shared_capability",
+                "twin_match": True,
+                "priority": priority,
+                "priority_reason": priority_reason,
+                "size": len(member_indices),
+                "file_count": len(member_files),
+                "max_lines": 0,
+                "max_sim": round(max(component_edges, default=1.0), 4),
+                "min_edge_sim": round(min(component_edges, default=1.0), 4),
+                "semantic_risk": None,
+                "risk_signals": [],
+                "capability_hints": [],
+                "canonical_symbol": None,
+                "members": twin_members,
+            }
+        )
     reports.extend(helper_reports)
 
     priority_order = {"high": 0, "medium": 1, "low": 2}
@@ -1186,6 +1358,7 @@ def main(argv: list[str] | None = None) -> int:
         "package": args.package,
         "threshold": threshold,
         "helper_reuse_threshold": helper_reuse_threshold,
+        "twin_threshold": twin_threshold,
         "regions_scanned": len(records),
         "functions_indexed": len(functions),
         "short_risky_blocks": sum(
@@ -1223,6 +1396,19 @@ def main(argv: list[str] | None = None) -> int:
                     f"{member['start_line']}-{member['end_line']} "
                     f"(L{member['nlines']}, cov={member['coverage']:.2f}, "
                     f"referenced={member['canonical_referenced_in_parent']})"
+                )
+            continue
+        if report.get("twin_match"):
+            print(
+                f"=== [{report['priority']}] {report['id']} TWIN "
+                f"{report['size']} functions across {report['file_count']} files, "
+                f"edge_sim={report['min_edge_sim']:.3f}-{report['max_sim']:.3f}"
+            )
+            for member in report["members"]:
+                print(
+                    f"    {member['path']}:{member['qualname']}:"
+                    f"{member['start_line']} "
+                    f"({member['nstatements']} stmts, cov={member['coverage']:.2f})"
                 )
             continue
         hints = ", ".join(report["capability_hints"]) or "-"

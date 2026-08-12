@@ -10,7 +10,8 @@ the detected target set, so a scanner that misses an injected defect cannot
 pass by finding an unrelated candidate with the same count.
 
 Covered channels: deadcode, duplicates, forks, contracts (all sub-channels),
-capabilities, hardcoded, regions (shared / helper_not_reused / short_risky).
+capabilities, hardcoded, regions (shared / helper_not_reused / short_risky /
+function-twin).
 The exit code is nonzero when any expected target is missing.
 """
 from __future__ import annotations

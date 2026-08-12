@@ -2267,7 +2267,11 @@ def test_region_scan_finds_latent_capability(
     )
     assert rc == 0
     payload = json.loads(output.read_text(encoding="utf-8"))
-    cluster = next(item for item in payload["clusters"] if item["size"] == 2)
+    cluster = next(
+        item
+        for item in payload["clusters"]
+        if item["size"] == 2 and not item.get("twin_match")
+    )
     assert cluster["file_count"] == 2
     assert cluster["min_edge_sim"] == 1.0
     assert "load_state_dict" in cluster["capability_hints"]
@@ -2362,12 +2366,46 @@ def test_report_formatter_renders_region_cluster_kinds() -> None:
             }
         ],
     }
+    twin = {
+        "id": "twin1",
+        "kind": "shared_capability",
+        "twin_match": True,
+        "priority": "high",
+        "priority_reason": "near-identical function bodies across files",
+        "size": 2,
+        "max_lines": 0,
+        "file_count": 2,
+        "max_sim": 1.0,
+        "min_edge_sim": 0.98,
+        "semantic_risk": None,
+        "risk_signals": [],
+        "capability_hints": [],
+        "canonical_symbol": None,
+        "members": [
+            {
+                "path": "lib/gauge_fixed.py",
+                "qualname": "intervention_providers",
+                "start_line": 97,
+                "nstatements": 9,
+                "coverage": 0.9884,
+            },
+            {
+                "path": "lib/gauge_interventions.py",
+                "qualname": "gauge_intervention_providers",
+                "start_line": 222,
+                "nstatements": 9,
+                "coverage": 0.9884,
+            },
+        ],
+    }
     summary = {
         "package": "pkg",
         "generated_at": "2026-08-12T00:00:00",
         "provenance": {"git": {"head": "abc1234", "dirty_count": 0}},
     }
-    text = report_formatter.markdown(_markdown_payloads([shared, helper]), summary)
+    text = report_formatter.markdown(
+        _markdown_payloads([shared, helper, twin]), summary
+    )
     assert "### [high] `shared1`" in text
     assert "edge similarity 0.900-1.000" in text
     assert "`load_state_dict`" in text
@@ -2375,6 +2413,10 @@ def test_report_formatter_renders_region_cluster_kinds() -> None:
     assert "Canonical helper: `lib/helper.py:check` (L3)" in text
     assert "coverage=0.978" in text
     assert "(referenced in parent)" in text
+    assert "### [high] `twin1`" in text
+    assert "2 functions across 2 files" in text
+    assert "`lib/gauge_fixed.py:intervention_providers:97`" in text
+    assert "coverage=0.988" in text
 
 
 def test_region_scan_ignores_generic_loops_without_api_calls(
@@ -2513,6 +2555,79 @@ def test_region_scan_short_risky_lookup_cluster(
     assert cluster["semantic_risk"] >= 0.45
     assert cluster["size"] >= 2
     assert {m["path"] for m in cluster["members"]} == {"experiments/lookup.py"}
+
+
+TWIN_PROVIDER = """def {name}(model, tables, basis):
+    providers = {{}}
+    for key in tables:
+        scores = tables[key]
+        norm = np.linalg.norm(scores)
+        providers[key] = scores / norm
+    return providers
+"""
+
+
+def test_region_scan_finds_twin_functions_cross_file(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """Near-identical API-ful function bodies across files are reported as
+    a twin cluster (the gauge_interventions / gauge_fixed provider-builder
+    pattern): covered bodies never matched any canonical helper, and
+    API-ful blocks only feed the region channel, so these pairs were
+    previously invisible."""
+    _write(
+        mini_repo / "pkg" / "lib" / "gauge_fixed.py",
+        TWIN_PROVIDER.format(name="intervention_providers"),
+    )
+    _write(
+        mini_repo / "pkg" / "lib" / "gauge_interventions.py",
+        TWIN_PROVIDER.format(name="gauge_intervention_providers"),
+    )
+    output = tmp_path / "regions.json"
+    rc = scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    )
+    assert rc == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["twin_threshold"] == 0.85
+    twins = [
+        item for item in payload["clusters"] if item.get("twin_match")
+    ]
+    assert twins, "expected a function-twin cluster"
+    cluster = twins[0]
+    assert cluster["kind"] == "shared_capability"
+    assert cluster["priority"] == "high"
+    assert cluster["file_count"] == 2
+    assert cluster["size"] == 2
+    assert cluster["max_sim"] == 1.0
+    assert cluster["min_edge_sim"] == 1.0
+    names = {m["qualname"] for m in cluster["members"]}
+    assert names == {"intervention_providers", "gauge_intervention_providers"}
+    assert {m["coverage"] for m in cluster["members"]} == {1.0}
+
+
+def test_region_scan_suppresses_same_file_twin_pair(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """A same-file pair of near-identical functions is a deliberate mirror
+    visible in one place (xunit-fixture style); only cross-file twins or
+    larger twin families are reported."""
+    _write(
+        mini_repo / "pkg" / "lib" / "builder.py",
+        TWIN_PROVIDER.format(name="build_a")
+        + "\n"
+        + TWIN_PROVIDER.format(name="build_b"),
+    )
+    output = tmp_path / "regions.json"
+    rc = scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    )
+    assert rc == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    twins = [
+        item for item in payload["clusters"] if item.get("twin_match")
+    ]
+    assert twins == [], "same-file two-member twin pairs are suppressed"
 
 
 def test_region_scan_helper_skips_constructor_boilerplate(
