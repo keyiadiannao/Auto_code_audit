@@ -13,20 +13,35 @@ when:
 3. (with ``--previous``) the patch scope gained a high/medium candidate that
    was not in the pre-patch report — a new risk appeared where the patch
    touched;
-4. a code-action verdict was recorded without a test gate — pass
-   ``--test-command`` to run the target project's tests or ``--no-tests`` to
-   declare that tests are verified outside this gate;
-5. ``--test-command`` exits non-zero.
+4. a code-action verdict was recorded without test evidence — pass
+   ``--test-command`` to run the target project's tests inside the gate,
+   ``--test-result`` to consume a machine-readable external test artifact
+   (e.g. a CI result file), or ``--no-tests`` to declare that behavioral
+   verification is delegated outside this gate (never machine-checked);
+5. ``--test-command`` exits non-zero or ``--test-result`` reports a failure;
+6. ``--test-result`` is unreadable or not a valid artifact.
+
+Test-gate vocabulary in the stats: ``passed`` (internal run), ``failed``
+(internal run rejected), ``external_passed`` / ``external_failed`` /
+``external_invalid`` (artifact consumed), ``external_unverified``
+(``--no-tests``: delegated, not machine-checked), ``skipped`` (declared via
+``--no-tests`` in older callers), ``not_run``.  ``fully_verified`` is true
+only when the gate passes and the test evidence is machine-checked
+(``passed`` or ``external_passed``); a ``--no-tests`` acceptance is never
+``fully_verified``.
 
 Verdict vocabulary: the gate speaks the skill-first protocol
 (``disposition: true_finding`` + ``recommended_action``) *and* the legacy
 adjudicate.py dispositions (``true duplicate`` / ``compatibility debt``,
 accepted as the legacy importer).  ``--verdicts`` accepts either an
 aggregated ``verdicts.json`` or a directory of per-case protocol verdict
-files (SKILL Phase 2).  Stale-evidence binding uses the canonical
-``finding_evidence_hash`` (run_all.finding_evidence_hash); per-case protocol
-files additionally carry ``case_hash`` (the protocol case digest), which
-binds commit and snippets and is *not* used for stale detection.
+files (SKILL Phase 2); per-case files run the shared full protocol
+validator (``_verdict_files.load_protocol_verdict``) — a verdict the Layer 2
+validator would reject cannot enter this gate.  Stale-evidence binding uses
+the canonical ``finding_evidence_hash`` (run_all.finding_evidence_hash);
+per-case protocol files additionally carry ``case_hash`` (the protocol case
+digest), which binds commit and snippets and is *not* used for stale
+detection.
 
 Exit code 0 means acceptance, 1 means rejection with the failing checks on
 stderr, 2 means usage or I/O error.
@@ -54,6 +69,36 @@ CODE_ACTION_ACTIONS = {
     "externalize_config",
 }
 RISK_PRIORITIES = {"high", "medium"}
+
+#: Accepted ``status`` values in a ``--test-result`` external artifact.
+ARTIFACT_STATUSES = {"passed", "failed"}
+
+
+def _external_test_gate(path: Path) -> tuple[str, str]:
+    """Read a machine-readable external test artifact and map it to a
+    test-gate value.
+
+    The artifact is a JSON object with a required ``status`` of ``passed`` or
+    ``failed`` and optional provenance fields (``tool``, ``summary``,
+    ``exit_code``, ``duration_seconds``).  Returns ``(gate, reason)`` where
+    ``gate`` is ``external_passed``, ``external_failed``, or
+    ``external_invalid``; ``reason`` is a short diagnostic for the invalid
+    case.
+    """
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return "external_invalid", f"artifact unreadable: {exc}"
+    if not isinstance(payload, dict):
+        return "external_invalid", "artifact must be a JSON object"
+    status = payload.get("status")
+    if status not in ARTIFACT_STATUSES:
+        return (
+            "external_invalid",
+            f"artifact status must be one of {sorted(ARTIFACT_STATUSES)}: "
+            f"{status!r}",
+        )
+    return f"external_{status}", ""
 
 
 def _verdict_hash(verdict: dict) -> str | None:
@@ -86,42 +131,25 @@ def _load_verdicts(path: Path) -> tuple[list[dict], list[str]]:
     """Load verdict entries from an aggregated verdicts.json or a directory
     of per-case protocol verdict files (SKILL Phase 2).
 
-    Per-case files are only usable by the gate when they carry
-    ``scanner``/``target_id`` (the bridge fields); pre-bridge files are
-    skipped with a warning.  Returns ``(entries, warnings)``.
+    Per-case files run the full shared protocol pipeline —
+    ``_verdict_files.load_protocol_verdict``: schema-version check, the
+    filename -> evidence_hash -> case_hash binding, the bridge fields, and
+    ``validate_verdict`` with its cross-field rules.  A file that fails any
+    step is skipped with a warning, so a verdict the Layer 2 validator would
+    reject can never reach the acceptance gate.  Returns ``(entries,
+    warnings)``.
     """
     entries: list[dict] = []
     warnings: list[str] = []
     if path.is_dir():
+        from _verdict_files import load_protocol_verdict
+
         for verdict_path in sorted(path.glob("*.json")):
             try:
-                payload = json.loads(verdict_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                warnings.append(f"{verdict_path.name}: unreadable ({exc})")
+                entries.append(load_protocol_verdict(verdict_path))
+            except (OSError, ValueError) as exc:
+                warnings.append(f"{verdict_path.name}: {exc}")
                 continue
-            case = payload.get("verdict")
-            scanner = payload.get("scanner")
-            target_id = payload.get("target_id")
-            if not isinstance(case, dict):
-                warnings.append(f"{verdict_path.name}: not a per-case verdict file")
-                continue
-            if not (isinstance(scanner, str) and isinstance(target_id, str)):
-                warnings.append(
-                    f"{verdict_path.name}: pre-bridge verdict file without "
-                    "scanner/target_id, skipped"
-                )
-                continue
-            entries.append(
-                {
-                    "scanner": scanner,
-                    "target_id": target_id,
-                    "finding_evidence_hash": payload.get("finding_evidence_hash"),
-                    "disposition": case.get("disposition"),
-                    "recommended_action": case.get("recommended_action"),
-                    "case_hash": payload.get("case_hash")
-                    or payload.get("evidence_hash"),
-                }
-            )
         return entries, warnings
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -178,20 +206,17 @@ def _in_scope(detail: dict, scope: str | None) -> bool:
     )
 
 
-def _risk_level(detail: dict) -> str | None:
-    """Unified risk severity across scanner detail schemas.
+def _risk_level(scanner: str, detail: dict) -> str | None:
+    """Unified risk severity for the new-risk gate.
 
-    Falls back ``priority`` (duplicates, regions) → ``severity``
-    (hardcoded) → deadcode's ``status`` (a new DEAD module after a patch is
-    the drift the gate exists to catch).
+    Delegates to ``run_all.finding_severity`` — one fallback chain across
+    scanner schemas (``priority`` → ``severity`` → deadcode ``status`` →
+    contracts ``_channel``) — so the gate and every other consumer agree on
+    what a new high/medium candidate is.
     """
-    for key in ("priority", "severity"):
-        value = detail.get(key)
-        if isinstance(value, str) and value.lower() in RISK_PRIORITIES:
-            return value.lower()
-    if detail.get("status") == "DEAD":
-        return "high"
-    return None
+    from run_all import finding_severity
+
+    return finding_severity(scanner, detail)
 
 
 def _check_report(
@@ -206,6 +231,7 @@ def _check_report(
         "code_action_verdicts": 0,
         "still_present": 0,
         "test_gate": test_gate,
+        "fully_verified": False,
     }
     candidates = _candidates(report)
     previous_candidates: set[tuple[str, str]] = (
@@ -235,10 +261,17 @@ def _check_report(
 
     if test_gate == "failed":
         failures.append("test command failed (non-zero exit)")
+    elif test_gate == "external_failed":
+        failures.append("external test artifact reports status 'failed'")
+    elif test_gate == "external_invalid":
+        failures.append(
+            "external test artifact is invalid or unreadable; "
+            "pass a valid --test-result or use --test-command/--no-tests"
+        )
     elif test_gate == "not_run" and stats["code_action_verdicts"] > 0:
         failures.append(
-            "code-action verdicts present but no test gate: "
-            "pass --test-command or --no-tests"
+            "code-action verdicts present but no test evidence: "
+            "pass --test-command, --test-result, or --no-tests"
         )
 
     if previous is not None:
@@ -247,12 +280,15 @@ def _check_report(
                 continue
             if not _in_scope(detail, scope):
                 continue
-            priority = _risk_level(detail)
+            priority = _risk_level(key[0], detail)
             if priority in RISK_PRIORITIES:
                 failures.append(
                     f"new {priority} candidate after patch: "
                     f"{key[0]} {key[1]} (not in previous report)"
                 )
+    stats["fully_verified"] = (
+        not failures and test_gate in ("passed", "external_passed")
+    )
     return failures, stats
 
 
@@ -282,21 +318,30 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--test-command",
         default=None,
-        help="shell command that runs the target project's tests; a non-zero "
-        "exit rejects the gate",
+        help="shell command that runs the target project's tests inside the "
+        "gate; a non-zero exit rejects the gate",
+    )
+    ap.add_argument(
+        "--test-result",
+        type=Path,
+        default=None,
+        help="machine-readable external test artifact (JSON with a required "
+        "'status' of 'passed' or 'failed'); machine-checked, unlike --no-tests",
     )
     ap.add_argument(
         "--no-tests",
         action="store_true",
-        help="explicitly skip the test gate (tests are verified outside "
-        "run_verify)",
+        help="declare that behavioral verification is delegated outside this "
+        "gate (test_gate 'external_unverified'; never fully_verified)",
     )
     ap.add_argument("--json", type=Path, default=None, help="write result JSON")
     args = ap.parse_args(argv)
 
-    if args.test_command and args.no_tests:
+    test_flags = [args.test_command, args.test_result, args.no_tests]
+    if sum(flag is not None and flag is not False for flag in test_flags) > 1:
         print(
-            "error: --test-command and --no-tests are mutually exclusive",
+            "error: --test-command, --test-result, and --no-tests are "
+            "mutually exclusive",
             file=sys.stderr,
         )
         return 2
@@ -316,24 +361,29 @@ def main(argv: list[str] | None = None) -> int:
     for warning in warnings:
         print(f"warning: {warning}", file=sys.stderr)
 
+    artifact_reason = ""
     if args.test_command:
         result = subprocess.run(args.test_command, shell=True)
         test_gate = "passed" if result.returncode == 0 else "failed"
+    elif args.test_result:
+        test_gate, artifact_reason = _external_test_gate(args.test_result)
     elif args.no_tests:
-        test_gate = "skipped"
+        test_gate = "external_unverified"
     else:
         test_gate = "not_run"
 
     failures, stats = _check_report(
         report, {"verdicts": verdict_entries}, previous, args.scope, test_gate
     )
+    if artifact_reason:
+        print(f"test artifact: {artifact_reason}", file=sys.stderr)
     passed = not failures
     if args.json is not None:
         args.json.parent.mkdir(parents=True, exist_ok=True)
         args.json.write_text(
             json.dumps(
                 {
-                    "schema_version": 2,
+                    "schema_version": 3,
                     "passed": passed,
                     "failures": failures,
                     "stats": stats,
@@ -350,6 +400,7 @@ def main(argv: list[str] | None = None) -> int:
         f"code_action_verdicts={stats['code_action_verdicts']} "
         f"still_present={stats['still_present']} "
         f"test_gate={stats['test_gate']} "
+        f"fully_verified={stats['fully_verified']} "
         f"failures={len(failures)}"
     )
     return 0 if passed else 1

@@ -75,13 +75,14 @@ python run_all.py --root /work/foo --package src
 python adjudicate.py --report /work/foo/reports/latest.json
 
 # Layer 3: run the audited project's tests, provenance gates, and the
-# engine-owned acceptance gate after a fix (tests ran above, so the gate
-# skips re-running them with --no-tests; --test-command would run them
-# inside the gate instead)
+# engine-owned acceptance gate after a fix. Tests ran above, so point the
+# gate at the machine-readable result artifact (--test-result), or declare
+# external delegation with --no-tests; --test-command would run the suite
+# inside the gate instead
 python -m pytest /work/foo/tests -q
 python run_verify.py --report /work/foo/reports/latest.json \
   --verdicts /work/foo/reports/verdicts.json --previous /work/foo/reports/pre.json \
-  --scope src/lib --no-tests
+  --scope src/lib --test-result /work/foo/reports/ci-result.json
 ```
 
 Runs all scanners against the package under the current directory (override
@@ -187,8 +188,8 @@ packages: dead-`public`-`API` candidates, forwarding wrappers, unreferenced
 public functions, fork pairs that are intentional convenience wrappers,
 non-security digest hashes, every `duplicates` cluster emitted at the pinned
 commits, and the first region batch (all 21 shared/short clusters plus the 50
-highest-coverage `helper_not_reused` clusters). 426 of 620 candidates carry
-labels (the 194 unlabelled remainder are lower-coverage `regions` helper
+highest-coverage `helper_not_reused` clusters). 407 of 591 candidates carry
+labels (the 184 unlabelled remainder are lower-coverage `regions` helper
 clusters awaiting a later batch). Twelve clusters are `true_finding` — ten
 from `duplicates`: near-verbatim copies inside the pytest thread/unraisable
 plugin pair, werkzeug's Request/Response deprecation wrappers
@@ -202,16 +203,17 @@ remaining clusters are false positives (intentional API-layer wrappers,
 sync/async dual-interface mirrors, boilerplate dunder families, parallel
 parsers with distinct grammars, and token-coincidence matches where the
 region never actually inline-copies the canonical named helper).
-Corpus totals at the pinned commits: precision 0.028 (12/426), review burden
-51.7 candidates per confirmed finding, 6.5 candidates per KLOC, runtime 0.3s
+Corpus totals at the pinned commits: precision 0.029 (12/407), review burden
+49.2 candidates per confirmed finding, 6.2 candidates per KLOC, runtime 0.31s
 per KLOC. A label file whose `target_id` matches no candidate in the pinned
 commit is reported as `unmatched_labels` (stale scope), so label drift is
 visible rather than silent.
 
-The regions scanner adds ~2.1 candidates per KLOC on the six pinned repos
-(199 clusters; helper-not-reused matches dominate at 178, shared-capability
-12, short-block 9), so the review burden grew from 42.1 to 62.0 once regions
-entered the profile. First-batch adjudication of that cohort found 2
+The regions scanner adds ~1.8 candidates per KLOC on the six pinned repos
+(170 clusters; helper-not-reused matches dominate at 149, shared-capability
+12, short-block 9); once regions entered the profile the review burden rose
+from 42.1, and the helper-FP filters below brought it back to 49.2.
+First-batch adjudication of that cohort found 2
 `true_finding` clusters out of 71 labelled: the pytest thread/unraisable
 plugin pair duplicates both its collect hook and its configure wiring (the
 same copy-paste the `duplicates` channel flags). The remaining 69 labelled
@@ -221,10 +223,20 @@ parallel families (xunit setup fixtures, sync/async mirrors, ASGI connection
 classes, capture `snap` variants), token-coincidence matches where the
 canonical is a nested span or an unrelated member, and `short_risky`
 self-pairs where the same function is matched against itself. The labelled
-`regions` precision is 0.028 (2/71), dominated by the `helper_not_reused`
-channel's token-level matching; lowering that false-positive rate is the next
-region milestone. The 194 unlabelled lower-coverage helper clusters remain
-open for a second batch.
+`regions` precision at the pinned commits is 0.038 (2/52): all 50 labelled
+`helper_not_reused` clusters are false positives, so the helper channel now
+suppresses the two dominant FP families before matching — `__init__`
+canonicals (constructor attribute-assignment boilerplate; 14 of the 50) and
+regions whose parent already references the canonical by name (an inline
+block that is not an orphaned copy; 3 more). That cut labelled helper
+clusters from 50 to 31 (19 dropped, every one a false positive) and helper
+clusters corpus-wide from 178 to 149 with zero loss of confirmed findings
+(both regions `true_finding` clusters are `shared_capability`, untouched;
+the mutation-corpus helper recall still passes). The remaining helper FP
+families — deliberate parallel families and token-coincidence matches — need
+semantic signals beyond token overlap; the 31 labelled survivors stay open
+for a second adjudication batch alongside the 118 remaining unlabelled
+helper clusters.
 
 ### Mutation corpus (recall)
 
@@ -328,17 +340,34 @@ skill-first protocol vocabulary (`disposition: true_finding` +
 `--verdicts` accepts either the aggregated `verdicts.json` or the per-case
 protocol verdict directory from SKILL Phase 2.
 
-New-candidate severity is unified across scanner schemas via a fallback
-chain: `priority` (duplicates, regions) → `severity` (hardcoded) → a new
-`DEAD` module's `status`, so a patch that silently strands a module is
-rejected, not just a duplicate or region hit.
+New-candidate severity is unified across scanner schemas in one function
+(`run_all.finding_severity`): `priority` (duplicates, regions) →
+`severity` (hardcoded) → a new `DEAD` module's `status` → the contracts
+`_channel` (`defensive_param_loosening` and `env_written_not_read` high,
+`generation_path_without_env` medium). A patch that silently strands a
+module — or that adds a defensive-param loosening or an env write without a
+read — is rejected, not just a duplicate or region hit.
 
-The gate also makes test evidence machine-checkable: pass
-`--test-command "<shell command>"` to run the target project's tests inside
-the gate (a non-zero exit rejects), or `--no-tests` to declare tests are
-verified outside it. A code-action verdict with neither flag is rejected —
-the gate never self-approves. Exit code 0 means acceptance; `--scope`
-limits the new-candidate check to the path the patch touched.
+The gate also makes test evidence machine-checkable, three ways
+(`--test-command`, `--test-result`, and `--no-tests` are mutually
+exclusive):
+
+- `--test-command "<shell command>"` — runs the target project's tests
+  inside the gate; a non-zero exit rejects.
+- `--test-result <file>` — consumes a machine-readable external test
+  artifact (a JSON object with a required `"status": "passed"` or
+  `"failed"`, plus optional provenance like `tool`/`summary`/`exit_code`;
+  e.g. a CI result file). Machine-checked like an internal run.
+- `--no-tests` — declares that behavioral verification is delegated outside
+  the gate (`test_gate: "external_unverified"`); accepted, but the result
+  JSON then reports `fully_verified: false`.
+
+A code-action verdict with no test evidence at all is rejected — the gate
+never self-approves. The result JSON (`--json`) reports `passed`, the
+`test_gate` value, and `fully_verified`, which is true only when the gate
+passed and the test evidence was machine-checked. Exit code 0 means
+acceptance; `--scope` limits the new-candidate check to the path the patch
+touched.
 
 ## Continuous integration
 

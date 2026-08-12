@@ -2515,6 +2515,57 @@ def test_region_scan_short_risky_lookup_cluster(
     assert {m["path"] for m in cluster["members"]} == {"experiments/lookup.py"}
 
 
+def test_region_scan_helper_skips_constructor_boilerplate(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """__init__ canonicals are never helper matches: constructor
+    attribute-assignment bodies are generic (14/50 labelled FPs)."""
+    body = "    self.model = model\n    self.tensor = tensor\n    self.device = model.device\n"
+    _write(mini_repo / "pkg" / "lib" / "helper.py", "class Box:\n" + body)
+    _write(
+        mini_repo / "pkg" / "experiments" / "a.py",
+        "class Envelope:\n" + body,
+    )
+    output = tmp_path / "regions.json"
+    rc = scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    )
+    assert rc == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    helper = [
+        item for item in payload["clusters"] if item["kind"] == "helper_not_reused"
+    ]
+    assert helper == [], "constructor boilerplate must not match a helper"
+
+
+def test_region_scan_helper_skips_parent_referencing_canonical(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """A region whose parent already references the canonical by name is not
+    an orphaned copy (3/50 labelled FPs)."""
+    _write(
+        mini_repo / "pkg" / "lib" / "helper.py",
+        "def check(model, tensor):\n" + INLINE_VALIDATION,
+    )
+    _write(
+        mini_repo / "pkg" / "experiments" / "a.py",
+        "def run(model, tensor, scale):\n"
+        "    check(model, tensor)\n"
+        + INLINE_VALIDATION
+        + "    return tensor.mul(scale)\n",
+    )
+    output = tmp_path / "regions.json"
+    rc = scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    )
+    assert rc == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    helper = [
+        item for item in payload["clusters"] if item["kind"] == "helper_not_reused"
+    ]
+    assert helper == [], "a caller that references the canonical is not a match"
+
+
 def test_region_external_effects_parameter_mutation() -> None:
     """A method call on a function input (``model.load_state_dict``) is an
     external effect: it mutates state the region does not own."""

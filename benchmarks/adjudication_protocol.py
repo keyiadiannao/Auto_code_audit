@@ -147,9 +147,28 @@ SYSTEM_PROMPT = (
     "(public API, deliberate duplication, platform adaptation, small "
     "boilerplate) and no code action is warranted.\n"
     "Base your decision ONLY on the provided evidence and snippets. Reply "
-    'with exactly one JSON object and nothing else:\n'
-    '{"disposition": "true_finding" or "false_positive", "confidence": 0.0-1.0, '
-    '"reason": "<one short paragraph>"}'
+    "with exactly one JSON object matching the full protocol schema below "
+    "and nothing else:\n"
+    '{\n'
+    '  "disposition": "true_finding" or "false_positive" (required),\n'
+    '  "confidence": 0.0-1.0 (required),\n'
+    '  "reason": "<one short paragraph>" (required),\n'
+    '  "reason_codes": ["one or more of INTENTIONAL_DUPLICATION, '
+    "PUBLIC_API_SURFACE, PLATFORM_ADAPTATION, BOILERPLATE, OVERRIDE_FAMILY, "
+    "CONTRACT_DRIFT, ORPHANED_CODE, DUPLICATED_OWNERSHIP, "
+    "UNEXTRACTED_SHARED_CAPABILITY, UNNECESSARY_REIMPLEMENTATION, "
+    'HARDCODED_CONSTANT, ENV_MISUSE, UNSAFE_REFACTOR, OTHER"],\n'
+    '  "recommended_action": "one of none, delete_dead_code, '
+    "extract_shared_component, reuse_existing, fix_contract_drift, "
+    'replace_with_library, externalize_config, investigate",\n'
+    '  "reuse_target": "<existing symbol the action reuses, else null>",\n'
+    '  "required_verification": ["subset of unit_tests, integration_tests, '
+    'type_check, lint, re_audit"]\n'
+    "}\n"
+    "Cross-field rules: a true_finding MUST carry a recommended_action other "
+    "than 'none' and MUST include the deterministic 're_audit' gate in "
+    "required_verification; a false_positive MUST set recommended_action "
+    "'none'; recommended_action 'reuse_existing' requires a reuse_target."
 )
 
 

@@ -51,9 +51,6 @@ DEFAULT_CASES_FILE = Path(__file__).resolve().parent / "adjudication" / "cases.j
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_API_KEY = "ollama"
 
-VERDICT_FILE_SCHEMA = 1
-
-
 # ---------------------------------------------------------------------------
 # Case preparation (protocol-shaped, label-free bundles)
 # ---------------------------------------------------------------------------
@@ -173,73 +170,17 @@ def restrict_to_corpus(
 
 
 # ---------------------------------------------------------------------------
-# Verdict file I/O (protocol-shaped)
+# Verdict file I/O (protocol-shaped, one validator)
 # ---------------------------------------------------------------------------
-
-
-def write_verdict_file(
-    verdicts_dir: Path,
-    digest: str,
-    verdict: dict[str, Any],
-    case: dict[str, Any] | None = None,
-) -> Path:
-    """Write a per-case protocol verdict file.
-
-    ``digest`` is the case hash (also the filename).  When ``case`` is given,
-    the file additionally carries the bridge fields the engine-owned verify
-    gate needs to match the verdict against report candidates: ``scanner``,
-    ``target_id``, ``finding_evidence_hash`` (stale-evidence binding), and
-    ``case_hash``.  These fields are additive, so pre-bridge files remain
-    valid for the scoring loop.
-    """
-    payload: dict[str, Any] = {
-        "schema_version": VERDICT_FILE_SCHEMA,
-        "evidence_hash": digest,
-        "adapter": "agent",
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "verdict": verdict,
-    }
-    if case is not None:
-        payload.update(
-            {
-                "case_hash": digest,
-                "scanner": case["scanner"],
-                "target_id": case["target_id"],
-                "finding_evidence_hash": case["finding_evidence_hash"],
-            }
-        )
-    path = verdicts_dir / f"{digest}.json"
-    path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    return path
-
-
-def read_verdict_file(path: Path, expected_evidence_hash: str) -> dict[str, Any] | None:
-    """Read and validate a verdict file bound to ``expected_evidence_hash``.
-
-    Enforces the triple binding: filename stem == payload evidence_hash == the
-    case's current evidence hash.  Any mismatch raises ValueError (the scoring
-    loop records it as an invalid verdict), so a verdict can never be reused
-    against different evidence.
-    """
-    from benchmarks.adjudication_protocol import validate_verdict
-
-    if path.stem != expected_evidence_hash:
-        raise ValueError(
-            f"verdict filename {path.name!r} does not match expected evidence "
-            f"hash {expected_evidence_hash!r}"
-        )
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("schema_version") != VERDICT_FILE_SCHEMA:
-        return None
-    if payload.get("evidence_hash") != expected_evidence_hash:
-        raise ValueError(
-            f"verdict payload evidence_hash {payload.get('evidence_hash')!r} "
-            f"does not match expected {expected_evidence_hash!r}"
-        )
-    return validate_verdict(payload.get("verdict", {}))
+# The file schema and the full validation pipeline live in _verdict_files.py,
+# shared with the engine-owned verify gate (run_verify.py).  This module
+# re-exports them so the scoring loop and the gate consume the same code.
+from _verdict_files import (
+    VERDICT_FILE_SCHEMA,
+    load_protocol_verdict,
+    read_verdict_file,
+    write_verdict_file,
+)
 
 
 def user_prompt(bundle: dict[str, Any]) -> str:

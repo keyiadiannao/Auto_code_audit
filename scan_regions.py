@@ -944,6 +944,15 @@ def main(argv: list[str] | None = None) -> int:
     ignored: list[dict[str, Any]] = []
 
     # helper_not_reused: helper-channel regions matched against named functions.
+    # Two FP filters from the first 71-case region label batch (50 labelled
+    # helper_not_reused clusters, all false positives):
+    #   - constructor attribute-assignment boilerplate: any __init__ body
+    #     token-matches any other __init__ body (14/50 labelled FPs);
+    #   - the region's parent function already references the canonical by
+    #     name (3/50 labelled FPs): the inline block is not an orphaned copy,
+    #     the caller knows the helper exists.  Member records keep the
+    #     `canonical_referenced_in_parent` flag (now only emitted as False)
+    #     so the schema is stable if the filter is ever relaxed.
     helper_reports: list[dict[str, Any]] = []
     helper_matches: list[tuple[int, int, float, bool]] = []
     helper_indices = [i for i, record in enumerate(records) if "helper" in record.channel]
@@ -955,6 +964,8 @@ def main(argv: list[str] | None = None) -> int:
                 or region.parent.startswith(fn.qualname + ".")
             ):
                 continue
+            if fn.qualname.endswith("__init__"):
+                continue
             # One-sided prefilter: an inline copy is usually *longer* than
             # the canonical helper it duplicates (extra local stmts), so a
             # symmetric length bucket would miss the match.  Coverage is
@@ -964,7 +975,9 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             coverage = _coverage(region.tokens, fn.tokens, len(fn.tokens))
             if coverage >= helper_reuse_threshold:
-                helper_matches.append((qi, fi, coverage, fn.name in region.parent_tokens))
+                if fn.name in region.parent_tokens:
+                    continue
+                helper_matches.append((qi, fi, coverage, False))
     by_function: dict[int, list[tuple[int, float, bool]]] = defaultdict(list)
     for qi, fi, coverage, referenced in helper_matches:
         by_function[fi].append((qi, coverage, referenced))

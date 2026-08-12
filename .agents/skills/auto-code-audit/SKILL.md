@@ -118,10 +118,16 @@ recurring patterns).
 After the user (or you) applies a patch for an accepted true finding:
 
 1. Tests: run the project's test suite; all must pass. The gate makes the
-   test evidence machine-checkable: pass `--test-command <cmd>` to execute
-   the suite inside the gate (non-zero exit rejects), or `--no-tests` to
-   declare that tests are verified outside it. A code-action verdict without
-   either flag is rejected — the gate never self-approves.
+   test evidence machine-checkable in three ways: `--test-command <cmd>`
+   executes the suite inside the gate (non-zero exit rejects);
+   `--test-result <file>` consumes a machine-readable external artifact (a
+   JSON object with `"status": "passed" | "failed"`, e.g. a CI result file);
+   `--no-tests` declares that behavioral verification is delegated outside
+   the gate (`test_gate: "external_unverified"`) — accepted but never
+   `fully_verified: true`. A code-action verdict with no test evidence at
+   all is rejected — the gate never self-approves. The three flags are
+   mutually exclusive; the result JSON reports `fully_verified`, true only
+   when the test evidence was machine-checked.
 2. Re-audit: re-run the full scan on the same scope.
 3. Run the engine-owned gate (replaces the manual checklist). `--verdicts`
    accepts either the aggregated `verdicts.json` or the per-case verdict

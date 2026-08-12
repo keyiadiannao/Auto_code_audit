@@ -82,6 +82,45 @@ def finding_evidence_hash(scanner: str, target_id: str, detail: dict) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+#: Contracts channels whose candidates are real drift risks: a new one after a
+#: patch must reach the Layer-3 new-risk gate.
+CONTRACTS_RISK: dict[str, str] = {
+    "defensive_param_loosening": "high",
+    "env_written_not_read": "high",
+    "generation_path_without_env": "medium",
+}
+
+
+def finding_severity(scanner: str, detail: dict) -> str | None:
+    """Unified risk severity for the Layer-3 new-risk gate.
+
+    One fallback chain across scanner detail schemas, so the gate and any
+    other consumer agree on what a new high/medium candidate is:
+
+    1. ``priority`` (duplicates, regions);
+    2. ``severity`` (hardcoded);
+    3. a new ``DEAD`` deadcode module's ``status`` (a patch that silently
+       strands a module);
+    4. the contracts ``_channel`` (``defensive_param_loosening`` /
+       ``env_written_not_read`` high, ``generation_path_without_env``
+       medium) — ``_candidate_signatures`` injects ``_channel`` on detail
+       copies.
+
+    Returns None for candidates that are not gate-worthy risks.
+    """
+    for key in ("priority", "severity"):
+        value = detail.get(key)
+        if isinstance(value, str) and value.lower() in ("high", "medium"):
+            return value.lower()
+    if detail.get("status") == "DEAD":
+        return "high"
+    if scanner == "contracts":
+        channel = detail.get("_channel")
+        if isinstance(channel, str):
+            return CONTRACTS_RISK.get(channel)
+    return None
+
+
 def _git_provenance(repo: Path, package: str) -> dict:
     def run(*parts: str) -> str | None:
         try:
