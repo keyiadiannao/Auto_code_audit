@@ -13,6 +13,7 @@ sys.path.insert(0, str(SKILL_DIR))
 
 import _audit_config
 import adjudicate
+import report_formatter
 import run_all
 import scan_capabilities
 import scan_cli_smoke
@@ -1310,6 +1311,15 @@ def test_adjudicate_ignore_entries_key_formats() -> None:
         "duplicates", {"id": "abc123def456"}, "n", date=date, owner=owner
     ) == [("duplicates", {"id": "abc123def456", "reason": "n", **stamped})]
     assert adjudicate._ignore_entries(
+        "regions", {"id": "abc123def456"}, "n", date=date, owner=owner
+    ) == [("regions", {"id": "abc123def456", "reason": "n", **stamped})]
+    # Distinct regions clusters must not collide under suppression identity.
+    first = {"id": "r1"}
+    second = {"id": "r2"}
+    assert adjudicate._suppression_identity(
+        "regions", first
+    ) != adjudicate._suppression_identity("regions", second)
+    assert adjudicate._ignore_entries(
         "forks", {"key": "a.py:f::b.py:g"}, "n", date=date, owner=owner
     ) == [("forks", {"key": "a.py:f::b.py:g", "reason": "n", **stamped})]
     assert adjudicate._ignore_entries(
@@ -2265,6 +2275,101 @@ def test_region_scan_finds_latent_capability(
     assert member["outputs"] == []
     assert member["extractability"] >= 0.5
     assert member["control_shape"] == "If1For1While0Try0With0"
+
+
+def _markdown_payloads(clusters: list[dict]) -> dict:
+    """Minimal payloads dict for report_formatter.markdown() with regions."""
+    return {
+        "deadcode": {},
+        "duplicates": {},
+        "forks": {},
+        "contracts": {},
+        "capabilities": {},
+        "hardcoded": {},
+        "style": {},
+        "regions": {"clusters": clusters},
+    }
+
+
+def test_report_formatter_renders_region_cluster_kinds() -> None:
+    """Both region cluster kinds render without KeyError or field bleed."""
+    shared = {
+        "id": "shared1",
+        "kind": "shared_capability",
+        "priority": "high",
+        "priority_reason": "latent capability repeated across files",
+        "size": 2,
+        "max_lines": 8,
+        "file_count": 2,
+        "max_sim": 1.0,
+        "min_edge_sim": 0.9,
+        "semantic_risk": 0.2,
+        "risk_signals": [],
+        "capability_hints": ["load_state_dict"],
+        "canonical_symbol": None,
+        "members": [
+            {
+                "path": "experiments/train.py",
+                "qualname": "train_model",
+                "region_id": "r1",
+                "start_line": 4,
+                "end_line": 11,
+                "nstatements": 6,
+                "nlines": 8,
+                "inputs": ["config", "device", "model"],
+                "outputs": [],
+                "calls": ["load_state_dict"],
+                "effects": {"mutates": []},
+                "control_shape": "If1For1",
+                "extractability": 0.8,
+            }
+        ],
+    }
+    helper = {
+        "id": "helper1",
+        "kind": "helper_not_reused",
+        "priority": "high",
+        "priority_reason": "inline copy covers 98% of canonical helper check",
+        "size": 1,
+        "max_lines": 7,
+        "max_coverage": 0.978,
+        "canonical_symbol": "lib/helper.py:check",
+        "canonical": {"path": "lib/helper.py", "qualname": "check", "lineno": 3},
+        "semantic_risk": 0.0,
+        "risk_signals": [],
+        "members": [
+            {
+                "path": "experiments/a.py",
+                "qualname": "run",
+                "region_id": "r9",
+                "start_line": 14,
+                "end_line": 20,
+                "nstatements": 5,
+                "nlines": 7,
+                "inputs": ["tensor"],
+                "outputs": [],
+                "calls": [],
+                "effects": {"mutates": []},
+                "control_shape": "If2",
+                "extractability": 1.0,
+                "coverage": 0.978,
+                "canonical_referenced_in_parent": True,
+            }
+        ],
+    }
+    summary = {
+        "package": "pkg",
+        "generated_at": "2026-08-12T00:00:00",
+        "provenance": {"git": {"head": "abc1234", "dirty_count": 0}},
+    }
+    text = report_formatter.markdown(_markdown_payloads([shared, helper]), summary)
+    assert "### [high] `shared1`" in text
+    assert "edge similarity 0.900-1.000" in text
+    assert "`load_state_dict`" in text
+    assert "### [high] `helper1`" in text
+    assert "Canonical helper: `lib/helper.py:check` (L3)" in text
+    assert "coverage=0.978" in text
+    assert "(referenced in parent)" in text
 
 
 def test_region_scan_ignores_generic_loops_without_api_calls(

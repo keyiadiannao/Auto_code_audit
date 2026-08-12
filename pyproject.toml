@@ -43,6 +43,7 @@ py-modules = [
     "report_formatter",
     "scan_deadcode",
     "scan_duplicates",
+    "scan_regions",
     "scan_forks",
     "scan_contracts",
     "scan_hardcoded",

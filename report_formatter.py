@@ -194,21 +194,53 @@ def markdown(payloads: dict[str, dict], summary: dict) -> str:
             ]
         )
         for cluster in regions["clusters"]:
-            hints = ", ".join(f"`{hint}`" for hint in cluster.get("capability_hints", []))
-            lines.append(
-                f"### [{cluster['priority']}] `{cluster['id']}`: {cluster['size']} regions "
-                f"(edge similarity {cluster['min_edge_sim']:.3f}-{cluster['max_sim']:.3f})"
-                + (f"; hints: {hints}" if hints else "")
-            )
+            lines.append(f"### [{cluster['priority']}] `{cluster['id']}`")
             lines.append("")
             lines.append(f"Reason: {cluster['priority_reason']}.")
             lines.append("")
-            for member in cluster["members"]:
-                lines.append(
-                    f"- `{member['path']}:{member['qualname']}:"
-                    f"{member['start_line']}-{member['end_line']}` "
-                    f"({member['nstatements']} stmts, ext={member['extractability']})"
+            if cluster.get("kind") == "helper_not_reused":
+                canonical = cluster.get("canonical") or {}
+                canonical_s = (
+                    f"`{canonical['path']}:{canonical['qualname']}` "
+                    f"(L{canonical['lineno']})"
+                    if canonical
+                    else f"`{cluster.get('canonical_symbol')}`"
                 )
+                lines.append(
+                    f"Canonical helper: {canonical_s}; max coverage "
+                    f"{cluster['max_coverage']:.3f}; {cluster['size']} inline copies."
+                )
+                lines.append("")
+                for member in cluster["members"]:
+                    referenced = (
+                        " (referenced in parent)"
+                        if member.get("canonical_referenced_in_parent")
+                        else ""
+                    )
+                    lines.append(
+                        f"- `{member['path']}:{member['qualname']}:"
+                        f"{member['start_line']}-{member['end_line']}` "
+                        f"({member['nstatements']} stmts, ext={member['extractability']}, "
+                        f"coverage={member['coverage']:.3f}){referenced}"
+                    )
+            else:
+                hints = ", ".join(
+                    f"`{hint}`" for hint in cluster.get("capability_hints", [])
+                )
+                short_tag = " [short-block cluster]" if cluster.get("short_block_cluster") else ""
+                lines.append(
+                    f"{cluster['size']} regions "
+                    f"(edge similarity {cluster['min_edge_sim']:.3f}-{cluster['max_sim']:.3f})"
+                    + (f"; hints: {hints}" if hints else "")
+                    + short_tag
+                )
+                lines.append("")
+                for member in cluster["members"]:
+                    lines.append(
+                        f"- `{member['path']}:{member['qualname']}:"
+                        f"{member['start_line']}-{member['end_line']}` "
+                        f"({member['nstatements']} stmts, ext={member['extractability']})"
+                    )
             lines.extend(["- Verdict:", ""])
     else:
         lines.extend(["No region clusters.", ""])

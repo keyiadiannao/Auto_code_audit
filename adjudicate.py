@@ -154,6 +154,7 @@ def _render_detail(scanner: str, detail: dict) -> str:
 _IDENTITY_FIELDS: dict[str, tuple[str, ...]] = {
     "deadcode": ("path",),
     "duplicates": ("id",),
+    "regions": ("id",),
     "forks": ("key",),
     "capabilities": ("key",),
     "hardcoded": ("path", "pattern"),
@@ -202,6 +203,8 @@ def _ignore_entries(
         return [("duplicates", stamped({"id": detail["id"], "reason": note}))]
     if scanner == "forks":
         return [("forks", stamped({"key": detail["key"], "reason": note}))]
+    if scanner == "regions":
+        return [("regions", stamped({"id": detail["id"], "reason": note}))]
     if scanner == "capabilities":
         key = f"{detail['local']['path']}:{detail['local']['qualname']}"
         return [("capabilities", stamped({"key": key, "reason": note}))]
