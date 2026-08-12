@@ -279,3 +279,35 @@ def short_hash(*parts: str) -> str:
     """
     raw = "\n".join(parts).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:12]
+
+
+def source_tree_sha256(root: Path, package: str | None, all_py: bool = False) -> str:
+    """Canonical content fingerprint of the audited source tree.
+
+    Walks the scanned scope — ``package``'s directory, or the whole ``root``
+    in ``--all-py`` mode — and hashes every ``*.py`` file as
+    ``relpath(scope-relative, posix) + NUL + raw bytes`` in sorted order.  Any
+    byte change, rename, or add/remove of a scanned file invalidates the hash
+    while path separators stay deterministic across platforms.
+
+    This is the binding run_verify uses to prove that the tree the tests ran
+    against is the tree the report was scanned at: ``git_head`` pins the
+    commit, but a dirty working tree can change between scan and verify while
+    the HEAD stays the same — the content hash is what actually pins the
+    audited code state.  A scope that does not exist hashes to the empty
+    digest.
+    """
+    digest = hashlib.sha256()
+    scope = root if all_py else (root / package if package else root)
+    if scope.is_dir():
+        for path in sorted(scope.rglob("*.py")):
+            rel = path.relative_to(scope).as_posix()
+            digest.update(rel.encode("utf-8"))
+            digest.update(b"\0")
+            try:
+                with path.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            except OSError:
+                continue
+    return digest.hexdigest()

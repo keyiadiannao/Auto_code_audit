@@ -20,13 +20,21 @@ when:
    verification is delegated outside this gate (never machine-checked);
 5. ``--test-command`` exits non-zero or ``--test-result`` reports a failure;
 6. ``--test-result`` is unreadable, not a valid artifact, or its ``git_head``
-   does not bind to the post-fix report's git head (provenance.git.head);
+   does not bind to the post-fix report's git head (provenance.git.head) or
+   its ``source_tree_sha256`` to the report's audited source-tree fingerprint
+   — the tests must have run against the exact code state the report
+   describes, not merely the same commit;
 7. a verdict artifact is protocol-invalid — a file the Layer 2 validator
    would reject cannot be skipped out of the gate's input, it rejects the
    gate (fail closed, not fail open);
 8. ``--previous`` was given but the pre-fix report is not comparable to the
-   post-fix report (schema / package / profile / scanner-set mismatch) —
-   the new-risk check would be meaningless.
+   post-fix report (schema / package / profile / scanner-set /
+   audit-config-hash / scanner-bundle-hash mismatch) — the new-risk check
+   would be meaningless;
+9. the live source tree under ``--root`` no longer hashes to the report's
+   ``provenance.source_tree_sha256`` — the code changed after the audit, so
+   neither the test evidence nor the new-risk check applies to the current
+   state; re-run the audit before verifying.
 
 Test-gate vocabulary in the stats: ``passed`` (internal run), ``failed``
 (internal run rejected), ``external_passed`` / ``external_failed`` /
@@ -83,7 +91,9 @@ RISK_PRIORITIES = {"high", "medium"}
 ARTIFACT_STATUSES = {"passed", "failed"}
 
 
-def _external_test_gate(path: Path, report_head: str | None) -> tuple[str, str]:
+def _external_test_gate(
+    path: Path, report_head: str | None, report_tree: str | None
+) -> tuple[str, str]:
     """Read a machine-readable external test artifact and map it to a
     test-gate value.
 
@@ -91,10 +101,13 @@ def _external_test_gate(path: Path, report_head: str | None) -> tuple[str, str]:
     hand-written ``{"status": "passed"}`` cannot be full verification
     evidence.  Required fields: ``status`` (``passed`` or ``failed``),
     ``exit_code`` (int, consistent with ``status``), ``git_head`` (40-char
-    hex commit), and a runner identity via ``tool`` or ``command`` (non-empty
-    string).  The artifact's ``git_head`` must equal the post-fix report's
-    ``provenance.git.head`` — the test evidence must come from the same
-    commit the report was scanned at.  Returns ``(gate, reason)`` where
+    hex commit), ``source_tree_sha256`` (64-char hex content fingerprint of
+    the tree the tests ran against), and a runner identity via ``tool`` or
+    ``command`` (non-empty string).  The artifact's ``git_head`` must equal
+    the post-fix report's ``provenance.git.head`` and its
+    ``source_tree_sha256`` the report's ``provenance.source_tree_sha256`` —
+    the test evidence must come from the same commit *and the same code
+    state* the report was scanned at.  Returns ``(gate, reason)`` where
     ``gate`` is ``external_passed``, ``external_failed``, or
     ``external_invalid``; ``reason`` is a short diagnostic for the invalid
     case.
@@ -136,6 +149,27 @@ def _external_test_gate(path: Path, report_head: str | None) -> tuple[str, str]:
             "external_invalid",
             f"artifact git_head {git_head[:12]} != report git head "
             f"{report_head[:12]}",
+        )
+    tree_hash = payload.get("source_tree_sha256")
+    if not isinstance(tree_hash, str) or len(tree_hash) != 64 or any(
+        char not in "0123456789abcdef" for char in tree_hash
+    ):
+        return (
+            "external_invalid",
+            "artifact source_tree_sha256 must be a 64-char hex digest",
+        )
+    if report_tree is None:
+        return (
+            "external_invalid",
+            "artifact source_tree_sha256 cannot be bound: the report carries "
+            "no source tree hash (stale report; re-run the audit)",
+        )
+    if tree_hash != report_tree:
+        return (
+            "external_invalid",
+            f"artifact source_tree_sha256 {tree_hash[:12]} != report "
+            f"source tree hash {report_tree[:12]}: the tests did not run "
+            "against the audited code state",
         )
     if not any(
         isinstance(payload.get(key), str) and payload[key]
@@ -277,12 +311,15 @@ def _check_report(
     test_gate: str = "not_run",
     previous_comparable: bool | None = None,
     verdict_invalid: list[str] | None = None,
+    tree_mismatch: str | None = None,
 ) -> tuple[list[str], dict[str, Any]]:
     """Evaluate the gate; ``previous_comparable`` is the run_all comparator's
     verdict (None when no ``--previous`` was given; an incompatible baseline
-    rejects the gate because its new-risk check would be meaningless) and
+    rejects the gate because its new-risk check would be meaningless),
     ``verdict_invalid`` are protocol-invalid verdict artifacts, which reject
-    the gate fail-closed instead of being dropped from the input."""
+    the gate fail-closed instead of being dropped from the input, and
+    ``tree_mismatch`` is the message produced when the live source tree no
+    longer matches the report's recorded ``source_tree_sha256``."""
     failures: list[str] = []
     stats: dict[str, Any] = {
         "code_action_verdicts": 0,
@@ -290,6 +327,8 @@ def _check_report(
         "test_gate": test_gate,
         "fully_verified": False,
     }
+    if tree_mismatch:
+        failures.append(tree_mismatch)
     for message in verdict_invalid or []:
         failures.append(f"invalid verdict artifact: {message}")
     if previous is not None and previous_comparable is not True:
@@ -361,6 +400,14 @@ def _check_report(
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--version", action="version", version=__version__)
+    ap.add_argument(
+        "--root",
+        type=Path,
+        default=Path("."),
+        help="repo root the report was generated from (default: current "
+        "directory); the live source tree is fingerprinted here and must "
+        "match the report's provenance.source_tree_sha256",
+    )
     ap.add_argument("--report", type=Path, required=True, help="post-fix report.json")
     ap.add_argument(
         "--verdicts",
@@ -392,9 +439,9 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=None,
         help="machine-readable external test artifact (JSON with required "
-        "'status', 'exit_code', 'git_head', and 'tool'/'command'; the "
-        "artifact's git_head must equal the report's provenance.git.head); "
-        "machine-checked, unlike --no-tests",
+        "'status', 'exit_code', 'git_head', 'source_tree_sha256', and "
+        "'tool'/'command'; git_head and source_tree_sha256 must equal the "
+        "report's provenance values); machine-checked, unlike --no-tests",
     )
     ap.add_argument(
         "--no-tests",
@@ -431,13 +478,19 @@ def main(argv: list[str] | None = None) -> int:
 
     previous_comparable: bool | None = None
     if previous is not None:
-        from run_all import DEFAULT_PROFILE, _diff_previous
+        from run_all import (
+            DEFAULT_PROFILE,
+            _diff_previous,
+            audit_config_hash,
+        )
 
         comparison = _diff_previous(
             previous,
             report.get("scanners", {}),
             report.get("package"),
             (report.get("configuration") or {}).get("profile", DEFAULT_PROFILE),
+            audit_config_hash(report.get("configuration") or {}),
+            ((report.get("provenance") or {}).get("scanner_bundle_hash")),
         )
         previous_comparable = bool(comparison and comparison.get("comparable"))
         if not previous_comparable:
@@ -447,15 +500,36 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
 
+    provenance = report.get("provenance") or {}
+    report_tree = provenance.get("source_tree_sha256")
+    tree_mismatch: str | None = None
+    if report_tree:
+        from _scanner_common import source_tree_sha256
+
+        configuration = report.get("configuration") or {}
+        live_tree = source_tree_sha256(
+            args.root.resolve(),
+            report.get("package"),
+            bool(configuration.get("all_py")),
+        )
+        if live_tree != report_tree:
+            tree_mismatch = (
+                f"live source tree does not match the report's audited tree "
+                f"(tree {live_tree[:12]} != report {report_tree[:12]}); "
+                f"the code changed after the audit, or --root does not point "
+                f"at the tree the audit was run against — re-run the audit "
+                f"before verifying"
+            )
+
     artifact_reason = ""
     if args.test_command:
         result = subprocess.run(args.test_command, shell=True)
         test_gate = "passed" if result.returncode == 0 else "failed"
     elif args.test_result:
-        report_head = (
-            (report.get("provenance") or {}).get("git") or {}
-        ).get("head")
-        test_gate, artifact_reason = _external_test_gate(args.test_result, report_head)
+        report_head = ((provenance.get("git") or {})).get("head")
+        test_gate, artifact_reason = _external_test_gate(
+            args.test_result, report_head, report_tree
+        )
     elif args.no_tests:
         test_gate = "external_unverified"
     else:
@@ -469,6 +543,7 @@ def main(argv: list[str] | None = None) -> int:
         test_gate,
         previous_comparable,
         invalid_verdicts,
+        tree_mismatch,
     )
     if artifact_reason:
         print(f"test artifact: {artifact_reason}", file=sys.stderr)
@@ -478,7 +553,7 @@ def main(argv: list[str] | None = None) -> int:
         args.json.write_text(
             json.dumps(
                 {
-                    "schema_version": 4,
+                    "schema_version": 5,
                     "passed": passed,
                     "failures": failures,
                     "stats": stats,

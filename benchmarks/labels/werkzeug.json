@@ -199,7 +199,8 @@
       "scanner": "duplicates",
       "target_id": "cluster/106e6dae78a6",
       "label": "true_finding",
-      "reason": "verbatim 13-line mimetype_params copied from Response into EnvironBuilder (test.py)"
+      "reason": "verbatim 13-line mimetype_params copied from Response into EnvironBuilder (test.py)",
+      "issue_id": "mimetype-params-copy"
     },
     {
       "scanner": "duplicates",
@@ -289,7 +290,8 @@
       "scanner": "duplicates",
       "target_id": "cluster/89976ed0f586",
       "label": "true_finding",
-      "reason": "identical is_json logic duplicated across Request and Response"
+      "reason": "identical is_json logic duplicated across Request and Response",
+      "issue_id": "is-json-duplication"
     },
     {
       "scanner": "duplicates",
@@ -331,7 +333,8 @@
       "scanner": "duplicates",
       "target_id": "cluster/ac4fe641d23a",
       "label": "true_finding",
-      "reason": "near-verbatim deprecation-wrapper properties (content_md5/pragma) duplicated across Request and Response"
+      "reason": "near-verbatim deprecation-wrapper properties (content_md5/pragma) duplicated across Request and Response",
+      "issue_id": "deprecation-wrapper-properties"
     },
     {
       "scanner": "duplicates",
@@ -487,13 +490,15 @@
       "scanner": "regions",
       "target_id": "region/106e6dae78a6",
       "label": "true_finding",
-      "reason": "mimetype_params is a verbatim copy from Response into EnvironBuilder (on_update + parse_options_header + CallbackDict), versionadded 0.5 vs 0.14; already a duplicates true_finding"
+      "reason": "mimetype_params is a verbatim copy from Response into EnvironBuilder (on_update + parse_options_header + CallbackDict), versionadded 0.5 vs 0.14; already a duplicates true_finding",
+      "issue_id": "mimetype-params-copy"
     },
     {
       "scanner": "regions",
       "target_id": "region/33ded048685c",
       "label": "true_finding",
-      "reason": "Request/Response content_md5 are a verbatim deprecation-wrapper pair; already a duplicates true_finding"
+      "reason": "Request/Response content_md5 are a verbatim deprecation-wrapper pair; already a duplicates true_finding",
+      "issue_id": "deprecation-wrapper-properties"
     },
     {
       "scanner": "regions",

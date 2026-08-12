@@ -49,6 +49,11 @@ def load_labels(path: Path) -> dict[str, Any]:
             raise ValueError(f"label needs scanner and target_id: {path}")
         if not entry.get("reason"):
             raise ValueError(f"label needs a reason: {path}")
+        issue_id = entry.get("issue_id")
+        if issue_id is not None and (
+            not isinstance(issue_id, str) or not issue_id
+        ):
+            raise ValueError(f"label issue_id must be a non-empty string: {path}")
         if (scanner, target_id) in seen:
             raise ValueError(f"duplicated label {scanner}/{target_id}: {path}")
         seen.add((scanner, target_id))
@@ -171,28 +176,45 @@ def _label_stats(
     label; ``coverage`` reports how many of the emitted candidates remain
     unlabelled.  Labels whose target_id matches no current candidate are
     reported as ``unmatched_labels`` (stale or out-of-scope labels).
+
+    True findings may carry an ``issue_id``: several candidates that report
+    the same underlying defect (e.g. a region finding corroborating a
+    duplicates finding for the same function pair) share one id, so the run
+    can report ``unique_issues`` — how many distinct defects the labelled
+    true findings represent — alongside the candidate-level counts.  A label
+    without an ``issue_id`` is its own issue.  An issue counts toward
+    ``unique_issues`` only when at least one of its candidates matched in
+    this run.
     """
     from run_all import _candidate_signatures
 
     candidates = _candidate_signatures(report.get("scanners", {}))
-    labels_by_scanner: dict[str, dict[str, str]] = {}
+    labels_by_scanner: dict[str, dict[str, tuple[str, str]]] = {}
     for entry in labels["labels"]:
         labels_by_scanner.setdefault(entry["scanner"], {})[
             entry["target_id"]
-        ] = entry["label"]
+        ] = (
+            entry["label"],
+            entry.get("issue_id") or f"{entry['scanner']}/{entry['target_id']}",
+        )
 
     per_scanner: dict[str, Any] = {}
     total_candidates = 0
     total_labelled = 0
     total_true = 0
     total_false = 0
+    matched_issues: dict[str, list[str]] = {}
     for scanner, items in candidates.items():
         mapping = labels_by_scanner.get(scanner, {})
         true = false = 0
         for signature, _, _ in items:
             if signature in mapping:
-                if mapping[signature] == "true_finding":
+                label, issue = mapping[signature]
+                if label == "true_finding":
                     true += 1
+                    matched_issues.setdefault(issue, []).append(
+                        f"{scanner}/{signature}"
+                    )
                 else:
                     false += 1
         total_candidates += len(items)
@@ -214,6 +236,19 @@ def _label_stats(
             if target_id not in known:
                 unmatched.append(f"{scanner}/{target_id}")
 
+    # Full issue evidence from the label file: every true label's candidate
+    # plus which of them the current run actually reproduced.
+    issues: dict[str, Any] = {}
+    for entry in labels["labels"]:
+        if entry["label"] != "true_finding":
+            continue
+        issue = entry.get("issue_id") or f"{entry['scanner']}/{entry['target_id']}"
+        issues.setdefault(issue, {"true_candidates": []})["true_candidates"].append(
+            f"{entry['scanner']}/{entry['target_id']}"
+        )
+    for issue, matched in matched_issues.items():
+        issues[issue]["matched"] = sorted(matched)
+
     return {
         "coverage": {
             "candidates": total_candidates,
@@ -229,7 +264,9 @@ def _label_stats(
             "precision": round(total_true / total_labelled, 3)
             if total_labelled
             else None,
+            "unique_issues": len(matched_issues),
         },
+        "issues": dict(sorted(issues.items())),
         "unmatched_labels": sorted(unmatched),
     }
 
@@ -251,6 +288,7 @@ def _aggregate_totals(results: list[dict[str, Any]]) -> dict[str, Any]:
         "labelled": 0,
         "true_findings": 0,
         "false_positives": 0,
+        "unique_issues": 0,
         "python_lines": 0,
         "elapsed_seconds": 0.0,
     }
@@ -264,12 +302,16 @@ def _aggregate_totals(results: list[dict[str, Any]]) -> dict[str, Any]:
             totals["labelled"] += coverage["labelled"]
             totals["true_findings"] += aggregate["true_findings"]
             totals["false_positives"] += aggregate["false_positives"]
+            totals["unique_issues"] += aggregate["unique_issues"]
         totals["python_lines"] += result.get("python_lines", 0)
         totals["elapsed_seconds"] += result.get("elapsed_seconds", 0)
     labelled = totals["labelled"]
     totals["precision"] = round(totals["true_findings"] / labelled, 3) if labelled else None
     true_findings = totals["true_findings"]
     totals["review_burden"] = round(totals["candidates"] / true_findings, 1) if true_findings else None
+    totals["issues_per_finding"] = (
+        round(totals["unique_issues"] / true_findings, 2) if true_findings else None
+    )
     kloc = max(0.001, totals["python_lines"] / 1000.0)
     totals["candidates_per_kloc"] = round(totals["candidates"] / kloc, 2)
     totals["runtime_per_kloc"] = round(totals["elapsed_seconds"] / kloc, 3)
@@ -498,6 +540,7 @@ def main(argv: list[str] | None = None) -> int:
             "TOTALS "
             f"precision={precision if precision is not None else '-'} "
             f"labelled={totals['labelled']}/{totals['candidates']} "
+            f"unique_issues={totals['unique_issues']} "
             f"review_burden={review_burden if review_burden is not None else '-'} "
             f"candidates_per_kloc={totals['candidates_per_kloc']} "
             f"runtime_per_kloc={totals['runtime_per_kloc']}s "

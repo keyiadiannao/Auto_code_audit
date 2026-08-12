@@ -205,7 +205,8 @@
       "scanner": "duplicates",
       "target_id": "cluster/32b6626b9b44",
       "label": "true_finding",
-      "reason": "reader/writer twin helpers with identical 14-line bodies differing only in predicate name"
+      "reason": "reader/writer twin helpers with identical 14-line bodies differing only in predicate name",
+      "issue_id": "text-reader-writer-pair"
     },
     {
       "scanner": "duplicates",
@@ -247,19 +248,22 @@
       "scanner": "duplicates",
       "target_id": "cluster/7bd2e02f7bf8",
       "label": "true_finding",
-      "reason": "identical 11-line env-var parsing in Bash/Zsh/PowerShell get_completion_args; could share a base implementation"
+      "reason": "identical 11-line env-var parsing in Bash/Zsh/PowerShell get_completion_args; could share a base implementation",
+      "issue_id": "completion-args-env-parsing"
     },
     {
       "scanner": "duplicates",
       "target_id": "cluster/833b36278b73",
       "label": "true_finding",
-      "reason": "stdin/stderr/stdout win-console stream trio sharing identical construction logic"
+      "reason": "stdin/stderr/stdout win-console stream trio sharing identical construction logic",
+      "issue_id": "win-console-stream-trio"
     },
     {
       "scanner": "duplicates",
       "target_id": "cluster/8b0fc5ec2cfd",
       "label": "true_finding",
-      "reason": "reader/writer twin helpers with byte-identical 16-line bodies differing only in predicate name"
+      "reason": "reader/writer twin helpers with byte-identical 16-line bodies differing only in predicate name",
+      "issue_id": "binary-reader-writer-pair"
     },
     {
       "scanner": "duplicates",

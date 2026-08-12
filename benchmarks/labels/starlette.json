@@ -133,7 +133,8 @@
       "scanner": "duplicates",
       "target_id": "cluster/37b43b1caf81",
       "label": "true_finding",
-      "reason": "identical 10-line url_path_for on Route and WebSocketRoute differing only by protocol string"
+      "reason": "identical 10-line url_path_for on Route and WebSocketRoute differing only by protocol string",
+      "issue_id": "url-path-for-route-pair"
     },
     {
       "scanner": "duplicates",

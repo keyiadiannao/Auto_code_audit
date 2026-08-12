@@ -787,7 +787,15 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
         == 0
     )
     payload = json.loads(output_json.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 5
+    assert payload["schema_version"] == 6
+    assert payload["provenance"]["audit_config_hash"] == (
+        run_all.audit_config_hash(payload["configuration"])
+    )
+    assert payload["provenance"]["scanner_bundle_hash"] == (
+        run_all.scanner_bundle_hash(
+            payload["provenance"]["scanner_sha256"], run_all.__version__
+        )
+    )
     assert set(payload["provenance"]["scanner_sha256"]) == {
         "_audit_config.py",
         "_scanner_common.py",

@@ -32,7 +32,57 @@ SKILL_DIR = Path(__file__).resolve().parent
 
 __version__ = "0.1.0"
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
+
+#: Configuration keys that change scanner semantics; the audit-config
+#: fingerprint is projected onto these (absolute-path and non-semantic keys
+#: like ``ignore_file``/``config_file`` locations and ``cli_smoke`` are
+#: excluded so reports stay comparable across machines).
+_CONFIG_SEMANTIC_KEYS = (
+    "document_channel",
+    "profile",
+    "public_api",
+    "duplicate_threshold",
+    "duplicate_min_chars",
+    "all_py",
+)
+
+
+def audit_config_hash(configuration: dict) -> str:
+    """Content fingerprint of the semantic audit configuration.
+
+    ``_diff_previous`` requires before/after reports to share it: a threshold
+    change (e.g. ``duplicate_threshold`` 0.85 -> 0.95) or a scope change
+    (``all_py``) can make candidates vanish without any code edit, so the
+    new-risk check is only meaningful when the config is byte-identical.  The
+    ignore rules file content is folded in when one was in effect, so ignore
+    edits invalidate comparability too.
+    """
+    semantic = {key: configuration.get(key) for key in _CONFIG_SEMANTIC_KEYS}
+    for key in ("ignore_file", "config_file"):
+        path = configuration.get(key)
+        if isinstance(path, str) and path:
+            try:
+                semantic[f"{key}_content"] = _sha256(Path(path))
+            except OSError:
+                pass
+    payload = json.dumps(
+        semantic, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("ascii")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def scanner_bundle_hash(sha_map: dict, version: str) -> str:
+    """Fingerprint of the scanner implementation bundle.
+
+    ``provenance.scanner_sha256`` already pins every scanner module
+    individually; this folds the map plus the tool version into one digest so
+    ``_diff_previous`` can reject before/after comparisons across tool
+    upgrades with a single check.
+    """
+    parts = [f"{name}:{sha_map[name]}" for name in sorted(sha_map)]
+    payload = ("\n".join(parts) + "\n" + version).encode("ascii")
+    return hashlib.sha256(payload).hexdigest()
 
 #: Default scanner profile.  ``research`` runs all scanners including TeX
 #: writing-style analysis; ``code`` excludes it.  When changing this default,
@@ -427,15 +477,27 @@ def _stale_ignore_entries(
 
 
 def _diff_previous(
-    previous: dict | None, payloads: dict, package: str, profile: str
+    previous: dict | None,
+    payloads: dict,
+    package: str,
+    profile: str,
+    config_hash: str | None = None,
+    bundle_hash: str | None = None,
 ) -> dict | None:
     """Compare current payloads against a previous report; None when absent.
 
     Returns a ``previous_run`` block: comparable plus per-scanner new/gone
     candidate lists (each item is {"signature", "display"}).
+
+    ``config_hash``/``bundle_hash`` are the current run's audit-config and
+    scanner-bundle fingerprints (``audit_config_hash``/``scanner_bundle_hash``
+    from this module); when the previous report carries different ones the
+    reports are not comparable — candidate deltas could come from a config or
+    tool change instead of a code edit.
     """
     if previous is None:
         return None
+    _prev_provenance = previous.get("provenance") or {}
     reason = None
     if previous.get("schema_version") != SCHEMA_VERSION:
         reason = (
@@ -448,6 +510,10 @@ def _diff_previous(
         reason = "profile changed; candidate reports are not comparable"
     elif set(previous.get("scanners", {})) != set(payloads):
         reason = "scanner set changed; candidate reports are not comparable"
+    elif config_hash is not None and _prev_provenance.get("audit_config_hash") != config_hash:
+        reason = "audit config changed; candidate reports are not comparable"
+    elif bundle_hash is not None and _prev_provenance.get("scanner_bundle_hash") != bundle_hash:
+        reason = "scanner implementation changed; candidate reports are not comparable"
     if reason is not None:
         return {
             "comparable": False,
@@ -643,22 +709,30 @@ def main(argv: list[str] | None = None) -> int:
         Path(scan_style.__file__),
         Path(__file__),
     ]
+    configuration = {
+        "document_channel": not args.no_doc_channel,
+        "profile": args.profile,
+        "public_api": bool(args.public_api),
+        "duplicate_threshold": duplicate_threshold,
+        "duplicate_min_chars": duplicate_min_chars,
+        "all_py": bool(args.all_py),
+        "ignore_file": str(args.ignore.resolve()) if args.ignore else None,
+        "config_file": str(config_path) if config_path.is_file() else None,
+        "cli_smoke": bool(args.cli_smoke),
+    }
+    config_hash = audit_config_hash(configuration)
+    bundle_sha_map = {path.name: _sha256(path) for path in scanner_files}
+    bundle_hash = scanner_bundle_hash(bundle_sha_map, __version__)
+    source_tree_hash = _scanner_common.source_tree_sha256(
+        args.root, args.package, bool(args.all_py)
+    )
     summary = {
         "scanner": "self-audit-run-all",
         "schema_version": SCHEMA_VERSION,
         "package": args.package,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "elapsed_seconds": round(time.perf_counter() - started, 3),
-        "configuration": {
-            "document_channel": not args.no_doc_channel,
-            "profile": args.profile,
-            "public_api": bool(args.public_api),
-            "duplicate_threshold": duplicate_threshold,
-            "duplicate_min_chars": duplicate_min_chars,
-            "ignore_file": str(args.ignore.resolve()) if args.ignore else None,
-            "config_file": str(config_path) if config_path.is_file() else None,
-            "cli_smoke": bool(args.cli_smoke),
-        },
+        "configuration": configuration,
         "state": {
             "project_root": str(args.root),
             "state_dir": str(args.json.parent),
@@ -670,12 +744,18 @@ def main(argv: list[str] | None = None) -> int:
         },
         "provenance": {
             "git": _git_provenance(args.root, args.package),
-            "scanner_sha256": {
-                path.name: _sha256(path) for path in scanner_files
-            },
+            "source_tree_sha256": source_tree_hash,
+            "audit_config_hash": config_hash,
+            "scanner_bundle_hash": bundle_hash,
+            "scanner_sha256": bundle_sha_map,
         },
         "previous_run": _diff_previous(
-            previous, payloads, args.package, args.profile
+            previous,
+            payloads,
+            args.package,
+            args.profile,
+            config_hash,
+            bundle_hash,
         ),
         "scanners": payloads,
     }

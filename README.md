@@ -180,6 +180,12 @@ project, plus corpus totals:
 - `coverage` — labelled vs. total candidates per project, so unlabelled
   channels stay visible instead of being silently dropped
 - `review_burden` — candidates per confirmed finding (corpus total)
+- `unique_issues` — distinct defects behind the true findings: labels may
+  carry an `issue_id`, so several candidates reporting one defect (a region
+  twin corroborating a `duplicates` finding for the same function pair)
+  count once; an issue counts only when a run reproduced it
+- `issues` — per-issue evidence: every true label of the issue plus which of
+  them the run matched
 - `candidates_per_kloc` and `runtime_per_kloc` — cost of a full pass against
   package size (lines of scanned `.py` code)
 
@@ -210,12 +216,18 @@ parsers with distinct grammars, and token-coincidence matches where the
 region never actually inline-copies the canonical named helper).
 Corpus totals at the pinned commits: precision 0.038 (16/423), review burden
 37.8 candidates per confirmed finding, 6.34 candidates per KLOC, runtime
-~0.3s per KLOC. A label file whose `target_id` matches no candidate in the
-pinned commit is reported as `unmatched_labels` (stale scope), so label drift
-is visible rather than silent. Fourteen `unmatched_labels` entries exist,
-every one a `false_positive` constructor/`__init__`-boilerplate or ASGI-idiom
-label created before the `__init__`-canonical helper filter landed; the two
-`regions` `true_finding` labels still match, so no confirmed finding was lost.
+~0.3s per KLOC. The 16 labelled true findings collapse to 10 unique issues:
+each corroborating twin label shares the issue id of the `duplicates`
+finding it confirms (pytest's two plugin-pair defects, werkzeug's
+`mimetype_params` and `content_md5` copies), so the region twins add channel
+evidence without inflating the defect count. A label file whose `target_id`
+matches no candidate in the pinned commit is reported as `unmatched_labels`
+(stale scope), so label drift is visible rather than silent. Eleven entries
+are currently unmatched — seven `false_positive`
+constructor/`__init__`-boilerplate or ASGI-idiom labels created before the
+`__init__`-canonical helper filter landed, plus four stale `regions` twin
+labels whose issues are still counted through their matched `duplicates`
+siblings, so no unique issue was lost.
 
 The regions scanner adds ~1.9 candidates per KLOC on the six pinned repos
 (184 clusters; helper-not-reused matches dominate at 152, plain

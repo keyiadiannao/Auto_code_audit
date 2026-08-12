@@ -476,16 +476,33 @@ def test_verify_cli_rejects_without_test_gate(tmp_path) -> None:
     assert "no test evidence" in result.stderr + result.stdout
 
 
-def _full_report(clusters: list[dict], head: str) -> dict:
-    """A report shaped like run_all's payload: comparable metadata plus git
-    provenance the test artifact's git_head can bind to."""
-    from run_all import SCHEMA_VERSION
+#: The tree fingerprint of a scope that does not exist (no *.py files): the
+#: CLI tests run from the repo root where ``pkg/`` is absent, so a report
+#: with this hash still matches the live tree the gate recomputes.
+_EMPTY_TREE = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
+
+def _full_report(
+    clusters: list[dict], head: str, tree: str = _EMPTY_TREE
+) -> dict:
+    """A report shaped like run_all's payload: comparable metadata plus git
+    provenance the test artifact's git_head can bind to and a source-tree
+    fingerprint the artifact's source_tree_sha256 must match.  The
+    audit-config hash is computed the same way run_verify recomputes it, so
+    baseline and post-fix reports compare equal."""
+    from run_all import SCHEMA_VERSION, audit_config_hash
+
+    configuration = {"profile": "code", "all_py": False}
     return {
         "schema_version": SCHEMA_VERSION,
         "package": "pkg",
-        "configuration": {"profile": "code"},
-        "provenance": {"git": {"head": head}},
+        "configuration": configuration,
+        "provenance": {
+            "git": {"head": head},
+            "source_tree_sha256": tree,
+            "audit_config_hash": audit_config_hash(configuration),
+            "scanner_bundle_hash": "2" * 64,
+        },
         "scanners": {"duplicates": {"clusters": clusters}},
     }
 
@@ -518,6 +535,7 @@ def test_verify_external_artifact_passed_is_fully_verified(tmp_path) -> None:
                 "summary": "42 passed",
                 "exit_code": 0,
                 "git_head": head,
+                "source_tree_sha256": _EMPTY_TREE,
             }
         ),
         encoding="utf-8",
@@ -564,6 +582,7 @@ def test_verify_external_artifact_passed_without_previous_is_not_fully_verified(
                 "tool": "pytest",
                 "exit_code": 0,
                 "git_head": head,
+                "source_tree_sha256": _EMPTY_TREE,
             }
         ),
         encoding="utf-8",
@@ -604,6 +623,7 @@ def test_verify_external_artifact_failure_rejects(tmp_path) -> None:
                 "tool": "pytest",
                 "exit_code": 3,
                 "git_head": head,
+                "source_tree_sha256": _EMPTY_TREE,
             }
         ),
         encoding="utf-8",
@@ -644,6 +664,10 @@ def test_verify_external_artifact_invalid_rejects(tmp_path) -> None:
         ("no-runner.json", '{"status": "passed", "exit_code": 0, "git_head": "' + "d" * 40 + '"}'),
         # A bare git_head mismatch between artifact and report rejects.
         ("wrong-head.json", '{"status": "passed", "exit_code": 0, "git_head": "' + "e" * 40 + '", "tool": "pytest"}'),
+        # The tree fingerprint is mandatory and must match the report's.
+        ("missing-tree.json", '{"status": "passed", "exit_code": 0, "git_head": "' + "d" * 40 + '", "tool": "pytest"}'),
+        ("bad-tree.json", '{"status": "passed", "exit_code": 0, "git_head": "' + "d" * 40 + '", "tool": "pytest", "source_tree_sha256": "xyz"}'),
+        ("wrong-tree.json", '{"status": "passed", "exit_code": 0, "git_head": "' + "d" * 40 + '", "tool": "pytest", "source_tree_sha256": "' + "f" * 64 + '"}'),
     ):
         artifact_path = tmp_path / name
         artifact_path.write_text(content, encoding="utf-8")
@@ -662,10 +686,61 @@ def test_verify_external_artifact_invalid_rejects(tmp_path) -> None:
         assert "invalid" in result.stderr + result.stdout, name
 
 
+def test_verify_live_tree_mismatch_rejects(tmp_path) -> None:
+    """The gate fingerprints the live tree under --root and rejects when it
+    no longer matches the report's audited tree: code changed after the
+    audit, so no evidence applies to the current state."""
+    import subprocess
+    import sys
+
+    from _scanner_common import source_tree_sha256
+
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "a.py").write_text("x = 1\n", encoding="utf-8")
+    tree = source_tree_sha256(tmp_path, "pkg")
+
+    head = "g" * 40
+    report_path = tmp_path / "report.json"
+    verdicts_path = tmp_path / "verdicts.json"
+    report_path.write_text(json.dumps(_full_report([], head, tree=tree)), encoding="utf-8")
+    verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
+    artifact_path = tmp_path / "ci-result.json"
+    artifact_path.write_text(
+        json.dumps(
+            {
+                "status": "passed",
+                "tool": "pytest",
+                "exit_code": 0,
+                "git_head": head,
+                "source_tree_sha256": tree,
+            }
+        ),
+        encoding="utf-8",
+    )
+    # The tree changes after the audit and the artifact were produced.
+    (pkg / "a.py").write_text("x = 2\n", encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "run_verify",
+            "--root", str(tmp_path),
+            "--report", str(report_path),
+            "--verdicts", str(verdicts_path),
+            "--test-result", str(artifact_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "re-run the audit" in result.stderr + result.stdout
+
+
 def test_verify_incompatible_previous_rejects(tmp_path) -> None:
-    """A pre-patch report with a different schema, package, or scanner set
-    makes the new-risk check meaningless: the gate rejects rather than
-    trusting a garbage baseline."""
+    """A pre-patch report with a different schema, package, scanner set,
+    audit-config hash, or scanner-bundle hash makes the new-risk check
+    meaningless: the gate rejects rather than trusting a garbage
+    baseline."""
     import subprocess
     import sys
 
@@ -692,6 +767,42 @@ def test_verify_incompatible_previous_rejects(tmp_path) -> None:
     )
     assert result.returncode == 1
     assert "not comparable" in result.stderr + result.stdout
+
+
+def test_verify_config_or_bundle_hash_mismatch_rejects(tmp_path) -> None:
+    """A baseline whose audit-config or scanner-bundle fingerprint differs
+    from the post-fix report's is not comparable: candidate deltas could
+    come from a config or tool change instead of a code edit."""
+    import subprocess
+    import sys
+
+    head = "h" * 40
+    report_path = tmp_path / "report.json"
+    previous_path = tmp_path / "previous.json"
+    verdicts_path = tmp_path / "verdicts.json"
+    report_path.write_text(json.dumps(_full_report([], head)), encoding="utf-8")
+    verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
+    for key, value in (
+        ("audit_config_hash", "9" * 64),
+        ("scanner_bundle_hash", "8" * 64),
+    ):
+        previous = _full_report([], head)
+        previous["provenance"][key] = value
+        previous_path.write_text(json.dumps(previous), encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "run_verify",
+                "--report", str(report_path),
+                "--verdicts", str(verdicts_path),
+                "--previous", str(previous_path),
+                "--no-tests",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 1, key
+        assert "not comparable" in result.stderr + result.stdout, key
 
 
 def test_verify_invalid_verdict_artifact_rejects_gate(tmp_path) -> None:

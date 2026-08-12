@@ -9,8 +9,8 @@ jobs:
   typecheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -26,8 +26,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -96,7 +96,7 @@ jobs:
           json.dump(verdicts, open("dogfood/verdicts.json", "w"), indent=2)
           PY
           # 1) a still-present code-action verdict rejects the gate
-          python run_verify.py --report dogfood/audit.json --verdicts dogfood/verdicts.json --no-tests \
+          python run_verify.py --root dogfood --report dogfood/audit.json --verdicts dogfood/verdicts.json --no-tests \
             && { echo "verify should have rejected the still-present finding"; exit 1; } || true
           python - <<'PY'
           import json
@@ -108,10 +108,10 @@ jobs:
           PY
           # 2) the patch introduced a new DEAD module: the unified severity
           #    fallback (status=DEAD -> high) rejects it against --previous
-          python run_verify.py --report dogfood/audit.json --verdicts dogfood/verdicts.json \
+          python run_verify.py --root dogfood --report dogfood/audit.json --verdicts dogfood/verdicts.json \
             --previous dogfood/pre.json --no-tests \
             && { echo "verify should have rejected the new DEAD module"; exit 1; } || true
           # 3) ghost verdicts + explicit test skip + no previous = acceptance
-          python run_verify.py --report dogfood/audit.json --verdicts dogfood/verdicts.json --no-tests
+          python run_verify.py --root dogfood --report dogfood/audit.json --verdicts dogfood/verdicts.json --no-tests
       - name: Whitespace hygiene
         run: git diff --check

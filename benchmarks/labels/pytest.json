@@ -421,7 +421,8 @@
       "scanner": "duplicates",
       "target_id": "cluster/8d13ea40e8bb",
       "label": "true_finding",
-      "reason": "near-verbatim 38-39L exception hook duplicated across threadexception and unraisableexception plugins"
+      "reason": "near-verbatim 38-39L exception hook duplicated across threadexception and unraisableexception plugins",
+      "issue_id": "exception-hook-plugin-pair"
     },
     {
       "scanner": "duplicates",
@@ -535,7 +536,8 @@
       "scanner": "duplicates",
       "target_id": "cluster/dfab0110b285",
       "label": "true_finding",
-      "reason": "near-verbatim 37L collector duplicated across threadexception and unraisableexception plugins"
+      "reason": "near-verbatim 37L collector duplicated across threadexception and unraisableexception plugins",
+      "issue_id": "collect-hook-plugin-pair"
     },
     {
       "scanner": "duplicates",
@@ -595,7 +597,8 @@
       "scanner": "regions",
       "target_id": "region/078c50de785c",
       "label": "true_finding",
-      "reason": "pytest_configure is a near-verbatim copy between the same plugin pair (excepthook vs unraisablehook wiring) — same duplication as the collect_* pair"
+      "reason": "pytest_configure is a near-verbatim copy between the same plugin pair (excepthook vs unraisablehook wiring) — same duplication as the collect_* pair",
+      "issue_id": "exception-hook-plugin-pair"
     },
     {
       "scanner": "regions",
@@ -709,7 +712,8 @@
       "scanner": "regions",
       "target_id": "region/e670a97200af",
       "label": "true_finding",
-      "reason": "near-verbatim copy of the collect hook between the threadexception and unraisableexception plugins: same errors-loop structure differing only in stash/warning types"
+      "reason": "near-verbatim copy of the collect hook between the threadexception and unraisableexception plugins: same errors-loop structure differing only in stash/warning types",
+      "issue_id": "collect-hook-plugin-pair"
     },
     {
       "scanner": "regions",
@@ -757,13 +761,15 @@
       "scanner": "regions",
       "target_id": "region/4d40293005af",
       "label": "true_finding",
-      "reason": "pytest_configure is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (excepthook vs unraisablehook wiring)"
+      "reason": "pytest_configure is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (excepthook vs unraisablehook wiring)",
+      "issue_id": "exception-hook-plugin-pair"
     },
     {
       "scanner": "regions",
       "target_id": "region/dfab0110b285",
       "label": "true_finding",
-      "reason": "collect hook is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (collect_thread_exception vs collect_unraisable)"
+      "reason": "collect hook is a near-verbatim copy between the threadexception/unraisableexception plugin pair; same copy-paste the duplicates channel flags (collect_thread_exception vs collect_unraisable)",
+      "issue_id": "collect-hook-plugin-pair"
     }
   ]
 }

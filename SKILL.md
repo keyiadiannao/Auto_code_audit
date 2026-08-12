@@ -203,8 +203,34 @@ After edits:
 4. Recompute any affected frozen-result summary independently. Run parity
    tests for shared forward/readout changes and finish with `git diff --check`.
 
+5. Run the provenance gate against the post-fix report when the audit has
+   verdicts, a pre-patch report, and machine-readable test evidence:
+
+   ```text
+   <python> run_verify.py --root <root> \
+     --report <root>/reports/latest.json \
+     --verdicts <root>/reports/verdicts.json \
+     --previous <pre-patch-report>.json \
+     --test-result <ci-result>.json
+   ```
+
+   `--root` must point at the tree the audit ran against (the same value
+   `run_all.py --root` received, or the current directory when the audit
+   ran from the project root): the gate fingerprints the live source tree
+   and requires it to equal the report's recorded `source_tree_sha256`.
+
+   The gate is machine-checked, not advisory. Remediation is complete only
+   when it prints `fully_verified=True`: the recorded test run passed and ran
+   against the exact audited source tree (`source_tree_sha256` matches the
+   live tree), the test artifact is bound to the report's git head, and a
+   comparable pre-patch report (same audit config, scanner bundle, profile,
+   and package) proves the patch introduced no new candidate. A `VERIFY FAIL`
+   means the patch or its evidence is not done — return to Layer 2.
+
 If a gate fails, return to semantic review. A clean static report cannot
-override a failed behavior or provenance gate.
+override a failed behavior or provenance gate, and a passing test suite
+cannot override a provenance mismatch: verification without a comparable
+pre-patch report or a bound test artifact never reaches `fully_verified`.
 
 ## Scope
 

@@ -101,6 +101,7 @@ def _toy_labels() -> dict:
                 "scanner": "deadcode",
                 "target_id": "DEAD/lib/a.py",
                 "label": "true_finding",
+                "issue_id": "unused-module",
                 "reason": "module is never imported",
             },
             {
@@ -119,6 +120,7 @@ def _toy_labels() -> dict:
                 "scanner": "duplicates",
                 "target_id": "cluster/abc123",
                 "label": "true_finding",
+                "issue_id": "unused-module",
                 "reason": "identical implementation",
             },
         ],
@@ -134,10 +136,56 @@ def test_label_stats_compute_precision_and_coverage() -> None:
         "true_findings": 2,
         "false_positives": 1,
         "precision": 0.667,
+        "unique_issues": 1,
     }
     assert stats["unmatched_labels"] == ["deadcode/DEAD/lib/zzz.py"]
     assert stats["per_scanner"]["duplicates"]["precision"] == 1.0
     assert stats["per_scanner"]["forks"]["labelled"] == 0
+    # cross-scanner issue grouping: the matched duplicates and deadcode true
+    # findings share one issue_id, so two candidates collapse into one issue;
+    # the stale true label is its own issue but is not reproduced.
+    assert stats["issues"] == {
+        "unused-module": {
+            "true_candidates": [
+                "deadcode/DEAD/lib/a.py",
+                "duplicates/cluster/abc123",
+            ],
+            "matched": [
+                "deadcode/DEAD/lib/a.py",
+                "duplicates/cluster/abc123",
+            ],
+        },
+        "deadcode/DEAD/lib/zzz.py": {
+            "true_candidates": ["deadcode/DEAD/lib/zzz.py"],
+        },
+    }
+
+
+def test_label_stats_counts_matched_issues_only(tmp_path: Path) -> None:
+    """An issue whose labels are all stale (no current candidate) must not
+    inflate unique_issues: it was adjudicated once but is not reproduced by
+    this run."""
+    labels = _toy_labels()
+    labels["labels"].append(
+        {
+            "scanner": "deadcode",
+            "target_id": "DEAD/lib/zzz.py",
+            "label": "true_finding",
+            "issue_id": "unused-module",
+            "reason": "stale twin of the matched finding",
+        }
+    )
+    stats = _label_stats(_toy_report(), labels)
+    assert stats["aggregate"]["unique_issues"] == 1
+    assert stats["issues"]["unused-module"]["true_candidates"] == [
+        "deadcode/DEAD/lib/a.py",
+        "duplicates/cluster/abc123",
+        "deadcode/DEAD/lib/zzz.py",
+    ]
+    assert stats["issues"]["unused-module"]["matched"] == [
+        "deadcode/DEAD/lib/a.py",
+        "duplicates/cluster/abc123",
+    ]
 
 
 def test_label_stats_without_labels_leaves_all_unlabelled() -> None:
@@ -173,6 +221,31 @@ def test_load_labels_validates_entries(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="label must be one of"):
+        load_labels(path)
+
+
+def test_load_labels_rejects_bad_issue_id(tmp_path: Path) -> None:
+    path = tmp_path / "labels.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "project_id": "toy",
+                "commit": "0" * 40,
+                "labels": [
+                    {
+                        "scanner": "deadcode",
+                        "target_id": "DEAD/a.py",
+                        "label": "true_finding",
+                        "issue_id": "",
+                        "reason": "empty issue id",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="issue_id must be a non-empty string"):
         load_labels(path)
 
 
@@ -228,6 +301,7 @@ def test_aggregate_totals_combine_labelled_results() -> None:
                         "true_findings": 4,
                         "false_positives": 1,
                         "precision": 0.8,
+                        "unique_issues": 3,
                     },
                 },
             },
@@ -239,6 +313,8 @@ def test_aggregate_totals_combine_labelled_results() -> None:
     assert totals["true_findings"] == 4
     assert totals["precision"] == 0.8
     assert totals["review_burden"] == 2.5
+    assert totals["unique_issues"] == 3
+    assert totals["issues_per_finding"] == 0.75
     assert totals["candidates_per_kloc"] == 2.0
     assert totals["runtime_per_kloc"] == 0.6
 
