@@ -249,3 +249,34 @@
   matches. **Boundary**: compose/agg-family adjudications in an active
   refactor zone must be re-verified after the refactor lands before they are
   treated as final.
+
+## 15. Region clusters: helper inlining is a deliberate fork family, not a defect
+
+- **Case**: the region scanner's first real-project run (reproduce_submit)
+  reported 43 high clusters — 132 helper_not_reused + 64 shared_capability
+  total, 43 flagged high. Adjudication found **zero computation-level bugs**
+  and zero clusters needing code changes.
+- **What the clusters actually are**:
+  - `y_and_y_swap` (mechanism/_ring_utils.py) inlined at 30 sites with
+    cov=1.00 — a trivial tuple-swap idiom; inlining is the standalone-script
+    design, not drift.
+  - `_validate_model_tensor` (n=15), `_make_xor_data_v1` (n=12),
+    `score_provider_from_gauge` (n=5), `_print_table` (n=7),
+    `_resolve_ckpt_root` (n=4) — short validation/construction/printing
+    blocks repeated across frozen experiment scripts. Refactoring them would
+    invalidate frozen evidence fingerprints; risk exceeds benefit.
+  - CLI boilerplate clusters (ArgumentParser idiom), experiment twin
+    families (e51/e52/e53, e70/e72/e73), audit-script families, test
+    mirrors — all deliberate per-script self-containment, consistent with
+    the 87 fork pairs already adjudicated in section 14's small channel.
+- **The one heuristic false positive**: `3469d0221c30` fired the
+  `asymmetric_indexing` signal on `scores_from_prepared_tables` vs
+  `_forward_intervened` (intervention_forward.py / qk_blockmask.py). Manual
+  index-by-index review proved both blocks equivalent: score tables are
+  structurally cross-indexed (S_ij = query index x key index), so "a in dim 0,
+  b in dim 1" is a legal invariant, not an asymmetry bug.
+- **Resolution**: 43 entries registered in `ignore.json` under `regions`
+  (id + reason + date + owner). Rerun: 196 clusters → 153, ignored=43,
+  high=0. Future drift is still caught by the previous-run delta report: a
+  changed inline copy lowers its coverage and the cluster reappears in the
+  delta even though the stale ID is suppressed.
