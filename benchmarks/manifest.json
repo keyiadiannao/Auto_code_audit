@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "description": "Fixed-commit pilot corpus for read-only code-profile audits.",
+  "projects": [
+    {
+      "id": "requests",
+      "url": "https://github.com/psf/requests.git",
+      "commit": "8068356288978c4f54661ae6f95afe0e0831885e",
+      "package": "src/requests",
+      "license": "Apache-2.0",
+      "all_py": true
+    },
+    {
+      "id": "click",
+      "url": "https://github.com/pallets/click.git",
+      "commit": "9c4dfdaebe0e6b2aabc566eb81f6f10eb5cd6ea1",
+      "package": "src/click",
+      "license": "BSD-3-Clause",
+      "all_py": true
+    },
+    {
+      "id": "httpx",
+      "url": "https://github.com/encode/httpx.git",
+      "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "package": "httpx",
+      "license": "BSD-3-Clause",
+      "all_py": true
+    }
+  ]
+}

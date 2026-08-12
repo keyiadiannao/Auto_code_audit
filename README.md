@@ -127,6 +127,25 @@ An optional `<root>/audit.config.json` tunes scanner thresholds and exclusions.
 The config is checked for supported keys, types, ranges, and schema version;
 invalid values produce one warning and use compiled-in defaults.
 
+## Benchmark Corpus
+
+The fixed-commit pilot corpus lives in `benchmarks/manifest.json`. It contains
+small, popular Python projects with different package layouts. The harness
+clones the declared commits, runs a read-only `code` profile, and writes one
+JSON result plus logs per project:
+
+```powershell
+python benchmarks\run_benchmarks.py `
+  --workspace C:\Temp\auto-code-audit-benchmarks `
+  --output C:\Temp\auto-code-audit-benchmarks\results.json
+```
+
+Use `--project requests` to run one entry, `--refresh` to replace a checkout at
+the wrong commit, and `--dry-run` to validate commands without network access.
+The harness does not install or execute target-project code. For flat and
+`src/` layouts, manifest entries use `--all-py`; ordinary audits retain the
+configured subdirectory scope.
+
 Consecutive runs against the same `--json` path diff against the previous
 report: `latest.json` gains a `previous_run` block (per-scanner new/gone
 signatures) and `latest.md` gains a "Changes since last run" section, so a
@@ -207,6 +226,7 @@ adjudicate.py           resumable Layer-2 semantic candidate review
 scan_*.py               the seven deterministic scanners
 scan_cli_smoke.py       entrypoint --help regression gate (run_all --cli-smoke)
 pyproject.toml          packaging metadata; console scripts auto-code-audit/-adjudicate
+benchmarks/             fixed-commit pilot corpus and read-only benchmark harness
 SKILL.md                the full three-layer protocol
 LESSONS.md              false-positive lesson archive (read before Layer 2)
 ignore.json             approved suppression registry (ships empty)
