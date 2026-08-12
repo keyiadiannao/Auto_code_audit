@@ -579,9 +579,11 @@ def main(argv: list[str] | None = None) -> int:
     for metric, values in hits.items():
         if values:
             print(f"  [{values[0]['severity']}] {metric}: {len(values)} hits")
-            for hit in values[:12]:
-                line = hit.get("line", "-")  # rate metrics are file-scoped
-                print(f"      {hit['path']}:{line} {hit['text'][:100]}")
+            for sample in values[:12]:
+                if not isinstance(sample, dict):
+                    continue
+                line_display = sample.get("line", "-")  # rate metrics are file-scoped
+                print(f"      {sample['path']}:{line_display} {sample['text'][:100]}")
     return 0
 
 

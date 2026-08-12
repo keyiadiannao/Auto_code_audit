@@ -34,6 +34,7 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Any
 
 from _scanner_common import (
     EXCLUDE_PARTS,
@@ -129,6 +130,10 @@ def _iter_python(pkg: Path, subdirs: list[str]):
             yield path, rel.as_posix()
 
 
+def _line_sort_key(item: dict[str, Any]) -> int:
+    return item["line"]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -181,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
     defensive_param_loosening = []
     env_written = []
     env_read = []
-    generation_consts: dict[str, list[dict]] = defaultdict(list)
+    generation_consts: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     for path, rel in _iter_python(pkg, list(subdirs)):
         try:
@@ -481,14 +486,14 @@ def main(argv: list[str] | None = None) -> int:
         env_written_not_read.append(item)
 
     env_read_files = {item["path"] for item in env_read}
-    generation_path_without_env = [
-        {
-            "path": rel,
-            "constants": sorted(items, key=lambda i: i["line"]),
-        }
-        for rel, items in sorted(generation_consts.items())
-        if rel not in env_read_files
-    ]
+    generation_path_without_env = []
+    for rel in sorted(generation_consts.keys()):
+        if rel in env_read_files:
+            continue
+        consts_sorted = sorted(generation_consts[rel], key=_line_sort_key)
+        generation_path_without_env.append(
+            {"path": rel, "constants": consts_sorted}
+        )
 
     ignore = load_ignore(args.ignore)
     contracts_ignore = ignore.get("contracts", {}) or {}

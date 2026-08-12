@@ -500,12 +500,12 @@ def main(argv: list[str] | None = None) -> int:
         f"(name={match_modes['name']} doc={match_modes['doc']}) "
         f"sig_match={sig_matches} untagged={len(untagged)}"
     )
-    for item in overlap[:top]:
-        local = item["local"]
-        lib = item["lib"]
-        marker = " SIG-MATCH" if item["signature_match"] else ""
+    for cand in overlap[:top]:
+        local = cand["local"]
+        lib = cand["lib"]
+        marker = " SIG-MATCH" if cand["signature_match"] else ""
         print(
-            f"=== [{item['match']} sim={item['similarity']:.2f}{marker}] "
+            f"=== [{cand['match']} sim={cand['similarity']:.2f}{marker}] "
             f"{local['path']}:{local['qualname']} (L{local['lineno']})"
         )
         print(f"    -> lib {lib['path']}:{lib['qualname']} (L{lib['lineno']}, "

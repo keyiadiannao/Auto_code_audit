@@ -82,13 +82,14 @@ def _string_constants(node) -> list[str]:
     ]
 
 
-def _call_argument(node, position: int, name: str):
+def _call_argument(node, position: int, name: str | None):
     """Read a call argument by position or keyword, or None."""
     if node.args and len(node.args) > position:
         return node.args[position]
-    for keyword in node.keywords:
-        if keyword.arg == name:
-            return keyword.value
+    if name is not None:
+        for keyword in node.keywords:
+            if keyword.arg == name:
+                return keyword.value
     return None
 
 
@@ -115,7 +116,7 @@ def _dynamic_import_hints(tree) -> list[tuple[str, str, int]]:
     """
     hints: list[tuple[str, str, int]] = []
     for node in ast.walk(tree):
-        if not _is_spec_file_load(node):
+        if not (isinstance(node, ast.Call) and _is_spec_file_load(node)):
             continue
         name_arg = _call_argument(node, 0, "fullname") or _call_argument(
             node, 0, "name"
@@ -437,15 +438,13 @@ def main(argv: list[str] | None = None) -> int:
     for source_path, hints in dynamic_hints_by_file.items():
         rel = source_path.relative_to(pkg).as_posix()
         for mechanism, hint, lineno in hints:
-            target_module = _resolve_dynamic_target(hint, source_path, pkg, modules)
-            if target_module is None or target_module == _module_name(
-                source_path, pkg
-            ):
+            resolved = _resolve_dynamic_target(hint, source_path, pkg, modules)
+            if resolved is None or resolved == _module_name(source_path, pkg):
                 continue
-            dynamic_edges[target_module].append(
+            dynamic_edges[resolved].append(
                 {"path": rel, "mechanism": mechanism, "lineno": lineno}
             )
-            import_refs[target_module].append(rel)
+            import_refs[resolved].append(rel)
 
     docs: set[Path] = set()
     if not args.no_doc_channel:
@@ -575,8 +574,8 @@ def main(argv: list[str] | None = None) -> int:
         f"skipped={len(skipped)}"
     )
     for edge in all_dynamic_edges:
-        lineno = edge.get("lineno") or "-"
-        print(f"  [dynamic] {edge['path']} {edge['mechanism']} -> {edge['target']} (L{lineno})")
+        edge_lineno = edge.get("lineno") or "-"
+        print(f"  [dynamic] {edge['path']} {edge['mechanism']} -> {edge['target']} (L{edge_lineno})")
     for item in payload["candidates"]:
         suffix = ""
         if item["doc_refs"]:

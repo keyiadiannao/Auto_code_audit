@@ -16,6 +16,7 @@ import json
 import re
 import sys
 from collections import defaultdict
+from typing import Any
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -185,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     records: list[FunctionRecord] = []
-    parse_failures: list[str] = []
+    parse_failures: list[dict[str, str]] = []
     for sub in subdirs:
         subdir = pkg / sub
         if not subdir.is_dir():
@@ -228,10 +229,10 @@ def main(argv: list[str] | None = None) -> int:
     for i, record in enumerate(records):
         digest = hashlib.sha256(record.normalized.encode("utf-8")).hexdigest()
         exact[digest].append(i)
-    for members in exact.values():
-        for index in members[1:]:
-            union_find.union(members[0], index)
-            edge_similarity[tuple(sorted((members[0], index)))] = 1.0
+    for exact_members in exact.values():
+        for index in exact_members[1:]:
+            union_find.union(exact_members[0], index)
+            edge_similarity[(exact_members[0], index)] = 1.0
 
     candidate_pairs = _candidate_pairs(records)
     for left, right in sorted(candidate_pairs):
@@ -258,8 +259,8 @@ def main(argv: list[str] | None = None) -> int:
         if entry.get("path")
     ]
 
-    reports = []
-    ignored = []
+    reports: list[dict[str, Any]] = []
+    ignored: list[dict[str, Any]] = []
     boilerplate_skipped = 0
     for indices in components.values():
         if len(indices) < 2:

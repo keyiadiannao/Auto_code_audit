@@ -15,7 +15,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator, cast
 
 # ---------------------------------------------------------------------------
 # Directory / exclusion constants
@@ -86,12 +86,13 @@ class NormalizeAST(ast.NodeTransformer):
 
     def visit_arg(self, node: ast.arg) -> ast.arg:
         node.arg = "_arg"
-        return self.generic_visit(node)
+        self.generic_visit(node)
+        return node
 
     def visit_Constant(self, node: ast.Constant) -> ast.Constant:
         value = node.value
         if value is None or isinstance(value, bool):
-            replacement = value
+            replacement: object = value
         elif isinstance(value, str):
             replacement = "_str"
         elif isinstance(value, bytes):
@@ -100,7 +101,9 @@ class NormalizeAST(ast.NodeTransformer):
             replacement = 0
         else:
             replacement = None
-        return ast.copy_location(ast.Constant(value=replacement), node)
+        return ast.copy_location(
+            ast.Constant(value=cast(Any, replacement)), node
+        )
 
     def visit_JoinedStr(self, node: ast.JoinedStr) -> ast.Constant:
         return ast.copy_location(ast.Constant(value="_fstr"), node)

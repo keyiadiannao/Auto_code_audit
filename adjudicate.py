@@ -22,6 +22,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -154,6 +155,7 @@ def _suppression_identity(section: str, entry: dict) -> tuple:
     ``reason``/``date``/``owner`` annotations.  This means re-suppressing
     the same candidate with a different reason keeps the first record.
     """
+    fields: tuple[str, ...]
     if section.startswith("contracts/"):
         fields = ("key",)
     else:
@@ -335,7 +337,7 @@ def _project_root(
 ) -> Path:
     if explicit_root is not None:
         return explicit_root.resolve()
-    state = report.get("state")
+    state: dict[str, Any] | None = report.get("state")
     if isinstance(state, dict) and state.get("project_root"):
         return Path(state["project_root"]).resolve()
     if report_path.parent.name == "reports":
@@ -419,7 +421,8 @@ def main(argv: list[str] | None = None) -> int:
 
     root = _project_root(report_path, report, args.root)
     owner = args.owner or _git_owner(root)
-    state = report.get("state") if isinstance(report.get("state"), dict) else {}
+    state_raw = report.get("state")
+    state: dict[str, Any] = state_raw if isinstance(state_raw, dict) else {}
     args.report = report_path
     args.ignore = _resolve_path(
         args.ignore,

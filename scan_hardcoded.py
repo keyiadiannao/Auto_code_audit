@@ -12,6 +12,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import _audit_config
 from _scanner_common import load_ignore, short_hash as _short_hash, write_json as _write_json
@@ -19,7 +20,7 @@ from _scanner_common import load_ignore, short_hash as _short_hash, write_json a
 # Pattern list: tune per project. `exclude_paths` ships empty — canonical
 # implementations that legitimately own the pattern belong there (or in
 # ignore.json under `hardcoded`).
-PATTERNS = [
+PATTERNS: list[dict[str, Any]] = [
     {
         "name": "readout_pool_then_ln_inline",
         "regex": r"norm_f\(\s*[A-Za-z_][A-Za-z0-9_]*\.mean\(dim=1\)\s*\)",
@@ -97,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
 
-    patterns = PATTERNS
+    patterns: list[dict[str, Any]] = PATTERNS
     config_patterns = hard_cfg.get("patterns")
     if isinstance(config_patterns, list):
         patterns = config_patterns  # config replaces module defaults wholesale
