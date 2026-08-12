@@ -197,12 +197,29 @@ def write_verdict_file(verdicts_dir: Path, digest: str, verdict: dict[str, Any])
     return path
 
 
-def read_verdict_file(path: Path) -> dict[str, Any] | None:
+def read_verdict_file(path: Path, expected_evidence_hash: str) -> dict[str, Any] | None:
+    """Read and validate a verdict file bound to ``expected_evidence_hash``.
+
+    Enforces the triple binding: filename stem == payload evidence_hash == the
+    case's current evidence hash.  Any mismatch raises ValueError (the scoring
+    loop records it as an invalid verdict), so a verdict can never be reused
+    against different evidence.
+    """
     from benchmarks.adjudication_protocol import validate_verdict
 
+    if path.stem != expected_evidence_hash:
+        raise ValueError(
+            f"verdict filename {path.name!r} does not match expected evidence "
+            f"hash {expected_evidence_hash!r}"
+        )
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema_version") != VERDICT_FILE_SCHEMA:
         return None
+    if payload.get("evidence_hash") != expected_evidence_hash:
+        raise ValueError(
+            f"verdict payload evidence_hash {payload.get('evidence_hash')!r} "
+            f"does not match expected {expected_evidence_hash!r}"
+        )
     return validate_verdict(payload.get("verdict", {}))
 
 
@@ -334,6 +351,10 @@ def call_model(
 # ---------------------------------------------------------------------------
 
 
+def _ratio(numerator: int, denominator: int) -> float | None:
+    return round(numerator / denominator, 3) if denominator else None
+
+
 def confusion_metrics(
     scored: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -344,9 +365,6 @@ def confusion_metrics(
     fp = sum(1 for entry in false if entry["predicted"] == "true_finding")
     tn = len(false) - fp
 
-    def ratio(numerator: int, denominator: int) -> float | None:
-        return round(numerator / denominator, 3) if denominator else None
-
     return {
         "ground_true": len(true),
         "ground_false": len(false),
@@ -355,10 +373,10 @@ def confusion_metrics(
         "fp": fp,
         "fn": fn,
         "tn": tn,
-        "adjudication_precision": ratio(tp, tp + fp),
-        "adjudication_recall": ratio(tp, tp + fn),
-        "fp_rejection_rate": ratio(tn, tn + fp),
-        "fn_rate": ratio(fn, tp + fn),
+        "adjudication_precision": _ratio(tp, tp + fp),
+        "adjudication_recall": _ratio(tp, tp + fn),
+        "fp_rejection_rate": _ratio(tn, tn + fp),
+        "fn_rate": _ratio(fn, tp + fn),
     }
 
 
@@ -393,6 +411,29 @@ def _load_labels_for(labels_dir: Path, project_id: str) -> dict[str, Any] | None
     return load(labels_dir, project_id)
 
 
+def load_cases_from_file(cases_file: Path) -> list[dict[str, Any]]:
+    """Load prepared protocol bundles (JSONL) for scoring."""
+    return [
+        json.loads(line)["bundle"]
+        for line in cases_file.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def load_truth_file(path: Path) -> dict[str, str]:
+    """Load a ``{evidence_hash: label}`` ground-truth map from JSON."""
+    from benchmarks.adjudication_protocol import DISPOSITIONS
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    labels = payload if isinstance(payload, dict) else payload.get("labels", {})
+    if not isinstance(labels, dict):
+        raise ValueError("--truth-file must be a JSON object {evidence_hash: label}")
+    unknown = set(labels.values()) - DISPOSITIONS
+    if unknown:
+        raise ValueError(f"--truth-file contains unknown labels: {sorted(unknown)}")
+    return {str(digest): label for digest, label in labels.items() if digest}
+
+
 def run_adjudication(
     *,
     results_dir: Path,
@@ -411,19 +452,28 @@ def run_adjudication(
     base_url: str = DEFAULT_BASE_URL,
     api_key: str = DEFAULT_API_KEY,
     prepare_only: bool = False,
+    from_cases_file: Path | None = None,
+    truth_file: Path | None = None,
 ) -> dict[str, Any]:
     from benchmarks.run_benchmarks import load_manifest
 
-    manifest = load_manifest(Path(__file__).resolve().parent / "manifest.json")
-    roots = _package_roots(workspace, manifest["projects"])
-    cases, truth_by_hash, warnings = build_cases(
-        results_dir,
-        labels_dir,
-        roots,
-        projects=projects,
-        scanners=scanners,
-        limit=limit,
-    )
+    if from_cases_file is not None:
+        cases = load_cases_from_file(from_cases_file)
+        truth_by_hash: dict[str, str] = {}
+        warnings: list[str] = []
+        if not cases:
+            raise ValueError(f"no case bundles found in {from_cases_file}")
+    else:
+        manifest = load_manifest(Path(__file__).resolve().parent / "manifest.json")
+        roots = _package_roots(workspace, manifest["projects"])
+        cases, truth_by_hash, warnings = build_cases(
+            results_dir,
+            labels_dir,
+            roots,
+            projects=projects,
+            scanners=scanners,
+            limit=limit,
+        )
     if corpus_dir.is_dir() and any(corpus_dir.glob("*.json")):
         cases, truth_by_hash, corpus_warnings = restrict_to_corpus(
             cases,
@@ -434,6 +484,14 @@ def run_adjudication(
         warnings.extend(corpus_warnings)
     elif include_unverified:
         warnings.append("--include-unverified given but no corpus found")
+    if truth_file is not None:
+        override = load_truth_file(truth_file)
+        unknown = sorted(set(override) - {case["evidence_hash"] for case in cases})
+        if unknown:
+            warnings.append(
+                f"--truth-file covers hashes outside the case set: {unknown}"
+            )
+        truth_by_hash.update(override)
     if prepare_only:
         prepare_cases(cases, cases_file)
         return {
@@ -462,8 +520,20 @@ def run_adjudication(
     predictions: list[dict[str, Any]] = []
     invalid: list[dict[str, Any]] = []
     pending: list[dict[str, Any]] = []
+    uncovered: list[dict[str, Any]] = []
     for case in cases:
         digest = case["evidence_hash"]
+        ground = truth_by_hash.get(digest)
+        if ground is None:
+            uncovered.append(
+                {
+                    "project_id": case["project_id"],
+                    "scanner": case["scanner"],
+                    "target_id": case["target_id"],
+                    "evidence_hash": digest,
+                }
+            )
+            continue
         path = verdicts_dir / f"{digest}.json"
         if not path.is_file():
             pending.append(
@@ -476,7 +546,7 @@ def run_adjudication(
             )
             continue
         try:
-            verdict = read_verdict_file(path)
+            verdict = read_verdict_file(path, digest)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
             invalid.append(
                 {
@@ -505,7 +575,7 @@ def run_adjudication(
                 "scanner": case["scanner"],
                 "target_id": case["target_id"],
                 "evidence_hash": digest,
-                "ground_truth": truth_by_hash[digest],
+                "ground_truth": ground,
                 "predicted": verdict["disposition"],
                 "confidence": verdict["confidence"],
                 "reason": verdict["reason"],
@@ -529,6 +599,19 @@ def run_adjudication(
     totals["cases"] = len(cases)
     totals["pending"] = len(pending)
     totals["invalid"] = len(invalid)
+    totals["uncovered"] = len(uncovered)
+    totals["protocol_compliance_rate"] = _ratio(len(predictions), len(cases))
+    high_conf = [entry for entry in predictions if entry["confidence"] >= 0.9]
+    high_conf_errors = [
+        entry
+        for entry in high_conf
+        if entry["predicted"] != entry["ground_truth"]
+    ]
+    totals["high_confidence_errors"] = len(high_conf_errors)
+    totals["high_confidence_cases"] = len(high_conf)
+    totals["high_confidence_error_rate"] = _ratio(
+        len(high_conf_errors), len(high_conf)
+    )
     totals["funnel"] = {
         "labelled": len(cases),
         "ground_true": totals["ground_true"],
@@ -543,6 +626,7 @@ def run_adjudication(
         "warnings": warnings,
         "pending": pending,
         "invalid": invalid,
+        "uncovered": uncovered,
         "per_project": per_project_metrics,
         "totals": totals,
         "predictions": predictions,
@@ -603,7 +687,23 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="write prepared case bundles for the agent, then exit",
     )
+    parser.add_argument(
+        "--from-cases",
+        type=Path,
+        default=None,
+        help="score already-prepared case bundles (JSONL) instead of building "
+        "them from results/labels",
+    )
+    parser.add_argument(
+        "--truth-file",
+        type=Path,
+        default=None,
+        help="JSON object mapping evidence_hash -> label; overrides/augments "
+        "corpus truth (used with --from-cases)",
+    )
     args = parser.parse_args(argv)
+    if args.truth_file is not None and args.from_cases is None:
+        parser.error("--truth-file requires --from-cases")
     try:
         payload = run_adjudication(
             results_dir=args.results_dir.resolve(),
@@ -622,6 +722,8 @@ def main(argv: list[str] | None = None) -> int:
             base_url=args.base_url,
             api_key=args.api_key,
             prepare_only=args.prepare_cases,
+            from_cases_file=args.from_cases,
+            truth_file=args.truth_file,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"error: adjudication benchmark failed: {exc}", file=sys.stderr)
@@ -656,6 +758,9 @@ def main(argv: list[str] | None = None) -> int:
         f"fp_rejection={totals['fp_rejection_rate'] if totals['fp_rejection_rate'] is not None else '-'} "
         f"fn_rate={totals['fn_rate'] if totals['fn_rate'] is not None else '-'} "
         f"cases={totals['cases']} pending={totals['pending']} invalid={totals['invalid']} "
+        f"uncovered={totals['uncovered']} "
+        f"compliance={totals['protocol_compliance_rate'] if totals['protocol_compliance_rate'] is not None else '-'} "
+        f"high_conf_errors={totals['high_confidence_errors']}/{totals['high_confidence_cases']} "
         f"funnel_labelled={funnel['labelled']} ground_true={funnel['ground_true']} "
         f"ai_true={funnel['ai_true']}"
     )

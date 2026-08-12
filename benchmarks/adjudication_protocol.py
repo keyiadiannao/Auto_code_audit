@@ -168,6 +168,12 @@ def validate_verdict(payload: dict[str, Any]) -> dict[str, Any]:
     for gate in payload.get("required_verification", []):
         if gate not in VERIFICATION_GATES:
             raise ValueError(f"unknown verification gate: {gate!r}")
+    _validate_verdict_cross_fields(
+        disposition,
+        action,
+        reuse_target,
+        payload.get("required_verification", []),
+    )
     return {
         "disposition": disposition,
         "confidence": float(confidence),
@@ -177,6 +183,41 @@ def validate_verdict(payload: dict[str, Any]) -> dict[str, Any]:
         "reuse_target": reuse_target,
         "required_verification": sorted(payload.get("required_verification", [])),
     }
+
+
+def _validate_verdict_cross_fields(
+    disposition: str,
+    action: str | None,
+    reuse_target: str | None,
+    required_verification: list[str],
+) -> None:
+    """Reject verdicts whose fields contradict each other semantically.
+
+    - ``true_finding`` requires a concrete action and the deterministic
+      ``re_audit`` gate (the executing agent can judge and modify, but only
+      the deterministic re-audit accepts).
+    - ``false_positive`` requires ``recommended_action == "none"``.
+    - ``recommended_action == "reuse_existing"`` requires a ``reuse_target``.
+    """
+    if disposition == "true_finding":
+        if action is None or action == "none":
+            raise ValueError(
+                "true_finding verdicts require a recommended_action other "
+                "than 'none'"
+            )
+        if "re_audit" not in required_verification:
+            raise ValueError(
+                "true_finding verdicts require the 're_audit' verification gate"
+            )
+    elif action is not None and action != "none":
+        raise ValueError(
+            f"false_positive verdicts must set recommended_action 'none', "
+            f"got {action!r}"
+        )
+    if action == "reuse_existing" and not reuse_target:
+        raise ValueError(
+            "recommended_action 'reuse_existing' requires a reuse_target"
+        )
 
 
 def validate_case(bundle: dict[str, Any]) -> dict[str, Any]:

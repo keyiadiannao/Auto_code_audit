@@ -16,6 +16,8 @@ from benchmarks.adjudication_protocol import (
 from benchmarks.run_adjudication import (
     _parse_verdict,
     confusion_metrics,
+    load_cases_from_file,
+    load_truth_file,
     prepare_cases,
     read_verdict_file,
     restrict_to_corpus,
@@ -169,20 +171,107 @@ def test_confusion_metrics_numbers() -> None:
 def test_verdict_file_roundtrip_validates(tmp_path) -> None:
     verdict = _valid_verdict()
     path = write_verdict_file(tmp_path, "abc123", verdict)
-    assert read_verdict_file(path)["disposition"] == "true_finding"
+    loaded = read_verdict_file(path, "abc123")
+    assert loaded is not None
+    assert loaded["disposition"] == "true_finding"
     malformed = tmp_path / "malformed.json"
     malformed.write_text(
-        json.dumps({"schema_version": 1, "verdict": {"disposition": "true_finding"}}),
+        json.dumps(
+            {
+                "schema_version": 1,
+                "evidence_hash": "malformed",
+                "verdict": {"disposition": "true_finding"},
+            }
+        ),
         encoding="utf-8",
     )
     with pytest.raises(ValueError, match="missing required"):
-        read_verdict_file(malformed)
+        read_verdict_file(malformed, "malformed")
     wrong_schema = tmp_path / "wrongschema.json"
     wrong_schema.write_text(
-        json.dumps({"schema_version": 99, "verdict": _valid_verdict()}),
+        json.dumps(
+            {
+                "schema_version": 99,
+                "evidence_hash": "wrongschema",
+                "verdict": _valid_verdict(),
+            }
+        ),
         encoding="utf-8",
     )
-    assert read_verdict_file(wrong_schema) is None
+    assert read_verdict_file(wrong_schema, "wrongschema") is None
+
+
+def test_verdict_hash_binding_rejects_filename_mismatch(tmp_path) -> None:
+    path = write_verdict_file(tmp_path, "aaa", _valid_verdict())
+    with pytest.raises(ValueError, match="filename"):
+        read_verdict_file(path, "bbb")
+
+
+def test_verdict_hash_binding_rejects_payload_mismatch(tmp_path) -> None:
+    path = write_verdict_file(tmp_path, "aaa", _valid_verdict())
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "evidence_hash": "ccc",
+                "verdict": _valid_verdict(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="payload evidence_hash"):
+        read_verdict_file(path, "aaa")
+
+
+def test_verdict_cross_field_validation() -> None:
+    no_reaadit = _valid_verdict()
+    no_reaadit["required_verification"] = ["unit_tests"]
+    with pytest.raises(ValueError, match="re_audit"):
+        validate_verdict(no_reaadit)
+    no_action = _valid_verdict()
+    no_action["recommended_action"] = "none"
+    with pytest.raises(ValueError, match="recommended_action"):
+        validate_verdict(no_action)
+    fp_with_action = {
+        "disposition": "false_positive",
+        "confidence": 0.8,
+        "reason": "public API surface",
+        "recommended_action": "extract_shared_component",
+    }
+    with pytest.raises(ValueError, match="false_positive"):
+        validate_verdict(fp_with_action)
+    ok_fp = {
+        "disposition": "false_positive",
+        "confidence": 0.8,
+        "reason": "public API surface",
+        "recommended_action": "none",
+    }
+    assert validate_verdict(ok_fp)["recommended_action"] == "none"
+    reuse = _valid_verdict()
+    reuse["recommended_action"] = "reuse_existing"
+    reuse["reuse_target"] = None
+    with pytest.raises(ValueError, match="reuse_target"):
+        validate_verdict(reuse)
+
+
+def test_load_cases_and_truth_files(tmp_path) -> None:
+    bundle = {
+        "evidence_hash": "abc",
+        "scanner": "contracts",
+        "target_id": "t",
+        "display": "d",
+        "evidence": {"path": "a.py"},
+        "snippets": [],
+    }
+    cases_file = tmp_path / "cases.jsonl"
+    prepare_cases([bundle], cases_file)
+    assert load_cases_from_file(cases_file)[0]["evidence_hash"] == "abc"
+    truth_file = tmp_path / "truth.json"
+    truth_file.write_text(json.dumps({"abc": "true_finding", "zzz": "maybe"}))
+    with pytest.raises(ValueError, match="unknown labels"):
+        load_truth_file(truth_file)
+    truth_file.write_text(json.dumps({"abc": "true_finding"}))
+    assert load_truth_file(truth_file) == {"abc": "true_finding"}
 
 
 def test_restrict_to_corpus_gates_on_verified_and_hash(tmp_path) -> None:

@@ -1,6 +1,18 @@
 ---
 name: auto-code-audit
-description: Deterministic cross-file audit and adjudication protocol for AI-maintained codebases. Runs the scanner CLI (dead code, duplicate implementations, contract drift, capability overlap, hardcoded values), turns candidates into label-free protocol case bundles, adjudicates each candidate against evidence and project lessons, writes protocol verdicts, and enforces the deterministic re-audit gate before any fix is accepted. Also answers pre-change reuse questions ("have we already implemented this capability?"). Use when auditing a codebase after AI-driven changes, checking for duplicate implementations or drift, deciding whether to reuse an existing implementation or extract a shared component, or verifying that a fix actually removed a finding. Trigger words: 审计, self-audit, 查重复, 公共组件, 复用检查, adjudication, reuse check.
+description: >
+  Deterministic cross-file audit and adjudication protocol for AI-maintained
+  codebases. Runs the scanner CLI (dead code, duplicate implementations,
+  contract drift, capability overlap, hardcoded values), turns candidates into
+  label-free protocol case bundles, adjudicates each candidate against evidence
+  and project lessons, writes protocol verdicts, and enforces the deterministic
+  re-audit gate before any fix is accepted. Also answers pre-change reuse
+  questions ("have we already implemented this capability?"). Use when auditing
+  a codebase after AI-driven changes, checking for duplicate implementations or
+  drift, deciding whether to reuse an existing implementation or extract a
+  shared component, or verifying that a fix actually removed a finding.
+  Trigger words: 审计, self-audit, 查重复, 公共组件, 复用检查, adjudication,
+  reuse check.
 ---
 
 # Auto Code Audit
@@ -13,9 +25,9 @@ only when the deterministic re-audit says the target is gone, no new
 high-risk candidate appeared, and tests pass. Never mark a finding as
 remediated on the strength of your own belief that it is fixed.
 
-All scanners are pure Python stdlib. Run them with the project's own
-interpreter (the local default is
-`C:\Users\26433\miniconda3\envs\mamba2\python.exe`).
+All scanners are pure Python stdlib. Run them with the project's Python
+interpreter (use the interpreter the repository itself uses; never hardcode
+a machine-specific path).
 
 ## The Two Flows
 
