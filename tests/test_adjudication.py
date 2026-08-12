@@ -207,6 +207,51 @@ def test_verdict_hash_binding_rejects_filename_mismatch(tmp_path) -> None:
         read_verdict_file(path, "bbb")
 
 
+def test_build_case_carries_both_hash_concepts(tmp_path) -> None:
+    """The bundle distinguishes the case hash (context binding) from the
+    finding hash (stale-evidence binding)."""
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "a.py").write_text(
+        "def foo(x):\n    return x + 1\n", encoding="utf-8"
+    )
+    detail = {"path": "a.py", "name": "foo", "line": 1, "signature": "(x)"}
+    bundle = build_case("p", "0" * 40, "contracts", "t", "d", detail, package)
+    from run_all import finding_evidence_hash
+
+    assert bundle["evidence_hash"] != bundle["finding_evidence_hash"]
+    assert bundle["finding_evidence_hash"] == finding_evidence_hash(
+        "contracts", "t", detail
+    )
+    # Snippet drift changes the case hash but not the finding hash.
+    package.joinpath("a.py").write_text(
+        "def foo(x):\n    return x + 1\n\n# filler\n", encoding="utf-8"
+    )
+    drifted = build_case("p", "0" * 40, "contracts", "t", "d", detail, package)
+    assert drifted["evidence_hash"] != bundle["evidence_hash"]
+    assert drifted["finding_evidence_hash"] == bundle["finding_evidence_hash"]
+
+
+def test_write_verdict_file_bridge_fields(tmp_path) -> None:
+    """Per-case verdict files carry the scanner/target_id/finding hash the
+    engine-owned verify gate needs to match report candidates."""
+    case = {
+        "scanner": "regions",
+        "target_id": "region/abc",
+        "finding_evidence_hash": "f" * 64,
+    }
+    path = write_verdict_file(tmp_path, "abc123", _valid_verdict(), case=case)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["scanner"] == "regions"
+    assert payload["target_id"] == "region/abc"
+    assert payload["finding_evidence_hash"] == "f" * 64
+    assert payload["case_hash"] == "abc123"
+    # The scoring loop still binds on the case digest.
+    assert payload["evidence_hash"] == "abc123"
+    loaded = read_verdict_file(path, "abc123")
+    assert loaded is not None
+
+
 def test_verdict_hash_binding_rejects_payload_mismatch(tmp_path) -> None:
     path = write_verdict_file(tmp_path, "aaa", _valid_verdict())
     path.write_text(

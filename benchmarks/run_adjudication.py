@@ -177,21 +177,40 @@ def restrict_to_corpus(
 # ---------------------------------------------------------------------------
 
 
-def write_verdict_file(verdicts_dir: Path, digest: str, verdict: dict[str, Any]) -> Path:
+def write_verdict_file(
+    verdicts_dir: Path,
+    digest: str,
+    verdict: dict[str, Any],
+    case: dict[str, Any] | None = None,
+) -> Path:
+    """Write a per-case protocol verdict file.
+
+    ``digest`` is the case hash (also the filename).  When ``case`` is given,
+    the file additionally carries the bridge fields the engine-owned verify
+    gate needs to match the verdict against report candidates: ``scanner``,
+    ``target_id``, ``finding_evidence_hash`` (stale-evidence binding), and
+    ``case_hash``.  These fields are additive, so pre-bridge files remain
+    valid for the scoring loop.
+    """
+    payload: dict[str, Any] = {
+        "schema_version": VERDICT_FILE_SCHEMA,
+        "evidence_hash": digest,
+        "adapter": "agent",
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "verdict": verdict,
+    }
+    if case is not None:
+        payload.update(
+            {
+                "case_hash": digest,
+                "scanner": case["scanner"],
+                "target_id": case["target_id"],
+                "finding_evidence_hash": case["finding_evidence_hash"],
+            }
+        )
     path = verdicts_dir / f"{digest}.json"
     path.write_text(
-        json.dumps(
-            {
-                "schema_version": VERDICT_FILE_SCHEMA,
-                "evidence_hash": digest,
-                "adapter": "agent",
-                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "verdict": verdict,
-            },
-            indent=2,
-            ensure_ascii=False,
-        )
-        + "\n",
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
     return path
@@ -515,7 +534,9 @@ def run_adjudication(
                 base_url=base_url, api_key=api_key, model=model, prompt=user_prompt(case)
             )
             if verdict is not None:
-                write_verdict_file(verdicts_dir, case["evidence_hash"], verdict)
+                write_verdict_file(
+                    verdicts_dir, case["evidence_hash"], verdict, case=case
+                )
 
     predictions: list[dict[str, Any]] = []
     invalid: list[dict[str, Any]] = []

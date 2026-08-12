@@ -75,11 +75,13 @@ python run_all.py --root /work/foo --package src
 python adjudicate.py --report /work/foo/reports/latest.json
 
 # Layer 3: run the audited project's tests, provenance gates, and the
-# engine-owned acceptance gate after a fix
+# engine-owned acceptance gate after a fix (tests ran above, so the gate
+# skips re-running them with --no-tests; --test-command would run them
+# inside the gate instead)
 python -m pytest /work/foo/tests -q
 python run_verify.py --report /work/foo/reports/latest.json \
   --verdicts /work/foo/reports/verdicts.json --previous /work/foo/reports/pre.json \
-  --scope src/lib
+  --scope src/lib --no-tests
 ```
 
 Runs all scanners against the package under the current directory (override
@@ -119,10 +121,14 @@ defaulting to `git user.name`); re-suppressing an already-registered candidate
 keeps the original record. Pass `--ignore`, `--lessons`, or `--verdicts`
 explicitly when a project uses a non-default state layout.
 
-Each non-deferred verdict records a stable `target_id` and an `evidence_hash`.
-If the candidate evidence changes, `--check` requires a new review. False
-positive verdicts also store their compiled suppression payload, so this is
-reproducible even after the candidate disappears from a later report:
+Each non-deferred verdict records a stable `target_id` and a
+`finding_evidence_hash` (the digest of `{scanner, target_id, detail}` — the
+stale-evidence binding; the protocol layer's separate *case* hash, which
+binds commit and snippets, is only used for adjudication bundles, never for
+stale detection). If the candidate evidence changes, `--check` requires a
+new review. False positive verdicts also store their compiled suppression
+payload, so this is reproducible even after the candidate disappears from a
+later report:
 
 ```text
 python adjudicate.py --root /work/foo \
@@ -314,10 +320,25 @@ git diff --check
 `run_verify.py` is the engine-owned Layer-3 acceptance gate (SKILL.md Phase 3).
 It re-audits after a fix and fails when a code-action verdict's `target_id`
 still appears in the new report, when a still-present finding's
-`evidence_hash` recomputes unchanged, or when the patch scope gained a
-high/medium candidate that was absent before the patch. Exit code 0 means
-acceptance; `--scope` limits the new-candidate check to the path the patch
-touched.
+`finding_evidence_hash` recomputes unchanged, or when the patch scope gained
+a high/medium candidate that was absent before the patch. It speaks the
+skill-first protocol vocabulary (`disposition: true_finding` +
+`recommended_action`, e.g. `extract_shared_component`) as well as the legacy
+`adjudicate.py` dispositions (`true duplicate` / `compatibility debt`), so
+`--verdicts` accepts either the aggregated `verdicts.json` or the per-case
+protocol verdict directory from SKILL Phase 2.
+
+New-candidate severity is unified across scanner schemas via a fallback
+chain: `priority` (duplicates, regions) → `severity` (hardcoded) → a new
+`DEAD` module's `status`, so a patch that silently strands a module is
+rejected, not just a duplicate or region hit.
+
+The gate also makes test evidence machine-checkable: pass
+`--test-command "<shell command>"` to run the target project's tests inside
+the gate (a non-zero exit rejects), or `--no-tests` to declare tests are
+verified outside it. A code-action verdict with neither flag is rejected —
+the gate never self-approves. Exit code 0 means acceptance; `--scope`
+limits the new-candidate check to the path the patch touched.
 
 ## Continuous integration
 

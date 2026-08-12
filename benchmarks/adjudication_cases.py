@@ -144,8 +144,22 @@ def build_case(
     detail: dict[str, Any],
     package_root: Path,
 ) -> dict[str, Any]:
-    """Build a protocol-shaped case bundle with its deterministic digest."""
+    """Build a protocol-shaped case bundle with its deterministic digest.
+
+    The bundle carries two distinct hashes:
+
+    - ``evidence_hash`` — the *case* hash: digest of the canonical case
+      rendering (schema, project, commit, scanner, target, display, trimmed
+      evidence, snippets).  It binds the review to its full context and is
+      the verdict-file name.
+    - ``finding_evidence_hash`` — the *finding* hash: digest of the raw
+      ``{scanner, target_id, detail}`` payload, identical to
+      ``run_all.finding_evidence_hash``.  The engine-owned verify gate uses
+      it for stale-evidence detection; the case hash is never used that way
+      (snippets drift without the finding changing).
+    """
     from benchmarks.adjudication_protocol import CASE_SCHEMA_VERSION, canonical_case
+    from run_all import finding_evidence_hash
 
     bundle: dict[str, Any] = {
         "case_schema_version": CASE_SCHEMA_VERSION,
@@ -163,4 +177,7 @@ def build_case(
         )
     ).hexdigest()
     bundle["evidence_hash"] = digest
+    bundle["finding_evidence_hash"] = finding_evidence_hash(
+        scanner, target_id, detail
+    )
     return bundle

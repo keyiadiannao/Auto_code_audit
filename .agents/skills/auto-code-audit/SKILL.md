@@ -85,9 +85,14 @@ a bug assertion.
    actual file at the reported location and its callers.
 3. Consult `LESSONS.md` and `ignore.json` (existing suppressions) before
    judging.
-4. Write the verdict to `adjudication/verdicts/<evidence_hash>.json`:
+4. Write the verdict to `adjudication/verdicts/<case_hash>.json`. The file
+   carries the two hashes separately — `case_hash` (context binding: the
+   canonical case digest, identical to the filename) and
+   `finding_evidence_hash` (stale-evidence binding: the raw
+   `{scanner, target_id, detail}` digest) — plus the bridge fields that let
+   the engine-owned verify gate match the verdict to report candidates:
    ```json
-   {"schema_version": 1, "evidence_hash": "<from case>", "adapter": "agent", "verdict": {"disposition": "true_finding|false_positive", "confidence": 0.0, "reason": "...", "reason_codes": ["..."], "recommended_action": "...", "reuse_target": null, "required_verification": ["unit_tests", "re_audit"]}}
+   {"schema_version": 1, "case_hash": "<from case>", "evidence_hash": "<from case>", "scanner": "...", "target_id": "...", "finding_evidence_hash": "...", "adapter": "agent", "verdict": {"disposition": "true_finding|false_positive", "confidence": 0.0, "reason": "...", "reason_codes": ["..."], "recommended_action": "...", "reuse_target": null, "required_verification": ["unit_tests", "re_audit"]}}
    ```
 5. A verdict that changes evidence (e.g. proposed refactor) does not
    retroactively change the bundle: the hash binds verdict to evidence.
@@ -112,20 +117,29 @@ recurring patterns).
 
 After the user (or you) applies a patch for an accepted true finding:
 
-1. Tests: run the project's test suite; all must pass.
+1. Tests: run the project's test suite; all must pass. The gate makes the
+   test evidence machine-checkable: pass `--test-command <cmd>` to execute
+   the suite inside the gate (non-zero exit rejects), or `--no-tests` to
+   declare that tests are verified outside it. A code-action verdict without
+   either flag is rejected — the gate never self-approves.
 2. Re-audit: re-run the full scan on the same scope.
-3. Run the engine-owned gate (replaces the manual checklist):
+3. Run the engine-owned gate (replaces the manual checklist). `--verdicts`
+   accepts either the aggregated `verdicts.json` or the per-case verdict
+   directory `adjudication/verdicts/` from Phase 2:
 
    ```text
    python run_verify.py --report <post-fix report.json> \
-     --verdicts <verdicts.json> --previous <pre-fix report.json> \
-     --scope <path substring the patch touched>
+     --verdicts <verdicts.json | verdicts dir> --previous <pre-fix report.json> \
+     --scope <path substring the patch touched> --test-command "pytest -q"
    ```
 
    It fails when a code-action verdict's `target_id` still appears in the
-   new report, when a still-present finding's `evidence_hash` recomputes
-   unchanged, or when the patch scope gained a high/medium candidate that
-   was absent before the patch. Exit code 0 = acceptance.
+   new report, when a still-present finding's `finding_evidence_hash`
+   recomputes unchanged, when the patch scope gained a high/medium candidate
+   that was absent before the patch, or when the test gate rejects. It
+   speaks both the protocol vocabulary (`true_finding` +
+   `recommended_action`) and the legacy `adjudicate.py` dispositions. Exit
+   code 0 = acceptance.
 4. Only then mark the finding remediated and, if the outcome is a lasting
    project convention, append one line to `LESSONS.md`.
 

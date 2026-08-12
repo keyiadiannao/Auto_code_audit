@@ -1556,7 +1556,7 @@ def test_adjudicate_false_positive_end_to_end(
     assert verdict_log["verdicts"][0]["disposition"] == "false positive"
     assert verdict_log["verdicts"][0]["suppressed"] is True
     assert verdict_log["verdicts"][0]["target_id"] == "DEAD/pkg/lib/unused.py"
-    assert len(verdict_log["verdicts"][0]["evidence_hash"]) == 64
+    assert len(verdict_log["verdicts"][0]["finding_evidence_hash"]) == 64
     assert verdict_log["verdicts"][0]["suppression"][0]["section"] == "deadcode"
 
     # A second run resumes from the verdict log: no pending candidates.
@@ -1706,7 +1706,9 @@ def test_adjudicate_check_reports_pending_without_writing(
                         "scanner": "deadcode",
                         "signature": "DEAD/pkg/dead.py",
                         "target_id": finding["target_id"],
-                        "evidence_hash": finding["evidence_hash"],
+                        # legacy key on purpose: resume must accept verdicts
+                        # written before the finding_evidence_hash rename
+                        "evidence_hash": finding["finding_evidence_hash"],
                         "disposition": "false positive",
                     }
                 ]
@@ -1748,7 +1750,9 @@ def test_adjudicate_check_rejects_stale_evidence(
                         "scanner": "deadcode",
                         "signature": finding["signature"],
                         "target_id": finding["target_id"],
-                        "evidence_hash": finding["evidence_hash"],
+                        # legacy key: stale-evidence detection must fall back
+                        # to evidence_hash for pre-rename verdict files
+                        "evidence_hash": finding["finding_evidence_hash"],
                         "disposition": "false positive",
                     }
                 ]
@@ -2509,3 +2513,40 @@ def test_region_scan_short_risky_lookup_cluster(
     assert cluster["semantic_risk"] >= 0.45
     assert cluster["size"] >= 2
     assert {m["path"] for m in cluster["members"]} == {"experiments/lookup.py"}
+
+
+def test_region_external_effects_parameter_mutation() -> None:
+    """A method call on a function input (``model.load_state_dict``) is an
+    external effect: it mutates state the region does not own."""
+    import ast as ast_module
+
+    tree = ast_module.parse(
+        "def run(model, tensor, scale):\n"
+        "    model.load_state_dict(tensor)\n"
+        "    device = model.device\n"
+        "    if tensor.device != device:\n"
+        '        raise ValueError("mismatch")\n'
+        "    return tensor.mul(scale)\n"
+    )
+    fn = tree.body[0]
+    fn_locals = {
+        arg.arg
+        for arg in list(fn.args.posonlyargs) + list(fn.args.args) + list(fn.args.kwonlyargs)
+    }
+    effects = scan_regions._external_effects(fn.body, fn_locals)
+    assert "method_on_input:load_state_dict" in effects
+    assert "method_on_input:mul" in effects
+    assert "ValueError" in effects
+
+    # A receiver created inside the region is region-local state, not an
+    # input mutation.
+    tree = ast_module.parse(
+        "def build(items):\n"
+        "    cache = Cache()\n"
+        "    cache.update(items)\n"
+        "    return cache\n"
+    )
+    fn = tree.body[0]
+    fn_locals = {arg.arg for arg in fn.args.args}
+    effects = scan_regions._external_effects(fn.body, fn_locals)
+    assert not any(effect.startswith("method_on_input") for effect in effects)

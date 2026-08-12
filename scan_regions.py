@@ -188,8 +188,11 @@ def _external_effects(
     block: list[ast.stmt], fn_locals: set[str]
 ) -> tuple[str, ...]:
     """Calls that escape the region's own state: module-level functions
-    (``torch.stack``, ``load_state``) and methods on names that are neither
-    region-defined nor function-local (``tensor`` is local, ``torch`` is not).
+    (``torch.stack``, ``load_state``), methods on names that are neither
+    region-defined nor function-local (``tensor`` is local, ``torch`` is
+    not), and methods called on function inputs — a method on a parameter
+    object (``model.load_state_dict``, ``self.cache.update``) mutates state
+    the region does not own, so it is recorded as ``method_on_input:<attr>``.
     """
     defined: set[str] = set()
     effects: list[str] = []
@@ -202,8 +205,14 @@ def _external_effects(
         elif isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Attribute):
-                if isinstance(func.value, ast.Name) and func.value.id not in fn_locals:
-                    effects.append(func.attr)
+                root = func.value
+                while isinstance(root, ast.Attribute):
+                    root = root.value
+                if isinstance(root, ast.Name):
+                    if root.id not in fn_locals:
+                        effects.append(func.attr)
+                    elif root.id not in defined:
+                        effects.append(f"method_on_input:{func.attr}")
             elif isinstance(func, ast.Name) and func.id not in fn_locals:
                 effects.append(func.id)
         for child in ast.iter_child_nodes(node):

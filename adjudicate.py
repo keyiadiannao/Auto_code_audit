@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import hashlib
 import json
 import subprocess
 import sys
@@ -54,7 +53,9 @@ def _flatten(report: dict) -> list[dict]:
                     "scanner": scanner,
                     "signature": signature,
                     "target_id": signature,
-                    "evidence_hash": _evidence_hash(scanner, signature, detail),
+                    "finding_evidence_hash": run_all.finding_evidence_hash(
+                        scanner, signature, detail
+                    ),
                     "display": display,
                     "detail": detail,
                 }
@@ -62,15 +63,13 @@ def _flatten(report: dict) -> list[dict]:
     return items
 
 
-def _evidence_hash(scanner: str, target_id: str, detail: dict) -> str:
-    """Hash the candidate evidence while keeping target identity separate."""
-    payload = json.dumps(
-        {"scanner": scanner, "target_id": target_id, "detail": detail},
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-    ).encode("ascii")
-    return hashlib.sha256(payload).hexdigest()
+def _verdict_hash(verdict: dict) -> str:
+    """Finding-evidence hash of a recorded verdict; accepts the legacy
+    ``evidence_hash`` key for verdicts written before the rename."""
+    value = verdict.get("finding_evidence_hash")
+    if isinstance(value, str):
+        return value
+    return verdict.get("evidence_hash", "")
 
 
 def _report_context(report: dict, root: Path) -> dict:
@@ -91,7 +90,7 @@ def _verdict_record(item: dict, disposition: str, context: dict) -> dict:
         "scanner": item["scanner"],
         "signature": item["signature"],
         "target_id": item["target_id"],
-        "evidence_hash": item["evidence_hash"],
+        "finding_evidence_hash": item["finding_evidence_hash"],
         "disposition": disposition,
         "reviewed_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         **context,
@@ -554,15 +553,15 @@ def main(argv: list[str] | None = None) -> int:
     # ``skip`` is a session-level deferral, not a final decision: skipped
     # candidates reappear on resume and still count as pending for --check.
     decided = {
-        (item["scanner"], item["signature"], item.get("evidence_hash"))
+        (item["scanner"], item["signature"], _verdict_hash(item))
         for item in verdicts.get("verdicts", [])
-        if item.get("disposition") != "skip" and item.get("evidence_hash")
+        if item.get("disposition") != "skip" and _verdict_hash(item)
     }
 
     pending = [
         item for item in candidates
         if (
-            item["scanner"], item["signature"], item["evidence_hash"]
+            item["scanner"], item["signature"], item["finding_evidence_hash"]
         ) not in decided
     ]
     if args.check:

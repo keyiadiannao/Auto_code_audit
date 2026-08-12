@@ -79,8 +79,7 @@ jobs:
           python - <<'PY'
           import json, sys
           sys.path.insert(0, ".")
-          from run_all import _candidate_signatures
-          from adjudicate import _evidence_hash
+          from run_all import _candidate_signatures, finding_evidence_hash
           report = json.load(open("dogfood/audit.json", encoding="utf-8"))
           dead = [
               (scanner, signature, detail)
@@ -89,23 +88,30 @@ jobs:
               if scanner == "deadcode" and signature.endswith("unused2.py")
           ]
           verdicts = {"verdicts": [
-              {"scanner": s, "target_id": sig, "evidence_hash": _evidence_hash(s, sig, det),
+              {"scanner": s, "target_id": sig,
+               "finding_evidence_hash": finding_evidence_hash(s, sig, det),
                "disposition": "true duplicate"}
               for s, sig, det in dead
           ]}
           json.dump(verdicts, open("dogfood/verdicts.json", "w"), indent=2)
           PY
-          python run_verify.py --report dogfood/audit.json --verdicts dogfood/verdicts.json \
+          # 1) a still-present code-action verdict rejects the gate
+          python run_verify.py --report dogfood/audit.json --verdicts dogfood/verdicts.json --no-tests \
             && { echo "verify should have rejected the still-present finding"; exit 1; } || true
           python - <<'PY'
           import json
           verdicts = json.load(open("dogfood/verdicts.json", encoding="utf-8"))
           for verdict in verdicts["verdicts"]:
               verdict["target_id"] = verdict["target_id"] + ".ghost"
-              verdict["evidence_hash"] = "0" * 64
+              verdict["finding_evidence_hash"] = "0" * 64
           json.dump(verdicts, open("dogfood/verdicts.json", "w"), indent=2)
           PY
+          # 2) the patch introduced a new DEAD module: the unified severity
+          #    fallback (status=DEAD -> high) rejects it against --previous
           python run_verify.py --report dogfood/audit.json --verdicts dogfood/verdicts.json \
-            --previous dogfood/pre.json
+            --previous dogfood/pre.json --no-tests \
+            && { echo "verify should have rejected the new DEAD module"; exit 1; } || true
+          # 3) ghost verdicts + explicit test skip + no previous = acceptance
+          python run_verify.py --report dogfood/audit.json --verdicts dogfood/verdicts.json --no-tests
       - name: Whitespace hygiene
         run: git diff --check

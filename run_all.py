@@ -63,6 +63,25 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def finding_evidence_hash(scanner: str, target_id: str, detail: dict) -> str:
+    """Canonical finding-evidence hash shared by adjudicate.py and run_verify.py.
+
+    Binds a verdict to the exact candidate evidence it was reviewed against:
+    the payload is ``{scanner, target_id, detail}`` over the raw report
+    record, so any change in the scanner output invalidates the hash.  This
+    is the *finding* hash (stale-evidence detection).  It is distinct from
+    the protocol *case* hash in ``benchmarks/adjudication_cases.py``, which
+    additionally binds commit, display, and code snippets.
+    """
+    payload = json.dumps(
+        {"scanner": scanner, "target_id": target_id, "detail": detail},
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("ascii")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _git_provenance(repo: Path, package: str) -> dict:
     def run(*parts: str) -> str | None:
         try:
