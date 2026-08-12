@@ -92,6 +92,8 @@ Useful options:
 - `--no-doc-channel` — faster code-only dead-module pass
 - `--profile code|research` — run code-focused scanners only, or include the
   research TeX style channel (default: `research`)
+- `--all-py` — scan every Python file recursively; use this for flat or `src/`
+  package layouts instead of the configured `lib/experiments` subdirectories
 - `--duplicate-threshold` / `--duplicate-min-chars` — duplicate sensitivity
 - `--ignore ignore.json` — approved suppression registry (Layer-2 output)
 - `--cli-smoke` — run `--help` on every scanner entrypoint first; abort the

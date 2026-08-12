@@ -1797,6 +1797,32 @@ def test_run_all_code_profile_disables_research_style_channel(
     assert report["scanners"]["style"]["disabled"] is True
 
 
+def test_run_all_all_py_scans_flat_package_layout(
+    mini_repo: Path,
+) -> None:
+    _write(mini_repo / "pkg" / "root_module.py", "def root_only():\n    return 1\n")
+    assert (
+        run_all.main(
+            [
+                "--root",
+                str(mini_repo),
+                "--package",
+                "pkg",
+                "--all-py",
+                "--profile",
+                "code",
+                "--no-doc-channel",
+            ]
+        )
+        == 0
+    )
+    report = json.loads(
+        (mini_repo / "reports" / "latest.json").read_text(encoding="utf-8")
+    )
+    modules = report["scanners"]["deadcode"]["modules"]
+    assert any(item["path"] == "root_module.py" for item in modules)
+
+
 def test_stale_ignore_entries_flags_gone_targets(
     mini_repo: Path, tmp_path: Path
 ) -> None:
