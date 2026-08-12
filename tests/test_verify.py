@@ -1056,3 +1056,70 @@ def test_verify_post_test_rehash_rejects_modified_tree(tmp_path) -> None:
     )
     assert result.returncode == 1
     assert "modified the audited source" in result.stderr + result.stdout
+
+
+def test_verify_post_test_rehash_rejects_modified_inputs(tmp_path) -> None:
+    """TOCTOU guard covers the full audit-input manifest: a passing
+    --test-command that rewrites a scanned document-channel file (with the
+    Python tree untouched) must not verify either."""
+    import subprocess
+    import sys
+
+    from _scanner_common import audit_inputs_sha256, source_tree_sha256
+
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "a.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "docs").mkdir()
+    notes = tmp_path / "docs" / "notes.md"
+    notes.write_text("first\n", encoding="utf-8")
+    tree = source_tree_sha256(tmp_path, "pkg")
+    inputs = audit_inputs_sha256(
+        tmp_path,
+        "pkg",
+        document_channel=True,
+        profile="code",
+        doc_dirs=["docs"],
+        doc_exclude=[],
+        tex_dir="docs",
+        tex_exclude=[],
+    )
+
+    head = "n" * 40
+    report_path = tmp_path / "report.json"
+    verdicts_path = tmp_path / "verdicts.json"
+    report = _full_report([], head, tree=tree)
+    report["configuration"]["document_channel"] = True
+    report["provenance"]["audit_inputs_sha256"] = inputs
+    report["provenance"]["audit_inputs"] = {
+        "doc_dirs": ["docs"],
+        "doc_exclude": [],
+        "tex_dir": "docs",
+        "tex_exclude": [],
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    verdicts_path.write_text(json.dumps(_verdicts([])), encoding="utf-8")
+
+    mutator = tmp_path / "mutate.py"
+    mutator.write_text(
+        "from pathlib import Path\n"
+        f"Path({str(notes)!r}).write_text('second\\n', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "run_verify",
+            "--root", str(tmp_path),
+            "--report", str(report_path),
+            "--verdicts", str(verdicts_path),
+            "--test-command", f'{sys.executable} "{mutator}"',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "modified a scanned input" in result.stderr + result.stdout
+    # The Python tree is byte-identical after the run: only the inputs gate
+    # caught the rewrite.
+    assert source_tree_sha256(tmp_path, "pkg") == tree

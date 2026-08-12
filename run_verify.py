@@ -550,26 +550,49 @@ def main(argv: list[str] | None = None) -> int:
     if args.test_command:
         result = subprocess.run(args.test_command, shell=True)
         test_gate = "passed" if result.returncode == 0 else "failed"
-        if test_gate == "passed" and report_tree:
-            # TOCTOU guard: the test command may rewrite source (codegen,
-            # golden files, formatters), so re-fingerprint the tree after it
-            # ran — a passing suite against mutated code must not verify.
-            from _scanner_common import source_tree_sha256
+        if test_gate == "passed" and (report_tree or report_inputs):
+            # TOCTOU guard: the test command may rewrite source or scanned
+            # non-code inputs (codegen, golden files, formatters, docs/TeX),
+            # so re-fingerprint both after it ran — a passing suite against
+            # mutated state must not verify.
+            from _scanner_common import audit_inputs_sha256, source_tree_sha256
 
             configuration = report.get("configuration") or {}
-            post_test_tree = source_tree_sha256(
-                args.root.resolve(),
-                report.get("package"),
-                bool(configuration.get("all_py")),
-            )
-            if post_test_tree != report_tree:
-                mismatches.append(
-                    f"live source tree changed while running --test-command "
-                    f"(tree {post_test_tree[:12]} != report {report_tree[:12]}); "
-                    f"the tests modified the audited source — a passing suite "
-                    f"against rewritten code cannot verify; re-run the audit "
-                    f"before verifying"
+            if report_tree:
+                post_test_tree = source_tree_sha256(
+                    args.root.resolve(),
+                    report.get("package"),
+                    bool(configuration.get("all_py")),
                 )
+                if post_test_tree != report_tree:
+                    mismatches.append(
+                        f"live source tree changed while running --test-command "
+                        f"(tree {post_test_tree[:12]} != report {report_tree[:12]}); "
+                        f"the tests modified the audited source — a passing suite "
+                        f"against rewritten code cannot verify; re-run the audit "
+                        f"before verifying"
+                    )
+            if report_inputs:
+                inputs_meta = provenance.get("audit_inputs") or {}
+                post_test_inputs = audit_inputs_sha256(
+                    args.root.resolve(),
+                    report.get("package"),
+                    bool(configuration.get("all_py")),
+                    bool(configuration.get("document_channel", True)),
+                    configuration.get("profile", "research"),
+                    inputs_meta.get("doc_dirs"),
+                    inputs_meta.get("doc_exclude"),
+                    inputs_meta.get("tex_dir"),
+                    inputs_meta.get("tex_exclude"),
+                )
+                if post_test_inputs != report_inputs:
+                    mismatches.append(
+                        f"live audit inputs changed while running --test-command "
+                        f"(inputs {post_test_inputs[:12]} != report {report_inputs[:12]}); "
+                        f"the tests modified a scanned input (document channel "
+                        f"or TeX) — a passing suite against rewritten inputs "
+                        f"cannot verify; re-run the audit before verifying"
+                    )
     elif args.test_result:
         report_head = ((provenance.get("git") or {})).get("head")
         test_gate, artifact_reason = _external_test_gate(
