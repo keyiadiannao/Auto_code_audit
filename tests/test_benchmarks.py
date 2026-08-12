@@ -14,7 +14,7 @@ from benchmarks.run_benchmarks import (
     load_manifest,
     run_benchmarks,
 )
-from benchmarks.run_mutation import _recall, run_corpus
+from benchmarks.run_mutation import _detected_targets, _recall, run_corpus
 
 
 def test_benchmark_manifest_is_fixed_and_valid() -> None:
@@ -243,19 +243,30 @@ def test_aggregate_totals_combine_labelled_results() -> None:
     assert totals["runtime_per_kloc"] == 0.6
 
 
-def test_mutation_recall_reports_partial_detection() -> None:
-    recall = _recall({"deadcode": {"DEAD": 2}}, {"deadcode": {"DEAD": 5}})
-    assert recall["deadcode.DEAD"] == {
-        "expected": 5,
-        "detected": 2,
-        "recall": 0.4,
+def test_mutation_recall_reports_missing_targets() -> None:
+    detected = {("deadcode", "DEAD/lib/dead.py"), ("duplicates", "cluster/abc")}
+    expected = {
+        "expected_findings": [
+            {"scanner": "deadcode", "target_id": "DEAD/lib/dead.py", "defect": "a"},
+            {"scanner": "deadcode", "target_id": "DEAD/lib/gone.py", "defect": "b"},
+            {"scanner": "duplicates", "target_id": "cluster/abc", "defect": "c"},
+        ]
     }
+    recall = _recall(detected, expected)
+    assert recall["total"] == 3
+    assert recall["matched"] == 2
+    assert recall["recall"] == 0.667
+    assert [entry["target_id"] for entry in recall["missing"]] == [
+        "DEAD/lib/gone.py"
+    ]
 
 
-def test_mutation_corpus_reaches_full_recall() -> None:
-    detected, expected = run_corpus()
-    leaves = _recall(detected, expected)
-    assert all(entry["recall"] == 1.0 for entry in leaves.values())
+def test_mutation_corpus_reaches_full_target_recall() -> None:
+    report, expected = run_corpus()
+    recall = _recall(_detected_targets(report), expected)
+    assert recall["matched"] == recall["total"]
+    assert not recall["missing"]
+    assert recall["recall"] == 1.0
 
 
 def test_label_files_load_and_match_manifest_projects() -> None:

@@ -171,29 +171,45 @@ project, plus corpus totals:
 - `candidates_per_kloc` and `runtime_per_kloc` — cost of a full pass against
   package size (lines of scanned `.py` code)
 
-The v1 label set covers the channels most reliably adjudicated on public
+The label set covers the channels most reliably adjudicated on public
 packages: dead-`public`-`API` candidates, forwarding wrappers, unreferenced
-public functions, fork pairs that are intentional convenience wrappers, and
-non-security digest hashes. All v1 entries are `false_positive`; the
-`duplicates` channel (the largest) is not yet adjudicated and shows as
-unlabelled. A label file whose `target_id` matches no candidate in the pinned
-commit is reported as `unmatched_labels` (stale scope), so label drift is
-visible rather than silent.
+public functions, fork pairs that are intentional convenience wrappers,
+non-security digest hashes, and every `duplicates` cluster emitted at the
+pinned commits. 355 of 421 candidates carry labels. Ten clusters are
+`true_finding` — near-verbatim copies inside the pytest thread/unraisable
+plugin pair, werkzeug's Request/Response deprecation wrappers
+(`content_md5`, `pragma`), `is_json`, and the `mimetype_params` copied from
+`Response` into `EnvironBuilder`, plus click's twin reader/writer helpers and
+shell-completion env parsing and starlette's `Route`/`WebSocketRoute`
+`url_path_for` — while the remaining clusters are false positives
+(intentional API-layer wrappers, sync/async dual-interface mirrors,
+boilerplate dunder families, parallel parsers with distinct grammars).
+Corpus totals at the pinned commits: precision 0.028 (10/355), review burden
+42.1 candidates per confirmed finding, 4.41 candidates per KLOC. A label file
+whose `target_id` matches no candidate in the pinned commit is reported as
+`unmatched_labels` (stale scope), so label drift is visible rather than
+silent.
 
 ### Mutation corpus (recall)
 
 `benchmarks/mutation/project/` is a synthetic fixture that injects one known
 issue per channel: a dead module, a duplicated function, an env write without
 a read, `strict=False` loosening, a `generation_a` hardcoded path, and a
-capability overlap. `run_mutation.py` scans the fixture and compares detection
-counts against `benchmarks/mutation/expected.json`:
+capability overlap. `run_mutation.py` scans the fixture and compares the
+detected `(scanner, target_id)` set — the same stable signatures the label
+set uses — against `benchmarks/mutation/expected.json`:
 
 ```powershell
 python benchmarks\run_mutation.py
 ```
 
-Full recall is 16/16; the runner exits nonzero when any channel misses
-expected detections, so the regression gate covers scanner recall as well as
+Recall is exact target matching, not count matching: a channel that fires on
+the wrong target (or reports the right count for unrelated reasons) is a
+miss. The v2 corpus covers all seven scanners and now also injects a
+`hardcoded` mutant (a hand-written SHA-256 hexdigest) so the digest channel
+has a recall target too. Current corpus: 21 injected targets, 21 matched,
+recall 1.000; the runner exits nonzero when any channel misses expected
+detections, so the regression gate covers scanner recall as well as
 precision on the corpus.
 
 ## Scanners

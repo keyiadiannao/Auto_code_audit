@@ -110,6 +110,120 @@
       "target_id": "unreferenced/convertors.py:88:register_url_convertor",
       "label": "false_positive",
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/8e45063553bb",
+      "label": "false_positive",
+      "reason": "facade delegation (Starlette proxies host/mount/add_websocket_route to Router); bodies differ by design"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/69af51e1de6c",
+      "label": "false_positive",
+      "reason": "facade delegation (applications.add_route proxies to Router)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/83a2b8f34150",
+      "label": "false_positive",
+      "reason": "request/websocket __init__ boilerplate"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/8a178ccf1e89",
+      "label": "false_positive",
+      "reason": "small send_json helpers on different transport objects"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/449e61d5e270",
+      "label": "false_positive",
+      "reason": "property-accessor boilerplate (headers/query_params/url)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d1ddd659096c",
+      "label": "false_positive",
+      "reason": "testclient HTTP method family (deliberate per-method wrappers)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/1425764c496b",
+      "label": "false_positive",
+      "reason": "testclient HTTP method family (deliberate per-method wrappers)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/28ec7a78910e",
+      "label": "false_positive",
+      "reason": "route-type matches() family with different dispatch logic"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f9cff382a22a",
+      "label": "false_positive",
+      "reason": "3-5L __call__ boilerplate"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/c08251a10331",
+      "label": "false_positive",
+      "reason": "2-line __eq__ dunder"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a18f0fe7ca59",
+      "label": "false_positive",
+      "reason": "sync/async wrapper pair in auth middleware (deliberate dual-interface)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/37b43b1caf81",
+      "label": "true_finding",
+      "reason": "identical 10-line url_path_for on Route and WebSocketRoute differing only by protocol string"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/40a2878e86c2",
+      "label": "false_positive",
+      "reason": "small app-property variants"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/51c15ec9de35",
+      "label": "false_positive",
+      "reason": "receive_bytes/receive_text accessor pair"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/c850a9d438c4",
+      "label": "false_positive",
+      "reason": "6L send-callback helpers in unrelated modules"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d45af3a05515",
+      "label": "false_positive",
+      "reason": "multipart callback boilerplate (on_field_data/on_field_name)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/c7e698f2e27e",
+      "label": "false_positive",
+      "reason": "5L receive helpers"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/26be96e8a6bb",
+      "label": "false_positive",
+      "reason": "4L __eq__ dunder"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d412030b078e",
+      "label": "false_positive",
+      "reason": "2L multipart callbacks (on_header_field/on_header_value)"
     }
   ]
 }

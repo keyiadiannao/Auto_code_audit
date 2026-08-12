@@ -98,11 +98,20 @@ def _signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     return f"({ast.unparse(node.args)})"
 
 
-def extract_capabilities(path: Path) -> list[Capability]:
-    """Top-level functions and class methods, each with its docstring tag."""
+def extract_capabilities(path: Path, rel_root: Path | None = None) -> list[Capability]:
+    """Top-level functions and class methods, each with its docstring tag.
+
+    ``rel_root`` makes emitted paths stable relative to the package root so
+    candidate signatures survive across machines and workspaces; reading still
+    happens at ``path`` itself.
+    """
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     tree = ast.parse(text)
-    rel = path.as_posix()
+    rel = (
+        path.as_posix()
+        if rel_root is None
+        else path.relative_to(rel_root).as_posix()
+    )
     out: list[Capability] = []
 
     for node in tree.body:
@@ -238,7 +247,7 @@ def _run_file_check(
         print(f"error: --file is for specialized scripts, not tests: {rel}", file=sys.stderr)
         return 2
     try:
-        extracted = extract_capabilities(path)
+        extracted = extract_capabilities(path, rel_root=pkg)
     except (OSError, UnicodeError, SyntaxError) as exc:
         print(f"error: cannot parse {rel}: {exc}", file=sys.stderr)
         return 2
@@ -359,7 +368,7 @@ def main(argv: list[str] | None = None) -> int:
     if lib_dir.is_dir():
         for path in sorted(lib_dir.glob("*.py")):
             try:
-                index.extend(extract_capabilities(path))
+                index.extend(extract_capabilities(path, rel_root=pkg))
             except (OSError, UnicodeError, SyntaxError) as exc:
                 parse_failures.append(
                     {"path": path.relative_to(pkg).as_posix(), "error": str(exc)}
@@ -397,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
             if sub == "." and rel_parts[0] == "lib":
                 continue  # lib is indexed separately above
             try:
-                extracted = extract_capabilities(path)
+                extracted = extract_capabilities(path, rel_root=pkg)
             except (OSError, UnicodeError, SyntaxError) as exc:
                 parse_failures.append(
                     {"path": path.relative_to(pkg).as_posix(), "error": str(exc)}

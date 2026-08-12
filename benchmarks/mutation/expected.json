@@ -1,29 +1,27 @@
 {
-  "schema_version": 1,
-  "description": "Expected scanner detections for the synthetic mutation corpus. Each leaf is a channel count the scanners must reach for full recall.",
-  "expected": {
-    "deadcode": {
-      "DEAD": 5
-    },
-    "duplicates": {
-      "clusters": 1
-    },
-    "forks": {
-      "small_function_pairs": 1
-    },
-    "contracts": {
-      "experiment_as_library": 0,
-      "experiment_path_hacks": 0,
-      "forwarding_wrappers": 0,
-      "same_name_contracts": 1,
-      "unreferenced_top_level_functions": 4,
-      "cli_without_bootstrap": 0,
-      "defensive_param_loosening": 1,
-      "env_written_not_read": 1,
-      "generation_path_without_env": 1
-    },
-    "capabilities": {
-      "overlap": 1
-    }
-  }
+  "schema_version": 2,
+  "description": "Injected-defect targets for the synthetic mutation corpus. Each entry names the stable (scanner, target_id) signature a mutant must produce; recall is computed as detected ∩ expected, so a count that happens to match elsewhere no longer passes.",
+  "expected_findings": [
+    { "scanner": "deadcode", "target_id": "DEAD/lib/dead.py", "defect": "dead module never imported" },
+    { "scanner": "deadcode", "target_id": "DEAD/lib/canonical.py", "defect": "lib module only referenced by the injected duplicate" },
+    { "scanner": "deadcode", "target_id": "DEAD/experiments/contracts.py", "defect": "experiment module never imported" },
+    { "scanner": "deadcode", "target_id": "DEAD/experiments/duplicate.py", "defect": "experiment module never imported" },
+    { "scanner": "deadcode", "target_id": "DEAD/experiments/generation.py", "defect": "experiment module never imported" },
+    { "scanner": "deadcode", "target_id": "DEAD/experiments/hash_use.py", "defect": "experiment module never imported" },
+    { "scanner": "duplicates", "target_id": "cluster/8b09e89d217b", "defect": "identical function copied between lib and experiments" },
+    { "scanner": "forks", "target_id": "fork/experiments/duplicate.py:repeated|lib/canonical.py:repeated", "defect": "small near-duplicate of the copied function" },
+    { "scanner": "contracts", "target_id": "same_name/experiments/duplicate.py:1:repeated", "defect": "same-name definition of the copied function" },
+    { "scanner": "contracts", "target_id": "same_name/lib/canonical.py:1:repeated", "defect": "same-name definition of the copied function" },
+    { "scanner": "contracts", "target_id": "unreferenced/experiments/contracts.py:4:load", "defect": "top-level function never referenced" },
+    { "scanner": "contracts", "target_id": "unreferenced/experiments/duplicate.py:1:repeated", "defect": "top-level function never referenced" },
+    { "scanner": "contracts", "target_id": "unreferenced/experiments/hash_use.py:3:fingerprint", "defect": "top-level function never referenced" },
+    { "scanner": "contracts", "target_id": "unreferenced/lib/canonical.py:1:repeated", "defect": "top-level function never referenced" },
+    { "scanner": "contracts", "target_id": "unreferenced/lib/dead.py:1:never_called", "defect": "top-level function never referenced" },
+    { "scanner": "contracts", "target_id": "forwarding/experiments/hash_use.py:3:fingerprint", "defect": "function forwards to a single external call" },
+    { "scanner": "contracts", "target_id": "defensive/experiments/contracts.py:5", "defect": "strict=False parameter loosening" },
+    { "scanner": "contracts", "target_id": "env/UNREAD_MUTATION_FLAG:experiments/contracts.py:2", "defect": "env var written but never read" },
+    { "scanner": "contracts", "target_id": "genpath/experiments/generation.py", "defect": "generation path hardcoded without env variable" },
+    { "scanner": "capabilities", "target_id": "cap/experiments/duplicate.py:repeated|lib/canonical.py:repeated", "defect": "experiments re-implements a lib capability" },
+    { "scanner": "hardcoded", "target_id": "hard/manual_sha256/experiments/hash_use.py:4", "defect": "manual SHA-256 hashing" }
+  ]
 }

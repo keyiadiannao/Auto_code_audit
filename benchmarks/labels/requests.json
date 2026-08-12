@@ -194,6 +194,42 @@
       "target_id": "hard/manual_sha256/auth.py:195",
       "label": "false_positive",
       "reason": "hash used for hashing/IDs, not security; pattern is a false positive"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/1592b9b56b70",
+      "label": "false_positive",
+      "reason": "intentional API-layer forwarding wrappers (requests.api convenience vs Session methods); per-method semantics differ"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b112f3bc200c",
+      "label": "false_positive",
+      "reason": "intentional API-layer forwarding wrappers (head/options); per-method semantics differ"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/c87df69fd84e",
+      "label": "false_positive",
+      "reason": "one-line algorithm helpers differing only in hash algorithm; idiomatic, not duplication"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/5d1e37779cc7",
+      "label": "false_positive",
+      "reason": "small same-file cookie helpers with distinct behaviors (domain/path list filtering)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/3b9c8699c4ea",
+      "label": "false_positive",
+      "reason": "dunder boilerplate (identical __eq__ on two auth classes), not consolidated code"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d56529b68d45",
+      "label": "false_positive",
+      "reason": "dunder boilerplate (__getstate__ pickle shims on distinct objects)"
     }
   ]
 }

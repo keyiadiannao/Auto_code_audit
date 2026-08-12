@@ -272,6 +272,318 @@
       "target_id": "hard/manual_sha256/python.py:1064",
       "label": "false_positive",
       "reason": "hash used for hashing/IDs, not security; pattern is a false positive"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/8d13ea40e8bb",
+      "label": "true_finding",
+      "reason": "near-verbatim 38-39L exception hook duplicated across threadexception and unraisableexception plugins"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/dfab0110b285",
+      "label": "true_finding",
+      "reason": "near-verbatim 37L collector duplicated across threadexception and unraisableexception plugins"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/17d4d8fc2a79",
+      "label": "false_positive",
+      "reason": "plugin pytest_addoption hooks registering different ini options; skeleton similarity only"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/fdfd99ce5447",
+      "label": "false_positive",
+      "reason": "different collectors (directory walk vs module tree); verified bodies differ"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d374da66ac2f",
+      "label": "false_positive",
+      "reason": "reporter __init__ boilerplate with distinct fields (helpconfig vs terminal)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/9283ad7c5c25",
+      "label": "false_positive",
+      "reason": "unrelated helpers sharing a try/except-raise pattern; verified bodies differ"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/5523b32e61a8",
+      "label": "false_positive",
+      "reason": "unrelated functions (frame slicing vs node walk); structural coincidence"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f910f60c590c",
+      "label": "false_positive",
+      "reason": "fixture variant family (capfd/capsys backends) with distinct capture machinery"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/bcb5b3a8b8b5",
+      "label": "false_positive",
+      "reason": "dispatched pprint handlers with distinct formats (same-file family)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/5e58c9aa565e",
+      "label": "false_positive",
+      "reason": "exception __init__ boilerplate (5 classes)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/e9d6d6192ad3",
+      "label": "false_positive",
+      "reason": "snap() accessor family in capture internals"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/963ac0f1c4e8",
+      "label": "false_positive",
+      "reason": "fixture-registration variants for distinct scopes (function/module/class)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b4e9ceb8b736",
+      "label": "false_positive",
+      "reason": "pprint formatting handlers for different containers"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a13b907ea058",
+      "label": "false_positive",
+      "reason": "dispatch stubs for user types (dict/list/string)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f6f33d05f1ce",
+      "label": "false_positive",
+      "reason": "hook-stub boilerplate (6-8L registration callbacks) in warnings plugin"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/79efc936ee76",
+      "label": "false_positive",
+      "reason": "resume/suspend accessor family in capture internals"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0431b948b9ce",
+      "label": "false_positive",
+      "reason": "hook-stub boilerplate (6L registration callbacks) in logging plugin"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/aa7d5a4703b5",
+      "label": "false_positive",
+      "reason": "writeorg accessor family (4-5L)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d1e970d8c81e",
+      "label": "false_positive",
+      "reason": "hook-stub boilerplate (3L runtest callbacks) in capture plugin"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f2a58f75d202",
+      "label": "false_positive",
+      "reason": "pprint handlers for different types (ordered_dict/simplenamespace)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0d5a95d45621",
+      "label": "false_positive",
+      "reason": "raises-exception __init__ boilerplate"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a9ed447ebd5f",
+      "label": "false_positive",
+      "reason": "parallel mark-deselection methods; bodies differ in filter semantics"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/1dbb76cc9b91",
+      "label": "false_positive",
+      "reason": "pprint handlers for different types (counter/deque)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/03985117b50e",
+      "label": "false_positive",
+      "reason": "approx subclass __init__ passthrough boilerplate"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/139a7c54e91d",
+      "label": "false_positive",
+      "reason": "parallel ini-loading helpers with different formats"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a5222f699f8a",
+      "label": "false_positive",
+      "reason": "terminal summary writers (xfailed/xpassed) emitting different content"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/996e63515473",
+      "label": "false_positive",
+      "reason": "tiny shouldfail/shouldstop helpers"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0e48fb0c310b",
+      "label": "false_positive",
+      "reason": "doctest helper boilerplate with distinct logic"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/2b8d90c73e0e",
+      "label": "false_positive",
+      "reason": "AST visitor boilerplate with distinct logic"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0cfdd5d5527a",
+      "label": "false_positive",
+      "reason": "set-comparison direction pair (gt/lt) sharing the skeleton; distinct comparison"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0aa28403fa10",
+      "label": "false_positive",
+      "reason": "pytester assertion helpers with different contracts"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/1ee5abba14dc",
+      "label": "false_positive",
+      "reason": "AST visitor boilerplate with distinct logic (BinOp/UnaryOp)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/c25611c1a5ce",
+      "label": "false_positive",
+      "reason": "fixture-decorator overloads"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/26a487ce8734",
+      "label": "false_positive",
+      "reason": "tiny posix stat helpers (group/owner)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/284f81e106ed",
+      "label": "false_positive",
+      "reason": "approx __eq__ boilerplate"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/29b1005634f3",
+      "label": "false_positive",
+      "reason": "pytester result accessors (getfailures/getreports)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/5238809c1409",
+      "label": "false_positive",
+      "reason": "hook-stub boilerplate (5-8L) in assertion plugin"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a674dc897d67",
+      "label": "false_positive",
+      "reason": "stash dict-method boilerplate (get/setdefault)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d9bcb287c084",
+      "label": "false_positive",
+      "reason": "junitxml node helper boilerplate"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/553f24a6faa8",
+      "label": "false_positive",
+      "reason": "raises message helpers (no_match_for_expected/actual)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/87e280b68eb2",
+      "label": "false_positive",
+      "reason": "hook-stub boilerplate (5-7L) in warnings plugin"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b323cec16cd0",
+      "label": "false_positive",
+      "reason": "set-comparison direction pair (gte/lte) sharing the skeleton; distinct comparison"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/1316275d5ce6",
+      "label": "false_positive",
+      "reason": "tiny assertion-state helpers"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/4d40293005af",
+      "label": "false_positive",
+      "reason": "plugin registration boilerplate (6L); substantive duplication of this plugin pair is in the hooks, marked separately"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d7060cdf9818",
+      "label": "false_positive",
+      "reason": "expression-parser recursion helpers"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f76f549aef94",
+      "label": "false_positive",
+      "reason": "raises/warns entry points; skeleton similarity only"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/4e460a10415f",
+      "label": "false_positive",
+      "reason": "tiny hasinit/hasnew helpers"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/efc8bd7c24bf",
+      "label": "false_positive",
+      "reason": "hook-stub boilerplate (4-5L) in setuponly/setupplan plugins"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/4b699afa91a7",
+      "label": "false_positive",
+      "reason": "start/suspend accessor boilerplate in capture internals"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/dc70a2feaa0c",
+      "label": "false_positive",
+      "reason": "tiny junitxml write helpers (4L)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/026ad02041e4",
+      "label": "false_positive",
+      "reason": "outcome __call__ boilerplate (3L)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b0a6a6902977",
+      "label": "false_positive",
+      "reason": "legacypath spawn helpers (3L)"
     }
   ]
 }

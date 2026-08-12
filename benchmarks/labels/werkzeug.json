@@ -176,6 +176,216 @@
       "target_id": "unreferenced/wsgi.py:18:responder",
       "label": "false_positive",
       "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/ac4fe641d23a",
+      "label": "true_finding",
+      "reason": "near-verbatim deprecation-wrapper properties (content_md5/pragma) duplicated across Request and Response"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/6fa81ce83a5e",
+      "label": "false_positive",
+      "reason": "different get() implementations (Headers vs TypeConversionDict vs CombinedMultiDict); verified bodies differ"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/72478a9a376c",
+      "label": "false_positive",
+      "reason": "per-module __getattr__ deprecation shims with different name mappings"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/106e6dae78a6",
+      "label": "true_finding",
+      "reason": "verbatim 13-line mimetype_params copied from Response into EnvironBuilder (test.py)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/37ff75b45127",
+      "label": "false_positive",
+      "reason": "WSGI __call__ implementations with different semantics (exception vs response)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/7e73b9ee8a2b",
+      "label": "false_positive",
+      "reason": "both delegate to shared util _sansio_utils.get_content_length; no duplicated logic"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a40881fa3733",
+      "label": "false_positive",
+      "reason": "operator-implementation boilerplate (__or__) on different dict types"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/c1139d4e335e",
+      "label": "false_positive",
+      "reason": "operator-implementation boilerplate (__ior__) on different dict types"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/89976ed0f586",
+      "label": "true_finding",
+      "reason": "identical is_json logic duplicated across Request and Response"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/1353e12a4b28",
+      "label": "false_positive",
+      "reason": "header-model __init__ passthrough boilerplate (cache_control/csp)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d5cf77f54ac0",
+      "label": "false_positive",
+      "reason": "unrelated functions (range header vs wsgi string); structural coincidence"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/41f134ab2460",
+      "label": "false_positive",
+      "reason": "EnvironBuilder HTTP test method family (thin request wrappers)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/fe797f4eff40",
+      "label": "false_positive",
+      "reason": "deprecation-property family on Response (same-file)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/e55049b5a03e",
+      "label": "false_positive",
+      "reason": "exception __init__ boilerplate (4 classes)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b2a68eb73ec9",
+      "label": "false_positive",
+      "reason": "lru_cache parse wrappers (4-5L)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/7ead64b24af7",
+      "label": "false_positive",
+      "reason": "parallel header parsers for different grammars (same-file family)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/aa373c00baec",
+      "label": "false_positive",
+      "reason": "property-accessor family (content_range/csp) on Response"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/b51bec7f8a53",
+      "label": "false_positive",
+      "reason": "exception header-builder family (get_headers x3)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/02dbf50e76d4",
+      "label": "false_positive",
+      "reason": "factory accessors (get_rules) on different rule classes"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0d5e2eebcb94",
+      "label": "false_positive",
+      "reason": "on_update callback boilerplate (5L)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/8530876e3719",
+      "label": "false_positive",
+      "reason": "parallel parsers for different header grammars (Cache-Control vs CSP) emitting different structures"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/92168bc8f55a",
+      "label": "false_positive",
+      "reason": "form-parser __init__ config passthrough on distinct parsers"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/8e2b45fb79d9",
+      "label": "false_positive",
+      "reason": "stream read/readline wrappers with distinct bodies"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/4edc03c41872",
+      "label": "false_positive",
+      "reason": "EnvironBuilder property pair (args/form) with different merge logic"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/0bc98940924b",
+      "label": "false_positive",
+      "reason": "local-proxy __call__ variants"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/a74236e59a42",
+      "label": "false_positive",
+      "reason": "accept __contains__/quality; unrelated"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/d42e260dd90b",
+      "label": "false_positive",
+      "reason": "auth dunder boilerplate (identical __eq__)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/54c8511860bb",
+      "label": "false_positive",
+      "reason": "map.bind match variants"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/5be16db5947a",
+      "label": "false_positive",
+      "reason": "tiny debug helpers (pin/pin_cookie_name)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/6d98547924c7",
+      "label": "false_positive",
+      "reason": "tiny wrappers (get_data/get_json)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/f5ffc9263cd3",
+      "label": "false_positive",
+      "reason": "unrelated functions (2-6L)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/34a10c545319",
+      "label": "false_positive",
+      "reason": "on_update callback boilerplate (5L)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/419766db2a7f",
+      "label": "false_positive",
+      "reason": "dunder boilerplate (__eq__, 5L)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/8d588fbdf470",
+      "label": "false_positive",
+      "reason": "dunder boilerplate (__hash__, 5L)"
+    },
+    {
+      "scanner": "duplicates",
+      "target_id": "cluster/cf2e274877e8",
+      "label": "false_positive",
+      "reason": "tiny EnvironBuilder flags (content_length/content_type)"
     }
   ]
 }
