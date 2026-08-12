@@ -1356,6 +1356,111 @@ def test_adjudicate_merge_ignore_dedupes_and_preserves() -> None:
     ]
 
 
+def test_adjudicate_merge_ignore_dedupes_across_different_reasons() -> None:
+    """Re-suppressing the same candidate with a different reason keeps the first.
+
+    ``reason`` is a review annotation, not identity: the dedupe must match on
+    the fields that locate the target (path, id, key, path+pattern) alone.
+    """
+    registry: dict = {}
+    entries = [
+        # deadcode identity = path
+        ("deadcode", {"path": "foo.py", "reason": "dynamic dispatch", "date": "2026-08-01"}),
+        ("deadcode", {"path": "foo.py", "reason": "loaded dynamically", "date": "2026-08-12"}),
+        # hardcoded identity = path + pattern
+        ("hardcoded", {"path": "a.py", "pattern": "sha", "reason": "canonical", "date": "2026-08-01"}),
+        ("hardcoded", {"path": "a.py", "pattern": "sha", "reason": "intentional", "date": "2026-08-12"}),
+        # contracts identity = key (within channel)
+        ("contracts/cli_without_bootstrap", {"key": "b.py", "reason": "v1", "date": "2026-08-01"}),
+        ("contracts/cli_without_bootstrap", {"key": "b.py", "reason": "v2", "date": "2026-08-12"}),
+        # different target — must be added
+        ("deadcode", {"path": "bar.py", "reason": "gone", "date": "2026-08-12"}),
+    ]
+    added = adjudicate._merge_ignore(registry, entries)
+    assert added == 4
+    # First record (with original reason and date) is preserved.
+    assert registry["deadcode"] == [
+        {"path": "foo.py", "reason": "dynamic dispatch", "date": "2026-08-01"},
+        {"path": "bar.py", "reason": "gone", "date": "2026-08-12"},
+    ]
+    assert registry["hardcoded"] == [
+        {"path": "a.py", "pattern": "sha", "reason": "canonical", "date": "2026-08-01"},
+    ]
+    assert registry["contracts"]["cli_without_bootstrap"] == [
+        {"key": "b.py", "reason": "v1", "date": "2026-08-01"},
+    ]
+
+
+def test_adjudicate_skip_is_not_permanent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``skip`` defers within the session; the candidate reappears on resume."""
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "scanner": "self-audit-run-all",
+                "schema_version": 5,
+                "scanners": {
+                    "deadcode": {
+                        "candidates": [
+                            {
+                                "path": "pkg/dead.py",
+                                "status": "DEAD",
+                                "py_refs": [],
+                                "doc_refs": [],
+                            }
+                        ]
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    ignore = tmp_path / "ignore.json"
+    lessons = tmp_path / "LESSONS.md"
+    verdicts = tmp_path / "verdicts.json"
+
+    # Session 1: skip the only candidate.
+    monkeypatch.setattr("builtins.input", lambda _prompt: "s")
+    assert adjudicate.main(
+        [
+            "--report", str(report),
+            "--ignore", str(ignore),
+            "--lessons", str(lessons),
+            "--verdicts", str(verdicts),
+        ]
+    ) == 0
+    log = json.loads(verdicts.read_text(encoding="utf-8"))
+    assert log["verdicts"][0]["disposition"] == "skip"
+
+    # --check must report the skipped candidate as still pending.
+    assert adjudicate.main(
+        ["--report", str(report), "--verdicts", str(verdicts), "--check"]
+    ) == 1
+
+    # Session 2: the candidate reappears; give it a real verdict.
+    answers = iter(["fp", "intentional generated entrypoint"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    assert adjudicate.main(
+        [
+            "--report", str(report),
+            "--ignore", str(ignore),
+            "--lessons", str(lessons),
+            "--verdicts", str(verdicts),
+        ]
+    ) == 0
+    # The skip record is replaced, not duplicated.
+    log = json.loads(verdicts.read_text(encoding="utf-8"))
+    assert len(log["verdicts"]) == 1
+    assert log["verdicts"][0]["disposition"] == "false positive"
+
+    # Now --check passes: the candidate has a real verdict.
+    assert adjudicate.main(
+        ["--report", str(report), "--verdicts", str(verdicts), "--check"]
+    ) == 0
+
+
 def test_adjudicate_append_lesson_numbers_blocks(tmp_path: Path) -> None:
     """Lesson blocks continue numbering and follow the Case/Lesson format."""
     lessons = tmp_path / "LESSONS.md"

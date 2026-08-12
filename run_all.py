@@ -27,7 +27,14 @@ import scan_style
 
 SKILL_DIR = Path(__file__).resolve().parent
 
+__version__ = "0.1.0"
+
 SCHEMA_VERSION = 5
+
+#: Default scanner profile.  ``research`` runs all scanners including TeX
+#: writing-style analysis; ``code`` excludes it.  When changing this default,
+#: the fallback in ``_diff_previous`` uses this constant automatically.
+DEFAULT_PROFILE = "research"
 
 _SCANNER_NAMES = {
     "deadcode": "dead code",
@@ -361,7 +368,7 @@ def _diff_previous(
         )
     elif previous.get("package") != package:
         reason = f"package {previous.get('package')!r} != {package!r}"
-    elif (previous.get("configuration") or {}).get("profile", "research") != profile:
+    elif (previous.get("configuration") or {}).get("profile", DEFAULT_PROFILE) != profile:
         reason = "profile changed; candidate reports are not comparable"
     if reason is not None:
         return {
@@ -840,7 +847,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--profile",
         choices=sorted(PROFILE_SCANNERS),
-        default="research",
+        default=DEFAULT_PROFILE,
         help="scanner profile: code excludes TeX style signals; research runs all scanners",
     )
     ap.add_argument(

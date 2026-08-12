@@ -44,21 +44,20 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from scan_capabilities import _signature_shape
-from scan_deadcode import _analyze_source, _matches_module, _module_name
-from scan_duplicates import _Normalize, load_ignore, _without_docstring
+from _scanner_common import (
+    EXCLUDE_PARTS,
+    PY_SUBDIRS,
+    NormalizeAST as _Normalize,
+    load_ignore,
+    matches_module as _matches_module,
+    module_name as _module_name,
+    signature_shape as _signature_shape,
+    without_docstring as _without_docstring,
+    write_json as _write_json,
+)
+from scan_deadcode import _analyze_source
 
 import _audit_config
-
-PY_SUBDIRS = (
-    "lib",
-    "experiments",
-    "mechanism",
-    "audit",
-    "verify",
-    "figures",
-)
-EXCLUDE_PARTS = {"frozen_source", "__pycache__"}
 COMMON_NAMES = {"main", "parse_args", "require", "close", "count"}
 
 _TOKEN_RE = re.compile(
@@ -268,13 +267,6 @@ def _import_evidence(
         for imp in imports_by_file.get(b_path, ())
     )
     return {"a_imports_b": a_imports_b, "b_imports_a": b_imports_a}
-
-
-def _write_json(path: Path | None, payload: dict) -> None:
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:

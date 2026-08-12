@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "auto-code-audit"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Three-layer static audit toolkit: dead modules, duplicate implementations, hard-coded drift, contract violations, and AI-style TeX prose"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,11 +31,15 @@ dev = ["pytest>=7"]
 auto-code-audit = "run_all:main"
 auto-code-adjudicate = "adjudicate:main"
 
+[tool.setuptools.dynamic]
+version = {attr = "run_all.__version__"}
+
 [tool.setuptools]
 py-modules = [
     "run_all",
     "adjudicate",
     "_audit_config",
+    "_scanner_common",
     "scan_deadcode",
     "scan_duplicates",
     "scan_forks",

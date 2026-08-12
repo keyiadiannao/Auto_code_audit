@@ -35,20 +35,16 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-from scan_duplicates import load_ignore
+from _scanner_common import (
+    EXCLUDE_PARTS,
+    PY_SUBDIRS,
+    load_ignore,
+    write_json as _write_json,
+)
 
 import _audit_config
 
 
-PY_SUBDIRS = (
-    "lib",
-    "experiments",
-    "mechanism",
-    "audit",
-    "verify",
-    "figures",
-    "tests",
-)
 CLI_ENTRY_LAYERS = ("experiments", "audit", "verify")
 EXCLUDE_PARTS = {"frozen_source", "__pycache__"}
 COMMON_NAMES = {"main", "parse_args", "require", "close", "count"}
@@ -131,13 +127,6 @@ def _iter_python(pkg: Path, subdirs: list[str]):
             if any(part in EXCLUDE_PARTS for part in rel.parts):
                 continue
             yield path, rel.as_posix()
-
-
-def _write_json(path: Path | None, payload: dict) -> None:
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:

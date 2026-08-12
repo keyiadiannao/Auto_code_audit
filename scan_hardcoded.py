@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import _audit_config
+from _scanner_common import load_ignore, write_json as _write_json
 
 # Pattern list: tune per project. `exclude_paths` ships empty — canonical
 # implementations that legitimately own the pattern belong there (or in
@@ -57,22 +58,9 @@ PATTERNS = [
 DEFAULT_EXCLUDE_PARTS = {"frozen_source", "tests", "self-audit", "__pycache__"}
 
 
-def _load_ignore(path: Path | None) -> dict:
-    if path and path.is_file():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {}
-
-
 def _candidate_id(pattern: str, path: str, line: int, code: str) -> str:
     raw = f"{pattern}\n{path}\n{line}\n{code}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:12]
-
-
-def _write_json(path: Path | None, payload: dict) -> None:
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -127,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         patterns = [item for item in patterns if item["severity"] != "low"]
     compiled = {item["name"]: re.compile(item["regex"]) for item in patterns}
 
-    ignore = _load_ignore(args.ignore)
+    ignore = load_ignore(args.ignore)
     ignored_pairs = {
         (entry.get("path", ""), entry.get("pattern", ""))
         for entry in ignore.get("hardcoded", [])

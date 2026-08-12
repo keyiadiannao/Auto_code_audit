@@ -42,17 +42,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import _audit_config
-
-PY_SUBDIRS = (
-    "lib",
-    "experiments",
-    "mechanism",
-    "audit",
-    "verify",
-    "figures",
-    "tests",
+from _scanner_common import (
+    EXCLUDE_PARTS,
+    PY_SUBDIRS,
+    signature_shape as _signature_shape,
+    write_json as _write_json,
 )
-EXCLUDE_PARTS = {"frozen_source", "__pycache__"}
 BOILERPLATE = {
     "main",
     "parse_args",
@@ -101,27 +96,6 @@ def _doc_first_line(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
 
 def _signature(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     return f"({ast.unparse(node.args)})"
-
-
-def _signature_shape(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-    """Parameter kinds and default presence only, e.g. ``(p, p, p, p=)``.
-
-    Names are dropped so two callables that differ only in parameter naming
-    still compare as the same shape -- that is the useful signal when the
-    names already match.
-    """
-    args = node.args
-    n_pos = len(args.posonlyargs) + len(args.args)
-    n_defaults = len(args.defaults)
-    bits = ["p"] * (n_pos - n_defaults) + ["p="] * n_defaults
-    if args.vararg:
-        bits.append("*p")
-    for index, arg in enumerate(args.kwonlyargs):
-        default = args.kw_defaults[index] if index < len(args.kw_defaults) else None
-        bits.append("k=" if default is not None else "k")
-    if args.kwarg:
-        bits.append("**p")
-    return f"({', '.join(bits)})"
 
 
 def extract_capabilities(path: Path) -> list[Capability]:
@@ -201,13 +175,6 @@ def _usage_counts(
             for name in names:
                 counts[name] += len(re.findall(rf"\b{re.escape(name)}\b", text))
     return counts
-
-
-def _write_json(path: Path | None, payload: dict) -> None:
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def _local_dict(local: Capability) -> dict:

@@ -36,6 +36,7 @@ import sys
 from pathlib import Path
 
 import _audit_config
+from _scanner_common import load_ignore, write_json as _write_json
 
 EXCESS_VOCAB = [
     "additionally",
@@ -243,12 +244,6 @@ def _mean_std(values: list[float]) -> tuple[float, float]:
 def _candidate_id(metric: str, path: str, text: str) -> str:
     raw = f"{metric}\n{path}\n{text}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:12]
-
-
-def _load_ignore(path: Path | None) -> dict:
-    if path and path.is_file():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {}
 
 
 def analyze_prose(
@@ -478,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: --tex-dir escapes root: {tex_dir}", file=sys.stderr)
         return 2
 
-    ignore = _load_ignore(args.ignore)
+    ignore = load_ignore(args.ignore)
     ignored_entries = ignore.get("style", [])
     ignored_ids = {entry.get("id", "") for entry in ignored_entries}
     ignored_pairs = {

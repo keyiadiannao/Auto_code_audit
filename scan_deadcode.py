@@ -24,6 +24,13 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import _audit_config
+from _scanner_common import (
+    PY_SUBDIRS,
+    load_ignore as _load_ignore,
+    matches_module as _matches_module,
+    module_name as _module_name,
+    write_json as _write_json,
+)
 
 DEFAULT_DOC_DIRS = [
     "{pkg}",
@@ -64,13 +71,6 @@ def _collect(root: Path, exts: set[str], exclude: set[str]) -> list[Path]:
             continue
         result.append(path)
     return result
-
-
-def _module_name(path: Path, package_root: Path) -> str:
-    parts = list(path.relative_to(package_root).with_suffix("").parts)
-    if parts and parts[-1] == "__init__":
-        parts.pop()
-    return ".".join(parts)
 
 
 def _string_constants(node) -> list[str]:
@@ -267,10 +267,6 @@ def _analyze_source(
     )
 
 
-def _matches_module(imported: str, target: str) -> bool:
-    return imported == target or imported.startswith(target + ".")
-
-
 def _resolve_dynamic_target(
     hint: str, source_path: Path, package_root: Path, modules: dict[Path, str]
 ) -> str | None:
@@ -316,19 +312,6 @@ def _references(
     return sorted(set(hits))
 
 
-def _load_ignore(path: Path | None) -> dict:
-    if path and path.is_file():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {}
-
-
-def _write_json(path: Path | None, payload: dict) -> None:
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
@@ -338,6 +321,9 @@ def main(argv: list[str] | None = None) -> int:
         help="repo root (default: script's repo)",
     )
     ap.add_argument("--package", default="src")
+    ap.add_argument("--subdirs", nargs="*", default=None,
+                    help="package subdirs to scan (default: all subdirs in config "
+                         "or PY_SUBDIRS)")
     ap.add_argument("--doc-dirs", nargs="*", default=None)
     ap.add_argument("--exclude", nargs="*", default=None)
     ap.add_argument("--json", type=Path, default=None)
@@ -353,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = _audit_config.load_config(repo)
     dead_cfg = cfg.get("deadcode", {})
+    subdirs = _audit_config.pick(args.subdirs, cfg, "subdirs", list(PY_SUBDIRS))
     exclude = set(
         _audit_config.pick(args.exclude, dead_cfg, "exclude", sorted(DEFAULT_EXCLUDE))
     )
@@ -360,11 +347,15 @@ def main(argv: list[str] | None = None) -> int:
         dead_cfg.get("doc_dirs"), DEFAULT_DOC_DIRS
     )
     extra_doc_dirs = args.doc_dirs or []
-    py_files = [
-        path
-        for path in pkg.rglob("*.py")
-        if not any(part in exclude for part in path.relative_to(pkg).parts)
-    ]
+    py_files = []
+    for sub in subdirs:
+        subdir = pkg / sub
+        if not subdir.is_dir():
+            continue
+        for path in subdir.rglob("*.py"):
+            if any(part in exclude for part in path.relative_to(pkg).parts):
+                continue
+            py_files.append(path)
     py_files.sort()
 
     imports_by_file: dict[Path, set[str]] = {}

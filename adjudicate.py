@@ -9,7 +9,9 @@ suppression). Decisions persist after each candidate, so quitting early loses
 nothing and resuming skips already-adjudicated candidates.
 
 Exit code 0: all candidates were adjudicated or the session was quit early.
-Exit code 2: the report file is missing or malformed.
+Exit code 1: ``--check`` found pending candidates (not yet adjudicated).
+Exit code 2: the report file is missing or malformed, or stdin was closed
+             during interactive adjudication.
 """
 from __future__ import annotations
 
@@ -93,7 +95,31 @@ def _render_detail(scanner: str, detail: dict) -> str:
     return ""
 
 
-_META_FIELDS = ("date", "owner")
+# Identity fields per suppression section.  Only these fields locate the
+# target in the codebase; reason/date/owner are review annotations, not
+# identity.  contracts/<channel> entries always use ``key``.
+_IDENTITY_FIELDS: dict[str, tuple[str, ...]] = {
+    "deadcode": ("path",),
+    "duplicates": ("id",),
+    "forks": ("key",),
+    "capabilities": ("key",),
+    "hardcoded": ("path", "pattern"),
+    "style": ("path", "pattern"),
+}
+
+
+def _suppression_identity(section: str, entry: dict) -> tuple:
+    """Return a hashable identity for a suppression entry.
+
+    Two entries collide when their identity tuples match, regardless of
+    ``reason``/``date``/``owner`` annotations.  This means re-suppressing
+    the same candidate with a different reason keeps the first record.
+    """
+    if section.startswith("contracts/"):
+        fields = ("key",)
+    else:
+        fields = _IDENTITY_FIELDS.get(section, ())
+    return tuple((f, entry.get(f)) for f in fields)
 
 
 def _suppression_meta(date: str | None, owner: str | None) -> dict:
@@ -154,9 +180,12 @@ def _ignore_entries(
 def _merge_ignore(registry: dict, entries: list[tuple[str, dict]]) -> int:
     """Merge entries into the registry; return the number of new entries.
 
-    Two entries collide when everything except their ``date``/``owner``
-    stamps matches, so re-suppressing an already-suppressed candidate keeps
-    the first suppression record (with its original review date).
+    Two entries collide when their suppression identity matches — that is,
+    when the fields that locate the target in the codebase are identical.
+    ``reason``/``date``/``owner`` are annotations and do not participate in
+    identity, so re-suppressing an already-suppressed candidate with a
+    different reason keeps the first suppression record (with its original
+    review date).
     """
     added = 0
     for section, entry in entries:
@@ -165,10 +194,9 @@ def _merge_ignore(registry: dict, entries: list[tuple[str, dict]]) -> int:
             channel_list = registry.setdefault("contracts", {}).setdefault(channel, [])
         else:
             channel_list = registry.setdefault(section, [])
-        identity = {key: value for key, value in entry.items() if key not in _META_FIELDS}
+        identity = _suppression_identity(section, entry)
         if any(
-            {key: value for key, value in existing.items() if key not in _META_FIELDS}
-            == identity
+            _suppression_identity(section, existing) == identity
             for existing in channel_list
         ):
             continue
@@ -211,6 +239,22 @@ def _save_verdicts(path: Path, verdicts: dict) -> None:
         json.dumps(verdicts, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+
+
+def _upsert_verdict(verdicts: dict, record: dict) -> None:
+    """Replace any existing verdict for the same candidate, else append.
+
+    A ``skip`` is a session-level deferral, not a permanent decision: the
+    candidate reappears on resume.  When the user later gives it a real
+    verdict, the old skip record is replaced rather than left alongside.
+    """
+    key = (record["scanner"], record["signature"])
+    records = verdicts.setdefault("verdicts", [])
+    for i, existing in enumerate(records):
+        if (existing.get("scanner"), existing.get("signature")) == key:
+            records[i] = record
+            return
+    records.append(record)
 
 
 def _path_from_state(value: str | None, root: Path, fallback: Path) -> Path:
@@ -358,14 +402,22 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     else:
         registry = {}
+
+    # Stamp schema version so future migrations can detect the format.
+    if "schema_version" not in registry:
+        registry["schema_version"] = 1
     verdicts = _load_verdicts(args.verdicts) or {
         "scanner": "self-audit-adjudicate",
         "report": str(args.report.resolve()),
         "adjudicated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "verdicts": [],
     }
+    # ``skip`` is a session-level deferral, not a final decision: skipped
+    # candidates reappear on resume and still count as pending for --check.
     decided = {
-        (item["scanner"], item["signature"]) for item in verdicts.get("verdicts", [])
+        (item["scanner"], item["signature"])
+        for item in verdicts.get("verdicts", [])
+        if item.get("disposition") != "skip"
     }
 
     pending = [
@@ -386,7 +438,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"  {_render_detail(item['scanner'], item['detail'])}")
         while True:
-            answer = input(f"verdict [{PROMPT_CHOICES}]: ").strip().lower()
+            try:
+                answer = input(f"verdict [{PROMPT_CHOICES}]: ").strip().lower()
+            except EOFError:
+                print(
+                    "\nerror: stdin closed; use --check for non-interactive mode",
+                    file=sys.stderr,
+                )
+                return 2
             if answer == "q":
                 print(
                     f"ADJUDICATE quit at {index}/{len(pending)}; "
@@ -400,7 +459,7 @@ def main(argv: list[str] | None = None) -> int:
                     "display": item["display"],
                     "disposition": "skip",
                 }
-                verdicts["verdicts"].append(record)
+                _upsert_verdict(verdicts, record)
                 _save_verdicts(args.verdicts, verdicts)
                 break
             if answer in DISPOSITIONS:
@@ -413,7 +472,14 @@ def main(argv: list[str] | None = None) -> int:
                 }
                 if disposition == "false positive":
                     while True:
-                        note = input("reason (appends to LESSONS.md; required): ").strip()
+                        try:
+                            note = input("reason (appends to LESSONS.md; required): ").strip()
+                        except EOFError:
+                            print(
+                                "\nerror: stdin closed; use --check for non-interactive mode",
+                                file=sys.stderr,
+                            )
+                            return 2
                         if note:
                             break
                     entries = _ignore_entries(item["scanner"], item["detail"], note, owner=owner)
@@ -428,10 +494,13 @@ def main(argv: list[str] | None = None) -> int:
                     record["note"] = note
                     record["suppressed"] = True
                 else:
-                    optional = input(f"optional note ({guidance}): ").strip()
+                    try:
+                        optional = input(f"optional note ({guidance}): ").strip()
+                    except EOFError:
+                        optional = ""
                     if optional:
                         record["note"] = optional
-                verdicts["verdicts"].append(record)
+                _upsert_verdict(verdicts, record)
                 _save_verdicts(args.verdicts, verdicts)
                 break
             print(f"  invalid choice; use one of {PROMPT_CHOICES}", file=sys.stderr)

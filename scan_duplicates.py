@@ -20,46 +20,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import _audit_config
+from _scanner_common import (
+    EXCLUDE_PARTS,
+    PY_SUBDIRS,
+    NormalizeAST as _Normalize,
+    load_ignore,
+    without_docstring as _without_docstring,
+    write_json as _write_json,
+)
 
 COMMON_NAMES = {"require", "parse_args", "main", "close", "count"}
-PY_SUBDIRS = (
-    "lib",
-    "experiments",
-    "mechanism",
-    "audit",
-    "verify",
-    "figures",
-    "tests",
-)
-EXCLUDE_PARTS = {"frozen_source", "__pycache__"}
-
-
-class _Normalize(ast.NodeTransformer):
-    """Normalize local names and literals while retaining called APIs."""
-
-    def visit_Name(self, node: ast.Name) -> ast.Name:
-        return ast.copy_location(ast.Name(id="_name", ctx=node.ctx), node)
-
-    def visit_arg(self, node: ast.arg) -> ast.arg:
-        node.arg = "_arg"
-        return self.generic_visit(node)
-
-    def visit_Constant(self, node: ast.Constant) -> ast.Constant:
-        value = node.value
-        if value is None or isinstance(value, bool):
-            replacement = value
-        elif isinstance(value, str):
-            replacement = "_str"
-        elif isinstance(value, bytes):
-            replacement = b"_bytes"
-        elif isinstance(value, (int, float, complex)):
-            replacement = 0
-        else:
-            replacement = None
-        return ast.copy_location(ast.Constant(value=replacement), node)
-
-    def visit_JoinedStr(self, node: ast.JoinedStr) -> ast.Constant:
-        return ast.copy_location(ast.Constant(value="_fstr"), node)
 
 
 @dataclass(frozen=True)
@@ -94,19 +64,6 @@ class _UnionFind:
         ra, rb = self.find(a), self.find(b)
         if ra != rb:
             self.parent[max(ra, rb)] = min(ra, rb)
-
-
-def _without_docstring(node: ast.FunctionDef | ast.AsyncFunctionDef):
-    cloned = copy.deepcopy(node)
-    cloned.name = "_function"
-    if (
-        cloned.body
-        and isinstance(cloned.body[0], ast.Expr)
-        and isinstance(cloned.body[0].value, ast.Constant)
-        and isinstance(cloned.body[0].value.value, str)
-    ):
-        cloned.body = cloned.body[1:]
-    return cloned
 
 
 def extract_functions(path: Path, min_chars: int) -> list[FunctionRecord]:
@@ -195,19 +152,6 @@ def _candidate_pairs(records: list[FunctionRecord]) -> set[tuple[int, int]]:
 def _cluster_id(members: list[FunctionRecord]) -> str:
     key = "\n".join(sorted(member.key for member in members))
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
-
-
-def load_ignore(path: Path | None) -> dict:
-    if path and path.is_file():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {}
-
-
-def _write_json(path: Path | None, payload: dict) -> None:
-    if path is None:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
