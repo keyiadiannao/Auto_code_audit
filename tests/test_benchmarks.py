@@ -19,6 +19,9 @@ def test_benchmark_manifest_is_fixed_and_valid() -> None:
         "requests",
         "click",
         "httpx",
+        "pytest",
+        "werkzeug",
+        "starlette",
     ]
     assert all(len(project["commit"]) == 40 for project in projects)
     assert all(project["all_py"] for project in projects)

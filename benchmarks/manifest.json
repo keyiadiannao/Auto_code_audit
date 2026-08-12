@@ -25,6 +25,30 @@
       "package": "httpx",
       "license": "BSD-3-Clause",
       "all_py": true
+    },
+    {
+      "id": "pytest",
+      "url": "https://github.com/pytest-dev/pytest.git",
+      "commit": "0d6fbdeffa57c796123f62f81f7dd370d9b7ecdc",
+      "package": "src/_pytest",
+      "license": "MIT",
+      "all_py": true
+    },
+    {
+      "id": "werkzeug",
+      "url": "https://github.com/pallets/werkzeug.git",
+      "commit": "218a653fd952b0a7fde05657dff00c40be5b8291",
+      "package": "src/werkzeug",
+      "license": "BSD-3-Clause",
+      "all_py": true
+    },
+    {
+      "id": "starlette",
+      "url": "https://github.com/encode/starlette.git",
+      "commit": "398e5a3430eb1ddd33e1d48d766efe41426e231f",
+      "package": "starlette",
+      "license": "BSD-3-Clause",
+      "all_py": true
     }
   ]
 }
