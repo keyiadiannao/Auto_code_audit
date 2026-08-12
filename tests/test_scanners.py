@@ -786,6 +786,8 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
     payload = json.loads(output_json.read_text(encoding="utf-8"))
     assert payload["schema_version"] == 5
     assert set(payload["provenance"]["scanner_sha256"]) == {
+        "_audit_config.py",
+        "_scanner_common.py",
         "run_all.py",
         "scan_capabilities.py",
         "scan_contracts.py",
@@ -1149,6 +1151,12 @@ def test_cli_smoke_catches_failing_entrypoint(tmp_path: Path) -> None:
         assert failures == [("broken_scan", 2)]
     finally:
         sys.path.remove(str(tmp_path))
+
+
+def test_cli_smoke_version_passes() -> None:
+    """Modules with --version must accept it and exit 0."""
+    failures = scan_cli_smoke.version_smoke()
+    assert failures == []
 
 
 def test_contract_scan_ignores_remaining_four_channels(

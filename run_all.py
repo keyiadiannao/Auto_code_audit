@@ -16,6 +16,7 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _audit_config
+import _scanner_common
 import scan_capabilities
 import scan_cli_smoke
 import scan_deadcode
@@ -884,9 +885,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cli_smoke:
         smoke_failures = scan_cli_smoke.smoke(("run_all",))
+        smoke_failures += scan_cli_smoke.version_smoke()
         if smoke_failures:
             for name, rc in smoke_failures:
-                print(f"error: CLI smoke failed {name} --help exited {rc}", file=sys.stderr)
+                print(f"error: CLI smoke failed {name} exited {rc}", file=sys.stderr)
             return 2
 
     args.root = args.root.resolve()
@@ -959,6 +961,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     scanner_files = [
+        Path(_audit_config.__file__),
+        Path(_scanner_common.__file__),
         Path(scan_capabilities.__file__),
         Path(scan_deadcode.__file__),
         Path(scan_contracts.__file__),
