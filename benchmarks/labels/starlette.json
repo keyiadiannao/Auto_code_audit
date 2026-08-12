@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "project_id": "starlette",
+  "commit": "398e5a3430eb1ddd33e1d48d766efe41426e231f",
+  "labels": [
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/config.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/authentication.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/base.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/cors.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/gzip.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/httpsredirect.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/trustedhost.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/wsgi.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/schemas.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/staticfiles.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/templating.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/testclient.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/middleware/gzip.py:221:_normalize_content_types",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/routing.py:89:get_name",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/status.py:210:__dir__",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/authentication.py:25:requires",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/concurrency.py:16:run_until_first_complete",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/convertors.py:88:register_url_convertor",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    }
+  ]
+}

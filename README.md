@@ -154,6 +154,48 @@ signatures) and `latest.md` gains a "Changes since last run" section, so a
 review session starts from what changed instead of re-reading the whole
 worksheet.
 
+### Labelled evaluation
+
+`benchmarks/labels/<project>.json` holds ground-truth adjudications keyed by
+the same stable `(scanner, target_id)` signatures the report diff uses. Each
+entry is `true_finding` or `false_positive` with a reason. The harness matches
+labels against the fresh run and reports per-scanner and aggregate stats per
+project, plus corpus totals:
+
+- `precision` — confirmed findings / labelled candidates (denominator is the
+  labelled subset only; unlabelled candidates are counted in `coverage` but do
+  not affect precision)
+- `coverage` — labelled vs. total candidates per project, so unlabelled
+  channels stay visible instead of being silently dropped
+- `review_burden` — candidates per confirmed finding (corpus total)
+- `candidates_per_kloc` and `runtime_per_kloc` — cost of a full pass against
+  package size (lines of scanned `.py` code)
+
+The v1 label set covers the channels most reliably adjudicated on public
+packages: dead-`public`-`API` candidates, forwarding wrappers, unreferenced
+public functions, fork pairs that are intentional convenience wrappers, and
+non-security digest hashes. All v1 entries are `false_positive`; the
+`duplicates` channel (the largest) is not yet adjudicated and shows as
+unlabelled. A label file whose `target_id` matches no candidate in the pinned
+commit is reported as `unmatched_labels` (stale scope), so label drift is
+visible rather than silent.
+
+### Mutation corpus (recall)
+
+`benchmarks/mutation/project/` is a synthetic fixture that injects one known
+issue per channel: a dead module, a duplicated function, an env write without
+a read, `strict=False` loosening, a `generation_a` hardcoded path, and a
+capability overlap. `run_mutation.py` scans the fixture and compares detection
+counts against `benchmarks/mutation/expected.json`:
+
+```powershell
+python benchmarks\run_mutation.py
+```
+
+Full recall is 16/16; the runner exits nonzero when any channel misses
+expected detections, so the regression gate covers scanner recall as well as
+precision on the corpus.
+
 ## Scanners
 
 | scanner | candidate signal | common false positive |

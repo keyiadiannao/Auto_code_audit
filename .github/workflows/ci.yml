@@ -41,9 +41,9 @@ jobs:
           python -m build --wheel --outdir dist
           python -m venv wheel-smoke
           if [ "$RUNNER_OS" = "Windows" ]; then
-            WHEEL_PY="wheel-smoke/Scripts/python.exe"
+            WHEEL_PY="$(pwd)/wheel-smoke/Scripts/python.exe"
           else
-            WHEEL_PY="wheel-smoke/bin/python"
+            WHEEL_PY="$(pwd)/wheel-smoke/bin/python"
           fi
           "$WHEEL_PY" -m pip install --quiet dist/*.whl
           mkdir -p wheel-smoke/outside

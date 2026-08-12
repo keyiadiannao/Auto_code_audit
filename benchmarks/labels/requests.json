@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "project_id": "requests",
+  "commit": "8068356288978c4f54661ae6f95afe0e0831885e",
+  "labels": [
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:74:get",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:90:options",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:117:post",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:137:put",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:154:patch",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/api.py:171:delete",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/sessions.py:908:session",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/utils.py:511:add_dict_to_cookiejar",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/utils.py:951:default_headers",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/_types.py:47:is_prepared",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/api.py:90:options",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/api.py:102:head",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/api.py:117:post",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/api.py:137:put",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/api.py:171:delete",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:149:dict_to_sequence",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:290:extract_zipped_paths",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:329:atomic_open",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:341:from_key_val_list",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:408:parse_list_header",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:500:dict_from_cookiejar",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:511:add_dict_to_cookiejar",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:522:get_encodings_from_content",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:633:get_unicode_from_response",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/api.py:post|sessions.py:Session.post",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/api.py:patch|sessions.py:Session.patch",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/api.py:patch|sessions.py:Session.put",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/api.py:put|sessions.py:Session.patch",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/api.py:put|sessions.py:Session.put",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/api.py:head|sessions.py:Session.head",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "forks",
+      "target_id": "fork/api.py:head|sessions.py:Session.options",
+      "label": "false_positive",
+      "reason": "intentional public convenience wrapper delegating to the full implementation"
+    },
+    {
+      "scanner": "hardcoded",
+      "target_id": "hard/manual_sha256/auth.py:195",
+      "label": "false_positive",
+      "reason": "hash used for hashing/IDs, not security; pattern is a false positive"
+    }
+  ]
+}

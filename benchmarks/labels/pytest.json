@@ -1,0 +1,277 @@
+{
+  "schema_version": 1,
+  "project_id": "pytest",
+  "commit": "0d6fbdeffa57c796123f62f81f7dd370d9b7ecdc",
+  "labels": [
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/assertion/truncate.py",
+      "label": "false_positive",
+      "reason": "referenced by _pytest/assertion/__init__.py via package-relative import; scope-limited ref resolution"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/freeze_support.py",
+      "label": "false_positive",
+      "reason": "re-exported as pytest.freeze_includes by the sibling src/pytest package outside the scanned scope"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "experiment_as_library/_py/path.py:1097:<dynamic spec_from_file_location>",
+      "label": "false_positive",
+      "reason": "stdlib importlib spec_from_file_location dynamic loading, not experiment-as-library reuse"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "experiment_as_library/assertion/rewrite.py:136:<dynamic spec_from_file_location>",
+      "label": "false_positive",
+      "reason": "stdlib importlib spec_from_file_location dynamic loading, not experiment-as-library reuse"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "experiment_as_library/pathlib.py:751:<dynamic spec_from_file_location>",
+      "label": "false_positive",
+      "reason": "stdlib importlib spec_from_file_location dynamic loading, not experiment-as-library reuse"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/_code/source.py:165:deindent",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/_io/saferepr.py:124:saferepr",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/_py/error.py:118:__getattr__",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/_py/path.py:199:map_as_list",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/assertion/_guards.py:14:istext",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/assertion/_guards.py:18:ismapping",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/assertion/_guards.py:22:isset",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/compat.py:36:legacy_path",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/compat.py:176:get_default_arg_names",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/config/__init__.py:191:main",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/config/findpaths.py:230:_load_pyproject_toml",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/doctest.py:733:doctest_namespace",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/faulthandler.py:78:get_timeout_config_value",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/fixtures.py:1749:deduplicate_names",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/legacypath.py:323:Cache_makedir",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/legacypath.py:331:FixtureRequest_fspath",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/legacypath.py:336:TerminalReporter_startdir",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/legacypath.py:346:Config_invocation_dir",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/legacypath.py:357:Config_rootdir",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/legacypath.py:377:Session_startdir",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/legacypath.py:398:Node_fspath",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/logging.py:57:_remove_ansi_escape_sequences",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/main.py:376:pytest_cmdline_main",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/main.py:475:pytest_collect_directory",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/mark/__init__.py:50:param",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/nodes.py:53:norm_sep",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/pathlib.py:69:get_lock_path",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/pathlib.py:235:find_suffixes",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/pathlib.py:1033:absolutepath",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/pathlib.py:1093:samefile_nofollow",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/pytester.py:199:_pytest",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/pytester.py:461:linecomp",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/pytester.py:478:pytester",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/python.py:230:path_matches_patterns",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/python.py:235:pytest_pycollect_makemodule",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/raises.py:300:repr_callable",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/raises.py:354:unescape",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/runner.py:384:pytest_runtest_makereport",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/unittest.py:527:_is_skipped",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "hardcoded",
+      "target_id": "hard/manual_sha256/python.py:1064",
+      "label": "false_positive",
+      "reason": "hash used for hashing/IDs, not security; pattern is a false positive"
+    }
+  ]
+}

@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "project_id": "werkzeug",
+  "commit": "218a653fd952b0a7fde05657dff00c40be5b8291",
+  "labels": [
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/dispatcher.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/http_proxy.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/lint.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/profiler.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "deadcode",
+      "target_id": "DEAD/middleware/proxy_fix.py",
+      "label": "false_positive",
+      "reason": "module is part of public package API (importable downstream); classification as dead is a false positive"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/_internal.py:29:_wsgi_decoding_dance",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/_internal.py:33:_wsgi_encoding_dance",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/datastructures/accept.py:250:_normalize_mime",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/datastructures/accept.py:321:_normalize_lang",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/datastructures/csp.py:12:csp_property",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/datastructures/headers.py:587:_options_header_vkw",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/debug/repr.py:38:debug_repr",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/formparser.py:45:default_stream_factory",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/http.py:1221:is_resource_modified",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/wsgi.py:18:responder",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/wsgi.py:86:get_host",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/wsgi.py:128:get_content_length",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "forwarding/wsgi.py:277:wrap_file",
+      "label": "false_positive",
+      "reason": "intentional delegation wrapper (public API or platform adaptation), not drift"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/exceptions.py:892:abort",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/security.py:75:generate_password_hash",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/security.py:117:check_password_hash",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/serving.py:552:make_ssl_devcert",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/test.py:146:encode_multipart",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/test.py:1205:create_environ",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:188:secure_filename",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:292:append_slash_redirect",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/utils.py:548:send_from_directory",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/http.py:1279:remove_hop_by_hop_headers",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    },
+    {
+      "scanner": "contracts",
+      "target_id": "unreferenced/wsgi.py:18:responder",
+      "label": "false_positive",
+      "reason": "public API surface (or runtime/duck-typed use), not dead code"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "description": "Expected scanner detections for the synthetic mutation corpus. Each leaf is a channel count the scanners must reach for full recall.",
+  "expected": {
+    "deadcode": {
+      "DEAD": 5
+    },
+    "duplicates": {
+      "clusters": 1
+    },
+    "forks": {
+      "small_function_pairs": 1
+    },
+    "contracts": {
+      "experiment_as_library": 0,
+      "experiment_path_hacks": 0,
+      "forwarding_wrappers": 0,
+      "same_name_contracts": 1,
+      "unreferenced_top_level_functions": 4,
+      "cli_without_bootstrap": 0,
+      "defensive_param_loosening": 1,
+      "env_written_not_read": 1,
+      "generation_path_without_env": 1
+    },
+    "capabilities": {
+      "overlap": 1
+    }
+  }
+}
