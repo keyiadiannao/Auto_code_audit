@@ -234,6 +234,40 @@ def iter_functions(
 #                         scan_duplicates with identical [:12] truncation)
 # ---------------------------------------------------------------------------
 
+def collect_py_files(
+    package_root: Path,
+    subdirs: list[str] | None = None,
+    exclude_parts: set[str] | None = None,
+) -> list[Path]:
+    """Collect ``.py`` files under *package_root*, optionally filtered by subdirs.
+
+    When *subdirs* is ``None``, empty, or contains ``"."``, scans all ``.py``
+    files recursively under *package_root* (the ``--all-py`` mode).  Otherwise
+    only scans the named subdirectories.
+
+    *exclude_parts* defaults to :data:`EXCLUDE_PARTS`; any path component in
+    the set causes the file to be skipped.
+    """
+    if exclude_parts is None:
+        exclude_parts = EXCLUDE_PARTS
+    files: list[Path] = []
+    if not subdirs or "." in subdirs:
+        for path in package_root.rglob("*.py"):
+            if any(part in exclude_parts for part in path.relative_to(package_root).parts):
+                continue
+            files.append(path)
+    else:
+        for sub in subdirs:
+            subdir = package_root / sub
+            if not subdir.is_dir():
+                continue
+            for path in subdir.rglob("*.py"):
+                if any(part in exclude_parts for part in path.relative_to(package_root).parts):
+                    continue
+                files.append(path)
+    return sorted(files)
+
+
 def short_hash(*parts: str) -> str:
     """Return a 12-char hex digest from the concatenation of *parts*.
 

@@ -346,6 +346,14 @@ def main(argv: list[str] | None = None) -> int:
         help="check for pending candidates without prompting or writing files",
     )
     ap.add_argument(
+        "--export-ignore",
+        type=Path,
+        default=None,
+        help="rebuild a suppression registry from verdicts.json and exit; "
+             "only 'false positive' dispositions generate suppression entries "
+             "(non-interactive)",
+    )
+    ap.add_argument(
         "--owner",
         default=None,
         help="suppression owner stamped into ignore.json (default: git user.name)",
@@ -433,6 +441,44 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ADJUDICATE CHECK_FAIL pending={len(pending)}", file=sys.stderr)
             return 1
         print(f"ADJUDICATE CHECK_PASS candidates={len(candidates)}")
+        return 0
+
+    if args.export_ignore is not None:
+        candidates_by_key = {
+            (item["scanner"], item["signature"]): item
+            for item in candidates
+        }
+        export_registry: dict = {}
+        if args.export_ignore.is_file():
+            try:
+                export_registry = json.loads(
+                    args.export_ignore.read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError):
+                export_registry = {}
+        if not isinstance(export_registry, dict):
+            export_registry = {}
+        if "schema_version" not in export_registry:
+            export_registry["schema_version"] = 1
+        exported = 0
+        for verdict in verdicts.get("verdicts", []):
+            if verdict.get("disposition") != "false positive":
+                continue
+            key = (verdict["scanner"], verdict["signature"])
+            item = candidates_by_key.get(key)
+            if item is None:
+                continue
+            note = verdict.get("note", "exported from verdicts")
+            entries = _ignore_entries(
+                item["scanner"], item["detail"], note, owner=owner
+            )
+            exported += _merge_ignore(export_registry, entries)
+        args.export_ignore.parent.mkdir(parents=True, exist_ok=True)
+        args.export_ignore.write_text(
+            json.dumps(export_registry, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        print(f"EXPORT_IGNORE written={exported} path={args.export_ignore}")
         return 0
 
     for index, item in enumerate(pending, start=1):

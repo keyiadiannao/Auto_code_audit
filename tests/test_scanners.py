@@ -788,6 +788,7 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
     assert set(payload["provenance"]["scanner_sha256"]) == {
         "_audit_config.py",
         "_scanner_common.py",
+        "report_formatter.py",
         "run_all.py",
         "scan_capabilities.py",
         "scan_contracts.py",
@@ -1821,6 +1822,151 @@ def test_run_all_stale_check_end_to_end(
     out = capsys.readouterr().out
     assert "STALE_CHECK" in out
     assert "file missing: pkg/gone.py" in out
+
+
+def test_adjudicate_export_ignore_rebuilds_registry(
+    tmp_path: Path,
+) -> None:
+    """--export-ignore rebuilds ignore.json from verdicts, keeping only FP dispositions."""
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "scanner": "self-audit-run-all",
+                "schema_version": 5,
+                "scanners": {
+                    "deadcode": {
+                        "candidates": [
+                            {
+                                "path": "pkg/lib/unused.py",
+                                "status": "DEAD",
+                                "py_refs": [],
+                                "doc_refs": [],
+                            }
+                        ]
+                    },
+                    "duplicates": {
+                        "clusters": [
+                            {
+                                "id": "abcd1234abcd",
+                                "size": 2,
+                                "priority": "high",
+                                "priority_reason": "lib_shared",
+                                "lib_shared": [],
+                                "members": [
+                                    {"path": "lib/a.py", "name": "a", "qualname": "a"},
+                                    {"path": "experiments/b.py", "name": "b", "qualname": "b"},
+                                ],
+                            }
+                        ]
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    verdicts = tmp_path / "verdicts.json"
+    verdicts.write_text(
+        json.dumps(
+            {
+                "verdicts": [
+                    {
+                        "scanner": "deadcode",
+                        "signature": "DEAD/pkg/lib/unused.py",
+                        "disposition": "false positive",
+                        "note": "reached via introspection",
+                    },
+                    {
+                        "scanner": "duplicates",
+                        "signature": "cluster/abcd1234abcd",
+                        "disposition": "true duplicate",
+                        "note": "consolidate later",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "exported_ignore.json"
+
+    rc = adjudicate.main(
+        [
+            "--report", str(report),
+            "--verdicts", str(verdicts),
+            "--export-ignore", str(export_path),
+            "--owner", "ci-bot",
+        ]
+    )
+    assert rc == 0
+    registry = json.loads(export_path.read_text(encoding="utf-8"))
+    assert registry["schema_version"] == 1
+    # Only the false-positive verdict generates a suppression entry.
+    assert len(registry["deadcode"]) == 1
+    assert registry["deadcode"][0]["path"] == "pkg/lib/unused.py"
+    assert registry["deadcode"][0]["reason"] == "reached via introspection"
+    assert registry["deadcode"][0]["owner"] == "ci-bot"
+    assert "date" in registry["deadcode"][0]
+    # The true-duplicate verdict must NOT appear as a suppression.
+    assert "duplicates" not in registry
+
+
+def test_adjudicate_export_ignore_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    """Running --export-ignore twice does not duplicate entries."""
+    report = tmp_path / "report.json"
+    report.write_text(
+        json.dumps(
+            {
+                "scanner": "self-audit-run-all",
+                "schema_version": 5,
+                "scanners": {
+                    "deadcode": {
+                        "candidates": [
+                            {
+                                "path": "pkg/lib/gone.py",
+                                "status": "DEAD",
+                                "py_refs": [],
+                                "doc_refs": [],
+                            }
+                        ]
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    verdicts = tmp_path / "verdicts.json"
+    verdicts.write_text(
+        json.dumps(
+            {
+                "verdicts": [
+                    {
+                        "scanner": "deadcode",
+                        "signature": "DEAD/pkg/lib/gone.py",
+                        "disposition": "false positive",
+                        "note": "generated code",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    export_path = tmp_path / "exported_ignore.json"
+
+    for _ in range(2):
+        assert (
+            adjudicate.main(
+                [
+                    "--report", str(report),
+                    "--verdicts", str(verdicts),
+                    "--export-ignore", str(export_path),
+                ]
+            )
+            == 0
+        )
+    registry = json.loads(export_path.read_text(encoding="utf-8"))
+    assert len(registry["deadcode"]) == 1
 
 
 def test_audit_config_warns_once_on_invalid_json(

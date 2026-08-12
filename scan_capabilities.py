@@ -317,6 +317,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--package", default="src")
     ap.add_argument(
+        "--subdirs",
+        nargs="*",
+        default=None,
+        help="package subdirs to scan (default: all in config or PY_SUBDIRS; "
+             "pass '.' to scan all .py files recursively)",
+    )
+    ap.add_argument(
         "--file",
         default=None,
         help="check one package-relative file (e.g. src/experiments/run_experiment.py) "
@@ -344,7 +351,7 @@ def main(argv: list[str] | None = None) -> int:
     cap_cfg = cfg.get("capabilities", {})
     doc_threshold = _audit_config.pick(args.doc_threshold, cap_cfg, "doc_threshold", 0.55)
     top = _audit_config.pick(args.top, cap_cfg, "top", 40)
-    subdirs = _audit_config.as_string_list(cfg.get("subdirs"), list(PY_SUBDIRS))
+    subdirs = _audit_config.pick(args.subdirs, cfg, "subdirs", list(PY_SUBDIRS))
 
     lib_dir = pkg / "lib"
     index: list[Capability] = []
@@ -387,6 +394,8 @@ def main(argv: list[str] | None = None) -> int:
             rel_parts = path.relative_to(pkg).parts
             if any(part in EXCLUDE_PARTS for part in rel_parts):
                 continue
+            if sub == "." and rel_parts[0] == "lib":
+                continue  # lib is indexed separately above
             try:
                 extracted = extract_capabilities(path)
             except (OSError, UnicodeError, SyntaxError) as exc:
