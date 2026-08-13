@@ -171,6 +171,12 @@ An optional `<root>/audit.config.json` tunes scanner thresholds and exclusions.
 The config is checked for supported keys, types, ranges, and schema version;
 invalid values produce one warning and use compiled-in defaults.
 
+For helper-reuse ownership, configure package-relative shared-code roots:
+
+```json
+{"schema_version": 1, "regions": {"shared_paths": ["lib", "src/core"]}}
+```
+
 ## Benchmark Corpus
 
 The fixed-commit pilot corpus lives in `benchmarks/manifest.json`. It contains
@@ -431,8 +437,8 @@ scanner recall as well as precision on the corpus.
 | `scan_deadcode.py` | no visible import or documentation reference | dynamic dispatch, manually invoked runner, provenance-only tool |
 | `scan_duplicates.py` | structurally similar function component | symmetric experiment arms, intentionally separate intervention boundaries |
 | `scan_forks.py` | cross-file callables sharing a large common skeleton with diverged bodies (>= 40 lines, >= 75% token similarity) | deliberate specialization forks with distinct contracts, same-file symmetric helpers |
-| `scan_contracts.py` | modules used as libraries, forwarding wrappers, repeated contract-sensitive names, unreferenced top-level functions, env-handoff and load-strictness violations | a valuable adapter, dynamic entrypoint, or intentionally independent audit implementation |
-| `scan_regions.py` | repeated capability blocks: inline copies of an existing named helper (`helper_not_reused`), shared-capability blocks across files, short high-semantic-density blocks (asymmetric indexing, contract kwargs), and near-identical whole functions carrying API calls (`twin_match`) | parallel branches with genuinely distinct contracts, single-occurrence boilerplate |
+| `scan_contracts.py` | modules used as libraries, dynamic module loading/state mutation, forwarding wrappers, repeated contract-sensitive names, unreferenced top-level functions, env-handoff and load-strictness violations | a valuable adapter, plugin loader with explicit lifecycle, dynamic entrypoint, or intentionally independent audit implementation |
+| `scan_regions.py` | repeated capability blocks: inline copies of an existing named helper (`helper_not_reused`), shared-capability blocks across files, short high-semantic-density blocks (asymmetric indexing, contract kwargs), and near-identical whole functions carrying API calls (`twin_match`) | parallel branches with genuinely distinct contracts, generic validation boilerplate, single-occurrence boilerplate |
 | `scan_hardcoded.py` | syntax known to drift from shared behavior | a distinct hash contract or an intentional frozen-forward implementation |
 | `scan_capabilities.py` | script-local reimplementations of library functions | thin role-specific wrappers with real contracts |
 | `scan_style.py` | AI-typical writing signals in TeX prose (semicolon chains, template openers, em-dash rate, burstiness, excess vocabulary, bare `\pm`) | technical enumeration, section-map lists, statistics-context "robust/significant" |
@@ -443,7 +449,11 @@ Highlights worth knowing before you interpret a report:
   package initializers as `PACKAGE`, never `DEAD`. Its dependency graph covers
   three channels: static imports, bare imports under a `sys.path`-pinned
   subdirectory, and importlib file loads (including thin wrapper calls).
-- **`scan_contracts.py`** runs four runtime-blind-spot channels that plain
+- **`scan_contracts.py`** also detects runtime-created module bindings. A
+  dynamic load is a medium-priority review candidate; assigning state on the
+  created module (directly or through a loop variable) is high priority because
+  behavior becomes dependent on ambient mutable globals and call order.
+- **`scan_contracts.py`** runs four additional runtime-blind-spot channels that plain
   AST fingerprints cannot see: `env_written_not_read`,
   `generation_path_without_env`, `cli_without_bootstrap`, and
   `defensive_param_loosening`.

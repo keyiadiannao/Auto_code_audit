@@ -125,6 +125,18 @@ class FunctionRecord:
     #: API-free twins (pure arithmetic, stdlib name calls) are simple
     #: enough to compare by eye and stay out of the report.
     api_calls: bool = False
+    #: Canonicalized call names in the body. Helper-reuse matches use these
+    #: as semantic anchors so generic boilerplate cannot become high risk
+    #: from token overlap alone.
+    calls: tuple[str, ...] = ()
+
+
+GENERIC_HELPER_CALLS = {
+    "bool", "dict", "enumerate", "float", "int", "len", "list", "max",
+    "min", "print", "range", "set", "sorted", "str", "sum", "tuple",
+    "zip", "AssertionError", "KeyError", "RuntimeError", "TypeError",
+    "ValueError",
+}
 
 
 def _control_shape(block: list[ast.stmt]) -> str:
@@ -620,6 +632,7 @@ def extract_regions(path: Path) -> tuple[list[RegionRecord], list[FunctionRecord
         if 3 <= nstmts <= 60 and node.name not in COMMON_NAMES:
             tokens = tuple(TOKEN_RE.findall(_normalize_block(body)))
             if len(tokens) >= 25:
+                _, _, calls, _, _, _ = _region_metrics(body, fn_locals)
                 function_candidates.append(
                     FunctionRecord(
                         path="",
@@ -631,6 +644,7 @@ def extract_regions(path: Path) -> tuple[list[RegionRecord], list[FunctionRecord
                         api_calls=any(
                             _stmt_has_api_call(stmt) for stmt in body
                         ),
+                        calls=calls,
                     )
                 )
     covered = {
@@ -838,6 +852,13 @@ def main(argv: list[str] | None = None) -> int:
     if not 0.0 <= twin_threshold <= 1.0:
         print("error: --twin-threshold must be in [0, 1]", file=sys.stderr)
         return 2
+    shared_paths = tuple(
+        part.strip("/")
+        for part in _audit_config.as_string_list(
+            region_cfg.get("shared_paths"), ["lib", "src"]
+        )
+        if part.strip("/")
+    )
 
     records: list[RegionRecord] = []
     functions: list[FunctionRecord] = []
@@ -893,6 +914,7 @@ def main(argv: list[str] | None = None) -> int:
                     tokens=item.tokens,
                     covered=item.covered,
                     api_calls=item.api_calls,
+                    calls=item.calls,
                 )
                 for item in indexed
             )
@@ -960,7 +982,7 @@ def main(argv: list[str] | None = None) -> int:
     #     partial-reuse drift signal and is reported — the member record's
     #     `canonical_referenced_in_parent` flag is True for those matches.
     helper_reports: list[dict[str, Any]] = []
-    helper_matches: list[tuple[int, int, float, bool]] = []
+    helper_matches: list[tuple[int, int, float, bool, tuple[str, ...]]] = []
     helper_indices = [i for i, record in enumerate(records) if "helper" in record.channel]
     canonical_indices = [fi for fi, fn in enumerate(functions) if not fn.covered]
     for qi in helper_indices:
@@ -985,17 +1007,29 @@ def main(argv: list[str] | None = None) -> int:
             if coverage >= helper_reuse_threshold:
                 if fn.name in region.calls:
                     continue
-                helper_matches.append(
-                    (qi, fi, coverage, fn.name in region.parent_tokens)
+                shared_calls = tuple(
+                    sorted(
+                        (set(region.calls) & set(fn.calls))
+                        - GENERIC_HELPER_CALLS
+                    )
                 )
-    by_function: dict[int, list[tuple[int, float, bool]]] = defaultdict(list)
-    for qi, fi, coverage, referenced in helper_matches:
-        by_function[fi].append((qi, coverage, referenced))
+                helper_matches.append(
+                    (
+                        qi,
+                        fi,
+                        coverage,
+                        fn.name in region.parent_tokens,
+                        shared_calls,
+                    )
+                )
+    by_function: dict[int, list[tuple[int, float, bool, tuple[str, ...]]]] = defaultdict(list)
+    for qi, fi, coverage, referenced, shared_calls in helper_matches:
+        by_function[fi].append((qi, coverage, referenced, shared_calls))
     for fi, fn_matches in by_function.items():
         fn = functions[fi]
         helper_members: list[dict[str, Any]] = []
         files = {fn.path}
-        for qi, coverage, referenced in sorted(fn_matches):
+        for qi, coverage, referenced, shared_calls in sorted(fn_matches):
             region = records[qi]
             helper_members.append(
                 {
@@ -1018,17 +1052,23 @@ def main(argv: list[str] | None = None) -> int:
                     "extractability": region.extractability,
                     "coverage": round(coverage, 4),
                     "canonical_referenced_in_parent": referenced,
+                    "shared_calls": list(shared_calls),
                 }
             )
             files.add(region.path)
-        best = max(coverage for _, coverage, _ in fn_matches)
+        best = max(coverage for _, coverage, _, _ in fn_matches)
         cross_file = len(files) >= 2
-        if best >= 0.85 and (fn.path.startswith("lib/") or cross_file):
+        canonical_in_shared_path = any(
+            fn.path == prefix or fn.path.startswith(prefix + "/")
+            for prefix in shared_paths
+        )
+        semantic_anchor = any(calls for _, _, _, calls in fn_matches)
+        if best >= 0.85 and cross_file and canonical_in_shared_path and semantic_anchor:
             priority = "high"
             priority_reason = (
                 f"inline copy covers {best:.0%} of canonical helper {fn.qualname}"
             )
-        elif best >= 0.7:
+        elif best >= 0.7 and (canonical_in_shared_path or semantic_anchor):
             priority = "medium"
             priority_reason = (
                 f"inline copy partially re-implements canonical helper {fn.qualname}"
@@ -1063,13 +1103,20 @@ def main(argv: list[str] | None = None) -> int:
                     "lineno": fn.start_line,
                 },
                 "semantic_risk": round(
-                    max(records[qi].risk for qi, _, _ in fn_matches), 2
+                    max(records[qi].risk for qi, _, _, _ in fn_matches), 2
                 ),
                 "risk_signals": sorted(
                     {
                         signal
-                        for qi, _, _ in fn_matches
+                        for qi, _, _, _ in fn_matches
                         for signal in records[qi].risk_signals
+                    }
+                ),
+                "shared_calls": sorted(
+                    {
+                        call
+                        for _, _, _, calls in fn_matches
+                        for call in calls
                     }
                 ),
                 "members": helper_members,

@@ -31,9 +31,9 @@ import scan_style
 
 SKILL_DIR = Path(__file__).resolve().parent
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 #: Configuration keys that change scanner semantics; the audit-config
 #: fingerprint is projected onto these (absolute-path and non-semantic keys
@@ -137,6 +137,7 @@ def finding_evidence_hash(scanner: str, target_id: str, detail: dict) -> str:
 #: Contracts channels whose candidates are real drift risks: a new one after a
 #: patch must reach the Layer-3 new-risk gate.
 CONTRACTS_RISK: dict[str, str] = {
+    "dynamic_module_runtime_coupling": "high",
     "defensive_param_loosening": "high",
     "env_written_not_read": "high",
     "generation_path_without_env": "medium",
@@ -162,6 +163,8 @@ def value_cohort(scanner: str, detail: dict) -> str:
         if detail.get("twin_match"):
             return "high"
         return "medium" if detail.get("kind") == "shared_capability" else "low"
+    if scanner == "contracts" and detail.get("priority") in {"high", "medium"}:
+        return str(detail["priority"])
     return "low"
 
 
@@ -354,6 +357,15 @@ def _candidate_signatures(
             detail["_channel"] = channel
             con.append((sig(item), display(item), detail))
 
+    contract_sigs(
+        "dynamic_module_runtime_coupling",
+        contracts.get("dynamic_module_runtime_coupling", []),
+        lambda i: f"dynamic_runtime/{i['path']}",
+        lambda i: (
+            f"`{i['path']}:{i['line']}` {i['kind']} "
+            f"({len(i['rebindings'])} state rebindings)"
+        ),
+    )
     contract_sigs(
         "experiment_as_library",
         contracts.get("experiment_as_library", []),

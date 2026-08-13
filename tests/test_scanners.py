@@ -82,6 +82,9 @@ def {name}(values, scale=1):
     assert [item["path"] for item in cluster["members"]] == sorted(
         item["path"] for item in cluster["members"]
     )
+    assert payload["schema_version"] == 2
+    assert all(member["start_line"] == 2 for member in cluster["members"])
+    assert all(member["end_line"] == 9 for member in cluster["members"])
 
 
 def test_short_shared_duplicate_stays_low_priority(
@@ -571,6 +574,7 @@ def test_contract_scan_exposes_boundaries_wrappers_and_name_collisions(
     ) == 0
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["counts"] == {
+        "dynamic_module_runtime_coupling": 0,
         "experiment_as_library": 1,
         "experiment_path_hacks": 0,
         "forwarding_wrappers": 1,
@@ -645,7 +649,73 @@ def test_contract_scan_flags_cli_scripts_without_syspath_bootstrap(
         "audit/also_bad.py",
     }
     assert payload["counts"]["cli_without_bootstrap"] == 2
-    assert payload["schema_version"] == 4
+    assert payload["schema_version"] == 5
+
+
+def test_contract_scan_detects_dynamic_module_state_mutation(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    package = mini_repo / "pkg"
+    _write(
+        package / "scripts" / "runtime_loader.py",
+        "import importlib.util\n"
+        "spec = importlib.util.spec_from_file_location('worker', WORKER_PATH)\n"
+        "worker = importlib.util.module_from_spec(spec)\n"
+        "spec.loader.exec_module(worker)\n"
+        "worker.MODE = 'audit'\n"
+        "for module in (worker,):\n"
+        "    module.ROOT = ROOT\n",
+    )
+    output = tmp_path / "dynamic-contracts.json"
+    assert scan_contracts.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    ) == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["dynamic_module_runtime_coupling"] == [
+        {
+            "kind": "dynamic_module_state_mutation",
+            "line": 2,
+            "loads": [
+                {
+                    "binding": "spec",
+                    "kind": "file",
+                    "line": 2,
+                    "source": "WORKER_PATH",
+                }
+            ],
+            "module_bindings": ["worker"],
+            "path": "scripts/runtime_loader.py",
+            "priority": "high",
+            "rebindings": [
+                {"attribute": "MODE", "line": 5, "target": "worker.MODE"},
+                {"attribute": "ROOT", "line": 7, "target": "module.ROOT"},
+            ],
+            "state_attributes": ["MODE", "ROOT"],
+        }
+    ]
+
+
+def test_contract_scan_does_not_flag_explicit_runtime_configuration(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    package = mini_repo / "pkg"
+    _write(
+        package / "lib" / "runtime.py",
+        "from dataclasses import dataclass\n"
+        "@dataclass(frozen=True)\n"
+        "class Config:\n"
+        "    root: str\n"
+        "class Runtime:\n"
+        "    def __init__(self, config):\n"
+        "        self.config = config\n"
+        "runtime = Runtime(Config(root='artifacts'))\n",
+    )
+    output = tmp_path / "explicit-contracts.json"
+    assert scan_contracts.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    ) == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["dynamic_module_runtime_coupling"] == []
 
 
 def test_contract_scan_flags_defensive_param_loosening(
@@ -802,6 +872,7 @@ def test_contract_scan_ignore_registry_suppresses_channels(
     assert payload["cli_without_bootstrap"] == []
     assert payload["defensive_param_loosening"] == []
     assert payload["ignored_counts"] == {
+        "dynamic_module_runtime_coupling": 0,
         "cli_without_bootstrap": 1,
         "defensive_param_loosening": 1,
         "env_written_not_read": 1,
@@ -941,7 +1012,7 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
         == 0
     )
     payload = json.loads(output_json.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 7
+    assert payload["schema_version"] == 8
     assert payload["provenance"]["audit_config_hash"] == (
         run_all.audit_config_hash(payload["configuration"])
     )
@@ -1441,6 +1512,7 @@ def test_contract_scan_ignores_remaining_four_channels(
         "lib/math.py"
     ]
     assert payload["ignored_counts"] == {
+        "dynamic_module_runtime_coupling": 0,
         "cli_without_bootstrap": 0,
         "defensive_param_loosening": 0,
         "env_written_not_read": 0,
@@ -2925,6 +2997,40 @@ def test_region_scan_finds_helper_not_reused(
     assert member["path"] == "experiments/a.py"
     assert member["qualname"] == "run"
     assert member["canonical_referenced_in_parent"] is False
+    assert cluster["shared_calls"] == ["_model_device_dtype"]
+
+
+def test_region_helper_token_overlap_without_semantic_anchor_is_not_high(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    generic = (
+        "    if len(values) == 0:\n"
+        "        raise ValueError('empty')\n"
+        "    if len(values) > limit:\n"
+        "        raise ValueError('too many')\n"
+        "    return values\n"
+    )
+    _write(
+        mini_repo / "pkg" / "lib" / "validation.py",
+        "def validate(values, limit):\n" + generic,
+    )
+    _write(
+        mini_repo / "pkg" / "experiments" / "runner.py",
+        "def run(values, limit, mode):\n"
+        + generic.replace("    return values\n", "")
+        + "    return values if mode else []\n",
+    )
+    output = tmp_path / "generic-helper.json"
+    assert scan_regions.main(
+        ["--root", str(mini_repo), "--package", "pkg", "--json", str(output)]
+    ) == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    matches = [
+        item
+        for item in payload["clusters"]
+        if item.get("canonical_symbol") == "lib/validation.py:validate"
+    ]
+    assert all(item["priority"] != "high" for item in matches)
 
 
 def test_region_scan_short_risky_lookup_cluster(

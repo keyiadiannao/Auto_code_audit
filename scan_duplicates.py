@@ -42,6 +42,8 @@ class FunctionRecord:
     name: str
     qualname: str
     is_top_level: bool
+    start_line: int
+    end_line: int
     nlines: int
     normalized: str
     tokens: tuple[str, ...]
@@ -111,6 +113,8 @@ def extract_functions(path: Path, min_chars: int) -> list[FunctionRecord]:
                 name=node.name,
                 qualname=qualname,
                 is_top_level=not parents,
+                start_line=node.lineno,
+                end_line=end_lineno,
                 nlines=end_lineno - node.lineno + 1,
                 normalized=normalized,
                 tokens=tokens,
@@ -216,6 +220,8 @@ def main(argv: list[str] | None = None) -> int:
                     name=item.name,
                     qualname=item.qualname,
                     is_top_level=item.is_top_level,
+                    start_line=item.start_line,
+                    end_line=item.end_line,
                     nlines=item.nlines,
                     normalized=item.normalized,
                     tokens=item.tokens,
@@ -346,6 +352,8 @@ def main(argv: list[str] | None = None) -> int:
                         "name": member.name,
                         "qualname": member.qualname,
                         "is_top_level": member.is_top_level,
+                        "start_line": member.start_line,
+                        "end_line": member.end_line,
                         "nlines": member.nlines,
                         **(
                             {"definition_ordinal": member.definition_ordinal}
@@ -379,7 +387,7 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = {
         "scanner": "duplicates",
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "package": args.package,
         "threshold": threshold,

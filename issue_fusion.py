@@ -29,7 +29,7 @@ def cluster_issue_bundles(
     *,
     keep: Callable[[str, dict], bool] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build label-free issue bundles from duplicate and region clusters.
+    """Build label-free issue bundles from clusters and atomic contract risks.
 
     ``keep`` applies the same review-cohort filter used by the Markdown report.
     Every retained cluster appears exactly once: corroborating cross-channel
@@ -43,6 +43,24 @@ def cluster_issue_bundles(
                 continue
             symbols, target_id = _cluster_symbols(scanner, cluster)
             clusters.append((scanner, target_id, symbols))
+
+    # File-level runtime-coupling findings are already one coherent issue.
+    # Include them in the unified issue count even though they cannot fuse
+    # with function-member clusters.
+    for detail in scanners.get("contracts", {}).get(
+        "dynamic_module_runtime_coupling", []
+    ):
+        if keep is not None and not keep("contracts", detail):
+            continue
+        path = detail.get("path")
+        if path:
+            clusters.append(
+                (
+                    "contracts",
+                    f"dynamic_runtime/{path}",
+                    frozenset({path}),
+                )
+            )
 
     bundles: list[dict[str, Any]] = []
     merged: set[tuple[str, str]] = set()
@@ -90,8 +108,8 @@ def issue_summary(bundles: list[dict[str, Any]]) -> dict[str, Any]:
     signals = sum(int(bundle["signals"]) for bundle in bundles)
     corroborated = sum(1 for bundle in bundles if len(bundle["channels"]) >= 2)
     return {
-        "schema_version": 1,
-        "method": "exact-member-set-v1",
+        "schema_version": 2,
+        "method": "exact-member-set-plus-atomic-v2",
         "candidate_signals": signals,
         "issue_count": len(bundles),
         "corroborated_issues": corroborated,

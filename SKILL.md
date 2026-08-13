@@ -60,7 +60,8 @@ Keep them in external audit state.
 Read report layers in order:
 
 1. `issues`: exact member-set bundles combining corroborating scanners.
-2. high-value near-exact duplicates and function twins.
+2. high-value near-exact duplicates, function twins, and dynamic-module state
+   mutation.
 3. medium-value shared-capability regions.
 4. exhaustive low-value candidates only when required.
 

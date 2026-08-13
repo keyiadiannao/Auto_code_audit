@@ -120,6 +120,7 @@ def markdown(
     contract_parts = {
         key: partition("contracts", contracts.get(key, []))
         for key in (
+            "dynamic_module_runtime_coupling",
             "experiment_as_library",
             "forwarding_wrappers",
             "same_name_contracts",
@@ -312,7 +313,8 @@ def markdown(
             lines.append("")
             for member in cluster["members"]:
                 lines.append(
-                    f"- `{member['path']}:{member.get('qualname', member['name'])}` "
+                    f"- `{member['path']}:{member.get('qualname', member['name'])}:"
+                    f"{member['start_line']}-{member['end_line']}` "
                     f"({member['nlines']} lines)"
                 )
             lines.extend(["- Verdict:", ""])
@@ -476,7 +478,29 @@ def markdown(
         ]
     )
     if any(kept for kept, _ in contract_parts.values()):
-        lines.extend(["### Experiment modules used as libraries", ""])
+        lines.extend(["### Dynamic-module runtime coupling", ""])
+        kept, hidden = contract_parts["dynamic_module_runtime_coupling"]
+        if kept:
+            lines.extend(
+                [
+                    "Runtime module loading is review-worthy; rebinding globals on the "
+                    "created module is high risk because behavior can depend on module "
+                    "identity and call order.",
+                    "",
+                ]
+            )
+            for item in kept:
+                attributes = ", ".join(item.get("state_attributes", [])) or "none"
+                lines.append(
+                    f"- [{item['priority']}] `{item['path']}:{item['line']}` "
+                    f"`{item['kind']}`; loads={len(item.get('loads', []))}, "
+                    f"state rebindings={len(item.get('rebindings', []))}, "
+                    f"attributes=`{attributes}`"
+                )
+        elif hidden:
+            lines.append(_hidden_note(hidden, "candidates"))
+
+        lines.extend(["", "### Experiment modules used as libraries", ""])
         kept, hidden = contract_parts["experiment_as_library"]
         if kept:
             for item in kept:

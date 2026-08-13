@@ -18,7 +18,7 @@ Supported schema (all keys optional):
   "forks": {"threshold": 0.75, "min_lines": 40, "small_floor": 8,
             "small_threshold": 0.9, "include_tests": false},
   "regions": {"threshold": 0.82, "helper_reuse_threshold": 0.6,
-              "twin_threshold": 0.85},
+              "twin_threshold": 0.85, "shared_paths": ["lib", "src"]},
   "contracts": {"contract_sensitive_names": [...],
                 "source_locked_active_paths": {"path": "why locked"}},
   "capabilities": {"doc_threshold": 0.55, "top": 40},
@@ -158,7 +158,7 @@ def _validate_config(data: dict) -> list[str]:
             issues.append("contracts.source_locked_active_paths must map strings to strings")
 
     regions = section(
-        "regions", {"threshold", "helper_reuse_threshold", "twin_threshold"}
+        "regions", {"threshold", "helper_reuse_threshold", "twin_threshold", "shared_paths"}
     )
     if "threshold" in regions:
         bounded_number(regions["threshold"], "regions.threshold", 0.0, 1.0)
@@ -171,6 +171,8 @@ def _validate_config(data: dict) -> list[str]:
         )
     if "twin_threshold" in regions:
         bounded_number(regions["twin_threshold"], "regions.twin_threshold", 0.0, 1.0)
+    if "shared_paths" in regions:
+        string_list(regions["shared_paths"], "regions.shared_paths")
 
     capabilities = section("capabilities", {"doc_threshold", "top"})
     if "doc_threshold" in capabilities:

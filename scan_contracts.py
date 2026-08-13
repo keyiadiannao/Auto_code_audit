@@ -19,11 +19,10 @@ on a hardcoded checkpoint-root bug and a ``strict=False`` load bug):
   hit needs a verdict: deliberate partial load or accidental degradation.
 * ``env_written_not_read`` -- env vars written inside the package but never
   read in-package; the writer's contract has no in-package consumer.
-* ``generation_path_without_env`` -- files embedding generation-pinned path
-  strings (e.g. ``generation_a`` / ``generation_b``) with no env read
-  anywhere in the file.  The failure signature: a hardcoded archive root
-  instead of honoring the environment-variable handoff used by the
-  orchestrator.
+* ``dynamic_module_runtime_coupling`` -- files that construct modules at
+  runtime and then rebind state on those module objects.  Loading a plugin is
+  review-worthy; mutating a dynamically loaded module's globals is high risk
+  because behavior depends on module identity and call order.
 """
 from __future__ import annotations
 
@@ -133,6 +132,103 @@ def _line_sort_key(item: dict[str, Any]) -> int:
     return item["line"]
 
 
+def _assigned_name(target: ast.AST) -> str | None:
+    """Return the simple name assigned by *target*, if there is one."""
+    return target.id if isinstance(target, ast.Name) else None
+
+
+def _root_name(node: ast.AST) -> str | None:
+    """Return the root name of an attribute/subscript expression."""
+    while isinstance(node, (ast.Attribute, ast.Subscript)):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else None
+
+
+def _runtime_module_coupling(tree: ast.AST, path: str) -> dict[str, Any] | None:
+    """Summarize dynamic module construction and state rebinding in one file.
+
+    The analysis is deliberately syntactic and label-free.  A plain runtime
+    load is medium-priority review evidence.  Assigning attributes on a
+    runtime-created module (directly or through a loop variable) raises the
+    candidate to high priority because configuration becomes ambient mutable
+    state rather than an explicit function contract.
+    """
+    module_names: set[str] = set()
+    loads: list[dict[str, Any]] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        value = node.value
+        if not isinstance(value, ast.Call):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        names = [name for target in targets if (name := _assigned_name(target))]
+        call = _dotted(value.func) or ""
+        if call.endswith("spec_from_file_location"):
+            source = ast.unparse(value.args[1]) if len(value.args) > 1 else "<dynamic>"
+            loads.append(
+                {"line": node.lineno, "kind": "file", "binding": names[0] if names else None, "source": source[:160]}
+            )
+        elif call.endswith("module_from_spec"):
+            module_names.update(names)
+        elif call.endswith("import_module"):
+            module_names.update(names)
+            source = ast.unparse(value.args[0]) if value.args else "<dynamic>"
+            loads.append(
+                {"line": node.lineno, "kind": "import", "binding": names[0] if names else None, "source": source[:160]}
+            )
+
+    if not loads:
+        return None
+
+    # A loop such as ``for module in (a, b.inner): module.MODE = value`` is
+    # equivalent to rebinding every dynamically created module in the tuple.
+    loop_module_names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.For, ast.AsyncFor)):
+            continue
+        target_name = _assigned_name(node.target)
+        referenced_roots = {
+            root for child in ast.walk(node.iter) if (root := _root_name(child))
+        }
+        if target_name and referenced_roots & module_names:
+            loop_module_names.add(target_name)
+
+    mutable_roots = module_names | loop_module_names
+    rebindings: list[dict[str, Any]] = []
+    assignment_nodes = (ast.Assign, ast.AnnAssign, ast.AugAssign)
+    for node in ast.walk(tree):
+        if not isinstance(node, assignment_nodes):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        for target in targets:
+            if not isinstance(target, ast.Attribute):
+                continue
+            if _root_name(target) not in mutable_roots:
+                continue
+            rebindings.append(
+                {
+                    "line": node.lineno,
+                    "target": ast.unparse(target)[:160],
+                    "attribute": target.attr,
+                }
+            )
+
+    return {
+        "path": path,
+        "line": min(item["line"] for item in loads),
+        "kind": (
+            "dynamic_module_state_mutation" if rebindings else "dynamic_module_load"
+        ),
+        "priority": "high" if rebindings else "medium",
+        "loads": sorted(loads, key=lambda item: item["line"]),
+        "module_bindings": sorted(module_names),
+        "rebindings": sorted(rebindings, key=lambda item: (item["line"], item["target"])),
+        "state_attributes": sorted({item["attribute"] for item in rebindings}),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -186,6 +282,7 @@ def main(argv: list[str] | None = None) -> int:
     env_written = []
     env_read = []
     generation_consts: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    dynamic_module_runtime_coupling = []
 
     for path, rel in _iter_python(pkg, list(subdirs)):
         try:
@@ -199,6 +296,9 @@ def main(argv: list[str] | None = None) -> int:
         file_has_pkg_import = False
         first_pkg_import: dict | None = None
         file_env_read = False
+        runtime_coupling = _runtime_module_coupling(tree, rel)
+        if runtime_coupling is not None:
+            dynamic_module_runtime_coupling.append(runtime_coupling)
 
         docstring_const_ids = set()
         for node in ast.walk(tree):
@@ -516,6 +616,11 @@ def main(argv: list[str] | None = None) -> int:
         for entry in contracts_ignore.get("generation_path_without_env", [])
         if entry.get("key")
     }
+    dynamic_runtime_ignored = {
+        entry.get("key", "")
+        for entry in contracts_ignore.get("dynamic_module_runtime_coupling", [])
+        if entry.get("key")
+    }
     experiment_import_ignored = {
         entry.get("key", "")
         for entry in contracts_ignore.get("experiment_as_library", [])
@@ -590,6 +695,10 @@ def main(argv: list[str] | None = None) -> int:
         "generation_path_without_env": sum(
             item["path"] in generation_ignored for item in generation_path_without_env
         ),
+        "dynamic_module_runtime_coupling": sum(
+            item["path"] in dynamic_runtime_ignored
+            for item in dynamic_module_runtime_coupling
+        ),
         "experiment_as_library": sum(
             item["path"] in experiment_import_ignored for item in experiment_imports
         ),
@@ -618,6 +727,11 @@ def main(argv: list[str] | None = None) -> int:
         for item in generation_path_without_env
         if item["path"] not in generation_ignored
     ]
+    dynamic_module_runtime_coupling = [
+        item
+        for item in dynamic_module_runtime_coupling
+        if item["path"] not in dynamic_runtime_ignored
+    ]
     experiment_imports = [
         item for item in experiment_imports if item["path"] not in experiment_import_ignored
     ]
@@ -634,9 +748,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     cli_without_bootstrap.sort(key=lambda item: (item["path"], item["line"]))
     defensive_param_loosening.sort(key=lambda item: (item["path"], item["line"]))
+    dynamic_module_runtime_coupling.sort(
+        key=lambda item: (item["path"], item["line"])
+    )
     payload = {
         "scanner": "function-contract-candidates",
-        "schema_version": 4,
+        "schema_version": 5,
         "generated_at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "package": args.package,
         "experiment_as_library": experiment_imports,
@@ -648,6 +765,7 @@ def main(argv: list[str] | None = None) -> int:
         "defensive_param_loosening": defensive_param_loosening,
         "env_written_not_read": env_written_not_read,
         "generation_path_without_env": generation_path_without_env,
+        "dynamic_module_runtime_coupling": dynamic_module_runtime_coupling,
         "parse_failures": parse_failures,
         "counts": {
             "experiment_as_library": len(experiment_imports),
@@ -659,6 +777,9 @@ def main(argv: list[str] | None = None) -> int:
             "defensive_param_loosening": len(defensive_param_loosening),
             "env_written_not_read": len(env_written_not_read),
             "generation_path_without_env": len(generation_path_without_env),
+            "dynamic_module_runtime_coupling": len(
+                dynamic_module_runtime_coupling
+            ),
         },
         "ignored_counts": ignored_counts,
         "guardrail": (

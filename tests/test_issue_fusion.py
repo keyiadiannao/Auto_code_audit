@@ -66,3 +66,33 @@ def test_keep_filter_controls_review_issue_scope() -> None:
     assert [bundle["issue_id"] for bundle in bundles] == [
         "duplicates/cluster/keep"
     ]
+
+
+def test_dynamic_runtime_contract_is_a_unified_issue() -> None:
+    scanners = {
+        "duplicates": {"clusters": []},
+        "regions": {"clusters": []},
+        "contracts": {
+            "dynamic_module_runtime_coupling": [
+                {
+                    "path": "scripts/runner.py",
+                    "priority": "high",
+                    "kind": "dynamic_module_state_mutation",
+                }
+            ]
+        },
+    }
+    assert cluster_issue_bundles(scanners) == [
+        {
+            "issue_id": "contracts/dynamic_runtime/scripts/runner.py",
+            "candidates": [
+                {
+                    "scanner": "contracts",
+                    "target_id": "dynamic_runtime/scripts/runner.py",
+                }
+            ],
+            "channels": ["contracts"],
+            "signals": 1,
+            "member_symbols": ["scripts/runner.py"],
+        }
+    ]
