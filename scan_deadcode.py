@@ -25,6 +25,7 @@ from pathlib import Path
 
 import _audit_config
 from _scanner_common import (
+    EXCLUDE_PARTS,
     PY_SUBDIRS,
     load_ignore as _load_ignore,
     matches_module as _matches_module,
@@ -50,13 +51,10 @@ DOC_EXTS = {
     ".cfg",
     ".ini",
 }
-DEFAULT_EXCLUDE = {
-    "frozen_source",
+DEFAULT_EXCLUDE = EXCLUDE_PARTS | {
     "frozen_results",
     "outputs",
     "artifacts",
-    "reports",
-    "__pycache__",
 }
 
 

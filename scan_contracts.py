@@ -47,7 +47,6 @@ import _audit_config
 
 
 CLI_ENTRY_LAYERS = ("experiments", "audit", "verify")
-EXCLUDE_PARTS = {"frozen_source", "__pycache__"}
 COMMON_NAMES = {"main", "parse_args", "require", "close", "count"}
 # Default sample of contract-sensitive names; tune per project. The channel
 # flags repeated top-level functions with these names as drift candidates.

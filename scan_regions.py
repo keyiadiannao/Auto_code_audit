@@ -53,8 +53,10 @@ from _scanner_common import (
     EXCLUDE_PARTS,
     PY_SUBDIRS,
     NormalizeAST as _Normalize,
+    UnionFind as _UnionFind,
     iter_functions as _iter_functions,
     load_ignore,
+    sequence_similarity as _similarity,
     short_hash as _short_hash,
     write_json as _write_json,
 )
@@ -123,22 +125,6 @@ class FunctionRecord:
     #: API-free twins (pure arithmetic, stdlib name calls) are simple
     #: enough to compare by eye and stay out of the report.
     api_calls: bool = False
-
-
-class _UnionFind:
-    def __init__(self, n: int) -> None:
-        self.parent = list(range(n))
-
-    def find(self, i: int) -> int:
-        while self.parent[i] != i:
-            self.parent[i] = self.parent[self.parent[i]]
-            i = self.parent[i]
-        return i
-
-    def union(self, a: int, b: int) -> None:
-        ra, rb = self.find(a), self.find(b)
-        if ra != rb:
-            self.parent[max(ra, rb)] = min(ra, rb)
 
 
 def _control_shape(block: list[ast.stmt]) -> str:
@@ -766,20 +752,6 @@ def _region_record(
     )
 
 
-def _similarity(
-    left: tuple[str, ...], right: tuple[str, ...], threshold: float
-) -> float:
-    shorter, longer = sorted((len(left), len(right)))
-    if longer == 0 or shorter / longer < threshold:
-        return 0.0
-    matcher = difflib.SequenceMatcher(None, left, right, autojunk=False)
-    if matcher.real_quick_ratio() < threshold:
-        return 0.0
-    if matcher.quick_ratio() < threshold:
-        return 0.0
-    return matcher.ratio()
-
-
 def _coverage(left: tuple[str, ...], right: tuple[str, ...], divisor: int) -> float:
     """Matched-block token sum of ``left`` vs ``right`` over ``divisor``.
 
@@ -1211,7 +1183,7 @@ def main(argv: list[str] | None = None) -> int:
     # (API-free blocks only) and to region clustering (covered bodies are
     # excluded from the canonical index); a twin pair such as two provider
     # builders with different contracts is exactly the duplication that
-    # drifts silently (the gauge_interventions / gauge_fixed provider
+    # drifts silently (for example, parallel provider implementations
     # families in a real repo).  Similarity is matched tokens over the
     # longer body (symmetric): containment -- one body merely containing the
     # other's shape -- scores low, so chains of generic short wrappers do

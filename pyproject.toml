@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "auto-code-audit"
 dynamic = ["version"]
-description = "Three-layer static audit toolkit: dead modules, duplicate implementations, hard-coded drift, contract violations, and AI-style TeX prose"
+description = "Deterministic audit, adjudication, and verification for AI-maintained Python repositories"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -44,6 +44,7 @@ py-modules = [
     "_scanner_common",
     "_verdict_files",
     "report_formatter",
+    "issue_fusion",
     "scan_deadcode",
     "scan_duplicates",
     "scan_regions",

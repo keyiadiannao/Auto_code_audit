@@ -941,7 +941,7 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
         == 0
     )
     payload = json.loads(output_json.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 6
+    assert payload["schema_version"] == 7
     assert payload["provenance"]["audit_config_hash"] == (
         run_all.audit_config_hash(payload["configuration"])
     )
@@ -968,6 +968,7 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
     assert set(payload["provenance"]["scanner_sha256"]) == {
         "_audit_config.py",
         "_scanner_common.py",
+        "issue_fusion.py",
         "report_formatter.py",
         "run_all.py",
         "scan_capabilities.py",
@@ -981,6 +982,32 @@ def test_run_all_writes_provenance_and_cleans_temporary_files(
     }
     assert "candidate list" in output_md.read_text(encoding="utf-8")
     assert not list(output_json.parent.glob("self-audit-*"))
+
+
+def test_run_all_default_scope_supports_flat_packages(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    """A generic install scans package-root modules without project tuning."""
+    _write(
+        mini_repo / "pkg" / "flat.py",
+        "import hashlib\n\ndef digest(value):\n    return hashlib.sha256(value).digest()\n",
+    )
+    output = tmp_path / "flat-report.json"
+
+    assert run_all.main(
+        [
+            "--root", str(mini_repo),
+            "--package", "pkg",
+            "--json", str(output),
+            "--markdown", str(tmp_path / "flat-report.md"),
+            "--no-doc-channel",
+        ]
+    ) == 0
+
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["configuration"]["subdirs"] == ["."]
+    hits = report["scanners"]["hardcoded"]["hits"]["manual_sha256"]
+    assert any(item["path"] == "flat.py" for item in hits)
 
 
 def test_run_all_reports_changes_since_last_run(
@@ -1967,6 +1994,69 @@ def test_run_all_report_records_state_paths(
     assert report["state"]["ignore_file"] == str((mini_repo / "ignore.json").resolve())
 
 
+def test_run_all_read_only_routes_all_state_outside_target(
+    mini_repo: Path, tmp_path: Path
+) -> None:
+    state_dir = tmp_path.with_name(tmp_path.name + "-external-audit-state")
+    assert not state_dir.is_relative_to(mini_repo)
+    assert (
+        run_all.main(
+            [
+                "--root",
+                str(mini_repo),
+                "--package",
+                "pkg",
+                "--state-dir",
+                str(state_dir),
+                "--read-only",
+                "--no-doc-channel",
+            ]
+        )
+        == 0
+    )
+    report_path = state_dir / "latest.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["state"]["read_only"] is True
+    assert report["state"]["state_dir"] == str(state_dir.resolve())
+    for key in ("report_json", "report_markdown", "ignore_file", "lessons_file", "verdicts_file"):
+        assert not Path(report["state"][key]).is_relative_to(mini_repo.resolve())
+    assert not (mini_repo / "reports").exists()
+    assert not (mini_repo / "ignore.json").exists()
+    assert not (mini_repo / "LESSONS.md").exists()
+
+
+def test_run_all_read_only_rejects_missing_or_internal_state_dir(
+    mini_repo: Path,
+) -> None:
+    common = [
+        "--root",
+        str(mini_repo),
+        "--package",
+        "pkg",
+        "--read-only",
+        "--no-doc-channel",
+    ]
+    assert run_all.main(common) == 2
+    assert run_all.main(common + ["--state-dir", str(mini_repo / "audit-state")]) == 2
+
+
+def test_git_provenance_failure_is_unknown_not_clean(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FailedGit:
+        returncode = 128
+        stdout = ""
+        stderr = "repository ownership could not be verified"
+
+    monkeypatch.setattr(run_all.subprocess, "run", lambda *args, **kwargs: FailedGit())
+    provenance = run_all._git_provenance(tmp_path, "pkg")
+    assert provenance["status"] == "unavailable"
+    assert provenance["head"] is None
+    assert provenance["dirty_count"] is None
+    assert provenance["dirty_files"] == []
+    assert provenance["errors"]
+
+
 def test_run_all_code_profile_disables_research_style_channel(
     mini_repo: Path,
 ) -> None:
@@ -2701,6 +2791,25 @@ def test_report_formatter_keep_hides_low_value_cohort() -> None:
     assert "`helper1`" in full
     assert "`lib/old.py`" in full
     assert "low-value cohort" not in full
+
+
+def test_report_formatter_warns_when_git_provenance_is_unavailable() -> None:
+    payloads = _markdown_payloads([])
+    summary = {
+        "package": "pkg",
+        "generated_at": "2026-08-13T00:00:00",
+        "provenance": {
+            "git": {
+                "status": "unavailable",
+                "head": None,
+                "dirty_count": None,
+                "errors": ["repository ownership could not be verified"],
+            }
+        },
+    }
+    text = report_formatter.markdown(payloads, summary)
+    assert "working tree is not known to be clean" in text
+    assert "Do not bind external test evidence" in text
 
 
 def test_value_cohort_rules_match_corpus_signal() -> None:

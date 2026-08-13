@@ -56,13 +56,26 @@ functional contract.
 ## Installation (optional)
 
 The toolkit runs straight from a checkout with stdlib only. `pip install -e .`
-additionally installs two console commands wrapping the same entrypoints:
+additionally installs three console commands wrapping the same entrypoints:
 
 ```text
 auto-code-audit --root /work/foo --package src
 auto-code-adjudicate --report /work/foo/reports/latest.json
 auto-code-verify --report /work/foo/reports/latest.json --verdicts /work/foo/reports/verdicts.json
 ```
+
+### Install as an agent skill
+
+Install or clone the whole repository as a skill directory, keeping
+`SKILL.md` beside the scanner scripts. Then invoke `$auto-code-audit` for a
+reuse check, post-change audit, adjudication, or remediation verification.
+Copying only `SKILL.md` is insufficient because the workflow calls the
+deterministic CLI bundled in this repository.
+
+The skill is the agent-facing protocol; the three CLI commands are the
+deterministic evidence engine. Project-specific rules and lessons belong in
+the audited project's external state or `audit.config.json`, not in a fork of
+the generic skill.
 
 ## Quick start
 
@@ -95,13 +108,30 @@ the project being audited:
 <root>/reports/latest.md
 ```
 
+To audit a third-party or immutable tree, route all writable workflow state
+outside the target. `--read-only` rejects the run if the state directory,
+reports, suppression registry, lessons, or verdict path resolves under
+`--root`:
+
+```text
+python run_all.py --root /work/vendor --package src --profile code \
+  --state-dir /work/audit-state/vendor --read-only
+python adjudicate.py --report /work/audit-state/vendor/latest.json
+```
+
+The report carries these external paths forward, so Layer 2 does not silently
+write `ignore.json` or `LESSONS.md` into the audited tree.
+
 Useful options:
 
 - `--no-doc-channel` — faster code-only dead-module pass
 - `--profile code|research` — run code-focused scanners only, or include the
-  research TeX style channel (default: `research`)
-- `--all-py` — scan every Python file recursively; use this for flat or `src/`
-  package layouts instead of the configured `lib/experiments` subdirectories
+  optional research TeX style channel (default: `code`)
+- `--state-dir <path>` — set report, ignore, lessons, and verdict defaults
+- `--read-only` — require an external state directory and prohibit writable
+  workflow state under the audited root
+- `--all-py` — scan every Python file recursively, overriding any narrower
+  `subdirs` configured by the audited project
 - `--public-api` — classify importable public-package modules with no internal
   references as `PUBLIC_API_CANDIDATE` instead of `DEAD`; review them manually
 - `--duplicate-threshold` / `--duplicate-min-chars` — duplicate sensitivity
@@ -360,6 +390,12 @@ worksheet line plus candidate detail), `tokens_per_verified_issue`, and
 `verified_issue_yield`, so the compression the ranking buys stays
 measurable and honest.
 
+Before rendering scanner sections, the report also groups duplicate and region
+clusters with identical non-trivial `path:qualname` member sets into one
+label-independent `issues` bundle. This conservative fusion reduces repeated
+review work while preserving every raw candidate under `scanners`; multiple
+signals strengthen navigation, not the defect verdict.
+
 ### Mutation corpus (recall)
 
 `benchmarks/mutation/project/` is a synthetic fixture that injects one known
@@ -428,10 +464,10 @@ Highlights worth knowing before you interpret a report:
 ## Semantic review (Layer 2)
 
 Before assigning a verdict, write a contract card for each caller or caller
-family: scientific role, accepted inputs/contracts, outputs, randomness and
-provenance behavior, the existing canonical implementation, the exact
-semantic delta preventing direct reuse, and the parity or evidence gate
-needed before a change.
+family: functional role and ownership, inputs, outputs, errors, side effects,
+configuration and persistence behavior, compatibility constraints, the
+existing canonical implementation, the semantic delta preventing direct
+reuse, and the parity or evidence gate needed before a change.
 
 Assign one disposition per candidate:
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Auto Code Audit"
+  short_description: "Audit AI-maintained Python code with evidence gates"
+  default_prompt: "Use $auto-code-audit to audit this Python repository and verify any accepted remediation."

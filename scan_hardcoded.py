@@ -15,7 +15,13 @@ from pathlib import Path
 from typing import Any
 
 import _audit_config
-from _scanner_common import load_ignore, short_hash as _short_hash, write_json as _write_json
+from _scanner_common import (
+    EXCLUDE_PARTS,
+    PY_SUBDIRS,
+    load_ignore,
+    short_hash as _short_hash,
+    write_json as _write_json,
+)
 
 # Pattern list: tune per project. `exclude_paths` ships empty — canonical
 # implementations that legitimately own the pattern belong there (or in
@@ -55,7 +61,7 @@ PATTERNS: list[dict[str, Any]] = [
     },
 ]
 
-DEFAULT_EXCLUDE_PARTS = {"frozen_source", "tests", "self-audit", "__pycache__"}
+DEFAULT_EXCLUDE_PARTS = EXCLUDE_PARTS | {"tests", "self-audit"}
 
 
 def _candidate_id(pattern: str, path: str, line: int, code: str) -> str:
@@ -90,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         args.subdirs,
         cfg,
         "subdirs",
-        ["lib", "experiments", "mechanism", "audit", "verify", "figures"],
+        list(PY_SUBDIRS),
     )
     exclude_parts = set(
         _audit_config.as_string_list(

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import difflib
 import hashlib
 import json
 from pathlib import Path
@@ -21,21 +22,67 @@ from typing import Any, Iterator, cast
 # Directory / exclusion constants
 # ---------------------------------------------------------------------------
 
-#: Package subdirectories scanned by default (used by duplicates, forks,
-#: capabilities, contracts).  ``tests`` is included so scanners that want
-#: to skip tests can do so explicitly.
-PY_SUBDIRS = (
-    "lib",
-    "experiments",
-    "mechanism",
-    "audit",
-    "verify",
-    "figures",
-    "tests",
-)
+#: Scan the selected package recursively by default. Projects that need a
+#: narrower ownership boundary can override ``subdirs`` in ``audit.config.json``.
+PY_SUBDIRS = (".",)
 
-#: Path components that cause a file to be skipped by every scanner.
-EXCLUDE_PARTS = {"frozen_source", "__pycache__"}
+#: Path components that cause a file to be skipped by every Python scanner.
+#: These are generated, vendored, cache, environment, or audit-state trees;
+#: treating them as maintained source creates noisy candidates and can copy
+#: prior report fixtures into a new report.
+EXCLUDE_PARTS = {
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "env",
+    "frozen_source",
+    "node_modules",
+    "reports",
+    "site-packages",
+    "venv",
+}
+
+
+class UnionFind:
+    """Deterministic disjoint-set structure shared by cluster scanners."""
+
+    def __init__(self, size: int) -> None:
+        self.parent = list(range(size))
+
+    def find(self, index: int) -> int:
+        while self.parent[index] != index:
+            self.parent[index] = self.parent[self.parent[index]]
+            index = self.parent[index]
+        return index
+
+    def union(self, left: int, right: int) -> None:
+        left_root, right_root = self.find(left), self.find(right)
+        if left_root != right_root:
+            self.parent[max(left_root, right_root)] = min(left_root, right_root)
+
+
+def sequence_similarity(
+    left: tuple[str, ...], right: tuple[str, ...], threshold: float
+) -> float:
+    """Token-sequence similarity with sound length and quick-ratio gates."""
+    shorter, longer = sorted((len(left), len(right)))
+    if longer == 0 or shorter / longer < threshold:
+        return 0.0
+    matcher = difflib.SequenceMatcher(None, left, right, autojunk=False)
+    if matcher.real_quick_ratio() < threshold:
+        return 0.0
+    if matcher.quick_ratio() < threshold:
+        return 0.0
+    return matcher.ratio()
 
 
 # ---------------------------------------------------------------------------
@@ -281,11 +328,25 @@ def short_hash(*parts: str) -> str:
     return hashlib.sha256(raw).hexdigest()[:12]
 
 
-def source_tree_sha256(root: Path, package: str | None, all_py: bool = False) -> str:
+def _python_scope_subdirs(
+    all_py: bool, subdirs: list[str] | tuple[str, ...] | None
+) -> list[str]:
+    """Return the effective Python scan scope recorded by the orchestrator."""
+    if all_py:
+        return ["."]
+    return list(PY_SUBDIRS if subdirs is None else subdirs)
+
+
+def source_tree_sha256(
+    root: Path,
+    package: str | None,
+    all_py: bool = False,
+    subdirs: list[str] | tuple[str, ...] | None = None,
+) -> str:
     """Canonical content fingerprint of the audited source tree.
 
-    Walks the scanned scope — ``package``'s directory, or the whole ``root``
-    in ``--all-py`` mode — and hashes every ``*.py`` file as
+    Walks the effective Python scope under ``package`` and hashes every
+    maintained ``*.py`` file as
     ``relpath(scope-relative, posix) + NUL + raw bytes`` in sorted order.  Any
     byte change, rename, or add/remove of a scanned file invalidates the hash
     while path separators stay deterministic across platforms.
@@ -298,9 +359,11 @@ def source_tree_sha256(root: Path, package: str | None, all_py: bool = False) ->
     digest.
     """
     digest = hashlib.sha256()
-    scope = root if all_py else (root / package if package else root)
+    scope = root / package if package else root
     if scope.is_dir():
-        for path in sorted(scope.rglob("*.py")):
+        for path in collect_py_files(
+            scope, _python_scope_subdirs(all_py, subdirs)
+        ):
             rel = path.relative_to(scope).as_posix()
             digest.update(rel.encode("utf-8"))
             digest.update(b"\0")
@@ -323,6 +386,7 @@ def audit_inputs_sha256(
     doc_exclude: list[str] | None = None,
     tex_dir: str | None = None,
     tex_exclude: list[str] | None = None,
+    subdirs: list[str] | tuple[str, ...] | None = None,
 ) -> str:
     """Content fingerprint of every file the active scanners consume.
 
@@ -369,9 +433,13 @@ def audit_inputs_sha256(
 
     digest = hashlib.sha256()
     digest.update(b"python-scope\n")
-    scope = root if all_py else (root / package if package else root)
+    scope = root / package if package else root
     if scope.is_dir():
-        _append_files(digest, list(scope.rglob("*.py")), scope)
+        _append_files(
+            digest,
+            collect_py_files(scope, _python_scope_subdirs(all_py, subdirs)),
+            scope,
+        )
     if document_channel:
         digest.update(b"documents\n")
         exclude = set(doc_exclude)

@@ -164,6 +164,15 @@ def markdown(
         f"Git HEAD: `{provenance['git']['head'] or 'unavailable'}`",
         "",
     ]
+    git_status = provenance["git"].get("status", "ok")
+    if git_status != "ok":
+        lines.extend(
+            [
+                "> Provenance warning: Git state was unavailable; the working tree is not known to be clean.",
+                "> Do not bind external test evidence to this report; diagnostic details remain in the JSON report.",
+                "",
+            ]
+        )
     if provenance["git"]["dirty_count"]:
         lines.extend(
             [
@@ -227,6 +236,45 @@ def markdown(
                 "",
             ]
         )
+    issues = summary.get("issues") or {}
+    if issues.get("issue_count"):
+        lines.extend(
+            [
+                "## Issue bundles",
+                "",
+                f"Exact member-set fusion collapsed {issues['candidate_signals']} "
+                f"duplicate/region signals into {issues['issue_count']} review issues "
+                f"({issues['corroborated_issues']} corroborated across scanners; "
+                f"scope: `{issues.get('scope', 'unknown')}`).",
+                "",
+            ]
+        )
+        corroborated = [
+            bundle
+            for bundle in issues.get("bundles", [])
+            if len(bundle.get("channels", [])) >= 2
+        ]
+        if corroborated:
+            lines.extend(
+                [
+                    "| issue | channels | signals | members |",
+                    "|---|---|---:|---|",
+                ]
+            )
+            for bundle in corroborated[:20]:
+                members = bundle.get("member_symbols", [])
+                preview = ", ".join(f"`{member}`" for member in members[:3])
+                if len(members) > 3:
+                    preview += f", … (+{len(members) - 3})"
+                lines.append(
+                    f"| `{bundle['issue_id']}` | "
+                    f"{', '.join(bundle['channels'])} | {bundle['signals']} | {preview} |"
+                )
+            if len(corroborated) > 20:
+                lines.append(
+                    f"| … | | | {len(corroborated) - 20} more corroborated issues |"
+                )
+            lines.append("")
     lines.extend(["## Dead-code candidates", ""])
     if dead_candidates:
         lines.extend(
@@ -496,7 +544,7 @@ def markdown(
                     "These entry scripts import package modules but never add the repo "
                     "root to sys.path, so they only run when the cwd already contains "
                     "the repo root or when launched via `python -m`. Verify the launch "
-                    "method against how the submission actually runs them.",
+                    "method against how the project actually runs them.",
                     "",
                 ]
             )
@@ -554,10 +602,10 @@ def markdown(
             "",
             "For every accepted consolidation or retention, record:",
             "",
-            "- scientific role and callers",
-            "- accepted inputs, shapes, indexing, dtype, and device ownership",
-            "- outputs and required intermediate tensors",
-            "- randomness and checkpoint/provenance ownership",
+            "- functional role, ownership boundary, and callers",
+            "- accepted inputs, outputs, errors, and side effects",
+            "- configuration, state, concurrency, and persistence behavior",
+            "- compatibility and provenance constraints",
             "- existing canonical implementation and any semantic delta",
             "- disposition: necessary specialization, valuable adapter, independent audit, "
             "compatibility debt, or true duplicate",

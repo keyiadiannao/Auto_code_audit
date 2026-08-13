@@ -43,8 +43,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from _scanner_common import short_hash as _short_hash
 from benchmarks.run_benchmarks import load_labels
+from issue_fusion import cluster_issue_bundles
 from run_all import _candidate_signatures
 
 # Retrospective view ------------------------------------------------------------------
@@ -118,22 +118,6 @@ def _summarize(bundles: list[dict[str, Any]]) -> dict[str, Any]:
 
 # Proposed (predictive) view ----------------------------------------------------------
 
-def _cluster_symbols(scanner: str, cluster: dict) -> tuple[frozenset[str], str]:
-    """Member-symbol set ``{path:qualname, ...}`` and the target_id of one
-    scanner cluster (duplicates or regions)."""
-    members = cluster.get("members", [])
-    symbols = frozenset(
-        f"{member['path']}:{member['qualname']}"
-        for member in members
-        if member.get("path") and member.get("qualname")
-    )
-    if scanner == "duplicates":
-        target = f"cluster/{cluster['id']}"
-    else:
-        target = f"region/{cluster['id']}"
-    return symbols, target
-
-
 def _proposed_bundles(report: dict) -> list[dict[str, Any]]:
     """Label-independent deterministic fusion over the full candidate set.
 
@@ -145,49 +129,10 @@ def _proposed_bundles(report: dict) -> list[dict[str, Any]]:
     proposed view covers every candidate the scanners emitted.  No label
     information is consulted anywhere in this function.
     """
-    clusters: list[tuple[str, str, frozenset[str]]] = []
     scanners = report.get("scanners", {})
-    for cluster in scanners.get("duplicates", {}).get("clusters", []):
-        symbols, target = _cluster_symbols("duplicates", cluster)
-        clusters.append(("duplicates", target, symbols))
-    for cluster in scanners.get("regions", {}).get("clusters", []):
-        symbols, target = _cluster_symbols("regions", cluster)
-        clusters.append(("regions", target, symbols))
-
-    # Conservative merge: identical non-trivial symbol sets across channels.
-    bundles: list[dict[str, Any]] = []
-    merged: set[tuple[str, str]] = set()
-    by_symbol: dict[frozenset[str], list[tuple[str, str]]] = defaultdict(list)
-    for channel, target, symbols in clusters:
-        if len(symbols) >= 2:
-            by_symbol[symbols].append((channel, target))
-    for symbols, members in by_symbol.items():
-        channels = {channel for channel, _ in members}
-        if len(channels) >= 2:
-            issue_id = "proposed/" + _short_hash(*sorted(symbols))
-            bundles.append(
-                {
-                    "issue_id": issue_id,
-                    "candidates": [
-                        {"scanner": ch, "target_id": tid}
-                        for ch, tid in sorted(members)
-                    ],
-                    "channels": sorted(channels),
-                    "signals": len(members),
-                }
-            )
-            merged.update(members)
-    for channel, target, _ in clusters:
-        if (channel, target) in merged:
-            continue
-        bundles.append(
-            {
-                "issue_id": f"{channel}/{target}",
-                "candidates": [{"scanner": channel, "target_id": target}],
-                "channels": [channel],
-                "signals": 1,
-            }
-        )
+    bundles = cluster_issue_bundles(scanners)
+    for bundle in bundles:
+        bundle.pop("member_symbols", None)
     # Every non-cluster candidate is its own single bundle.
     for scanner, items in _candidate_signatures(scanners).items():
         if scanner in {"duplicates", "regions"}:

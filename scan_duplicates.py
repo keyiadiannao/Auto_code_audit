@@ -10,7 +10,6 @@ import argparse
 import ast
 import copy
 import datetime as dt
-import difflib
 import hashlib
 import json
 import re
@@ -25,8 +24,10 @@ from _scanner_common import (
     EXCLUDE_PARTS,
     PY_SUBDIRS,
     NormalizeAST as _Normalize,
+    UnionFind as _UnionFind,
     iter_functions as _iter_functions,
     load_ignore,
+    sequence_similarity as _similarity,
     short_hash as _short_hash,
     without_docstring as _without_docstring,
     write_json as _write_json,
@@ -59,22 +60,6 @@ class FunctionRecord:
         if self.definition_ordinal:
             return f"{self.path}:{self.qualname}#{self.definition_ordinal}"
         return f"{self.path}:{self.qualname}"
-
-
-class _UnionFind:
-    def __init__(self, n: int) -> None:
-        self.parent = list(range(n))
-
-    def find(self, i: int) -> int:
-        while self.parent[i] != i:
-            self.parent[i] = self.parent[self.parent[i]]
-            i = self.parent[i]
-        return i
-
-    def union(self, a: int, b: int) -> None:
-        ra, rb = self.find(a), self.find(b)
-        if ra != rb:
-            self.parent[max(ra, rb)] = min(ra, rb)
 
 
 def _is_signature_stub(node: ast.AST) -> bool:
@@ -138,20 +123,6 @@ def extract_functions(path: Path, min_chars: int) -> list[FunctionRecord]:
             )
         )
     return records
-
-
-def _similarity(
-    left: tuple[str, ...], right: tuple[str, ...], threshold: float
-) -> float:
-    shorter, longer = sorted((len(left), len(right)))
-    if longer == 0 or shorter / longer < threshold:
-        return 0.0
-    matcher = difflib.SequenceMatcher(None, left, right, autojunk=False)
-    if matcher.real_quick_ratio() < threshold:
-        return 0.0
-    if matcher.quick_ratio() < threshold:
-        return 0.0
-    return matcher.ratio()
 
 
 def _candidate_pairs(records: list[FunctionRecord]) -> set[tuple[int, int]]:

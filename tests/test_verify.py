@@ -917,6 +917,81 @@ def test_audit_inputs_hash_tracks_document_channel(tmp_path) -> None:
     assert audit_inputs_sha256(tmp_path, "pkg", document_channel=False, profile="code", **settings) == off
 
 
+def test_python_fingerprints_exclude_generated_and_audit_state(tmp_path) -> None:
+    """Files no scanner consumes must not stale source or input evidence."""
+    from _scanner_common import audit_inputs_sha256, source_tree_sha256
+
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "a.py").write_text("value = 1\n", encoding="utf-8")
+    tree = source_tree_sha256(tmp_path, "pkg")
+    inputs = audit_inputs_sha256(
+        tmp_path, "pkg", document_channel=False, profile="code"
+    )
+
+    for directory in ("reports", ".venv", "build", "__pycache__"):
+        target = pkg / directory
+        target.mkdir()
+        (target / "generated.py").write_text("private = True\n", encoding="utf-8")
+
+    assert source_tree_sha256(tmp_path, "pkg") == tree
+    assert (
+        audit_inputs_sha256(
+            tmp_path, "pkg", document_channel=False, profile="code"
+        )
+        == inputs
+    )
+
+
+def test_python_fingerprints_match_configured_subdirs(tmp_path) -> None:
+    """A narrowed scanner scope and its provenance hash use the same files."""
+    from _scanner_common import audit_inputs_sha256, source_tree_sha256
+
+    pkg = tmp_path / "pkg"
+    (pkg / "keep").mkdir(parents=True)
+    (pkg / "other").mkdir()
+    kept = pkg / "keep" / "a.py"
+    outside = pkg / "other" / "b.py"
+    kept.write_text("value = 1\n", encoding="utf-8")
+    outside.write_text("value = 1\n", encoding="utf-8")
+    subdirs = ["keep"]
+    tree = source_tree_sha256(tmp_path, "pkg", subdirs=subdirs)
+    inputs = audit_inputs_sha256(
+        tmp_path,
+        "pkg",
+        document_channel=False,
+        profile="code",
+        subdirs=subdirs,
+    )
+
+    outside.write_text("value = 2\n", encoding="utf-8")
+    assert source_tree_sha256(tmp_path, "pkg", subdirs=subdirs) == tree
+    assert (
+        audit_inputs_sha256(
+            tmp_path,
+            "pkg",
+            document_channel=False,
+            profile="code",
+            subdirs=subdirs,
+        )
+        == inputs
+    )
+    kept.write_text("value = 2\n", encoding="utf-8")
+    assert source_tree_sha256(tmp_path, "pkg", subdirs=subdirs) != tree
+
+
+def test_all_py_keeps_package_boundary(tmp_path) -> None:
+    """--all-py expands subdirs but never escapes the selected package."""
+    from _scanner_common import source_tree_sha256
+
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "a.py").write_text("value = 1\n", encoding="utf-8")
+    tree = source_tree_sha256(tmp_path, "pkg", all_py=True)
+    (tmp_path / "outside.py").write_text("private = True\n", encoding="utf-8")
+    assert source_tree_sha256(tmp_path, "pkg", all_py=True) == tree
+
+
 def test_audit_inputs_hash_tracks_tex_in_research_profile(tmp_path) -> None:
     """TeX files under tex_dir enter the fingerprint only in the research
     profile (the style scanner's profile)."""

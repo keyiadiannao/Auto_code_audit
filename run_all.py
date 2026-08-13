@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _audit_config
 import _scanner_common
+import issue_fusion
 import report_formatter
 import scan_capabilities
 import scan_cli_smoke
@@ -30,9 +31,9 @@ import scan_style
 
 SKILL_DIR = Path(__file__).resolve().parent
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 #: Configuration keys that change scanner semantics; the audit-config
 #: fingerprint is projected onto these (absolute-path and non-semantic keys
@@ -45,6 +46,7 @@ _CONFIG_SEMANTIC_KEYS = (
     "duplicate_threshold",
     "duplicate_min_chars",
     "all_py",
+    "subdirs",
 )
 
 
@@ -87,7 +89,7 @@ def scanner_bundle_hash(sha_map: dict, version: str) -> str:
 #: Default scanner profile.  ``research`` runs all scanners including TeX
 #: writing-style analysis; ``code`` excludes it.  When changing this default,
 #: the fallback in ``_diff_previous`` uses this constant automatically.
-DEFAULT_PROFILE = "research"
+DEFAULT_PROFILE = "code"
 
 _SCANNER_NAMES = report_formatter.SCANNER_NAMES
 
@@ -194,7 +196,9 @@ def finding_severity(scanner: str, detail: dict) -> str | None:
 
 
 def _git_provenance(repo: Path, package: str) -> dict:
-    def run(*parts: str) -> str | None:
+    """Return Git provenance without treating command failure as a clean tree."""
+
+    def run(*parts: str) -> tuple[str | None, str | None]:
         try:
             result = subprocess.run(
                 ["git", *parts],
@@ -204,14 +208,34 @@ def _git_provenance(repo: Path, package: str) -> dict:
                 timeout=30,
                 check=False,
             )
-        except (OSError, subprocess.SubprocessError):
-            return None
-        return result.stdout.strip() if result.returncode == 0 else None
+        except (OSError, subprocess.SubprocessError) as exc:
+            return None, f"{type(exc).__name__}: {exc}"
+        if result.returncode != 0:
+            message = result.stderr.strip() or f"git exited {result.returncode}"
+            return None, message
+        return result.stdout.strip(), None
 
-    head = run("rev-parse", "HEAD")
-    status = run("status", "--porcelain", "--", package) or ""
-    dirty = [line[3:].strip() for line in status.splitlines() if line.strip()]
-    return {"head": head, "dirty_files": dirty, "dirty_count": len(dirty)}
+    head, head_error = run("rev-parse", "HEAD")
+    status, status_error = run("status", "--porcelain", "--", package)
+    errors = [error for error in (head_error, status_error) if error]
+    if status is None:
+        dirty: list[str] = []
+        dirty_count: int | None = None
+    else:
+        dirty = [line[3:].strip() for line in status.splitlines() if line.strip()]
+        dirty_count = len(dirty)
+    return {
+        "status": "unavailable" if errors else "ok",
+        "head": head,
+        "dirty_files": dirty,
+        "dirty_count": dirty_count,
+        "errors": errors,
+    }
+
+
+def _inside(path: Path, root: Path) -> bool:
+    """Whether resolved *path* is *root* or one of its descendants."""
+    return path == root or root in path.parents
 
 
 def _run_scanner(
@@ -605,10 +629,22 @@ def main(argv: list[str] | None = None) -> int:
         help="suppression registry (default: <root>/ignore.json)",
     )
     ap.add_argument(
+        "--state-dir",
+        type=Path,
+        default=None,
+        help="state directory for report, ignore, lessons, and verdict defaults",
+    )
+    ap.add_argument(
+        "--read-only",
+        action="store_true",
+        help="require --state-dir outside --root and keep every writable audit "
+             "state path outside the audited tree",
+    )
+    ap.add_argument(
         "--all-py",
         action="store_true",
-        help="scan all .py files under --package recursively, ignoring "
-             "PY_SUBDIRS (use for flat-layout projects without lib/experiments/etc.)",
+        help="scan all .py files under --package recursively, overriding "
+             "configured subdirs",
     )
     ap.add_argument(
         "--public-api",
@@ -649,14 +685,57 @@ def main(argv: list[str] | None = None) -> int:
             return 2
 
     args.root = args.root.resolve()
+    if args.read_only and args.state_dir is None:
+        print("error: --read-only requires --state-dir", file=sys.stderr)
+        return 2
+    state_dir = args.state_dir.resolve() if args.state_dir is not None else None
+    default_report_dir = state_dir or (args.root / "reports")
     if args.json is None:
-        args.json = args.root / "reports" / "latest.json"
+        args.json = default_report_dir / "latest.json"
     if args.markdown is None:
-        args.markdown = args.root / "reports" / "latest.md"
+        args.markdown = default_report_dir / "latest.md"
     if args.ignore is None:
-        args.ignore = args.root / "ignore.json"
+        args.ignore = (
+            state_dir / "ignore.json" if state_dir else args.root / "ignore.json"
+        )
+
+    args.json = args.json.resolve()
+    args.markdown = args.markdown.resolve()
+    args.ignore = args.ignore.resolve()
+    effective_state_dir = state_dir or args.json.parent
+    lessons_path = (
+        effective_state_dir / "LESSONS.md"
+        if state_dir
+        else args.root / "LESSONS.md"
+    )
+    verdicts_path = effective_state_dir / "verdicts.json"
+    if args.read_only:
+        writable_paths = {
+            "state directory": effective_state_dir,
+            "JSON report": args.json,
+            "Markdown report": args.markdown,
+            "suppression registry": args.ignore,
+            "lessons": lessons_path,
+            "verdicts": verdicts_path,
+        }
+        violations = [
+            f"{label}={path}"
+            for label, path in writable_paths.items()
+            if _inside(path, args.root)
+        ]
+        if violations:
+            print(
+                "error: --read-only state paths must be outside --root: "
+                + "; ".join(violations),
+                file=sys.stderr,
+            )
+            return 2
 
     cfg = _audit_config.load_config(args.root)
+    configured_subdirs = _audit_config.as_string_list(
+        cfg.get("subdirs"), list(_scanner_common.PY_SUBDIRS)
+    )
+    effective_subdirs = ["."] if args.all_py else configured_subdirs
     dup_cfg = cfg.get("duplicates", {})
     duplicate_threshold = _audit_config.pick(
         args.duplicate_threshold, dup_cfg, "threshold", 0.82
@@ -665,8 +744,7 @@ def main(argv: list[str] | None = None) -> int:
         args.duplicate_min_chars, dup_cfg, "min_chars", 120
     )
     config_path = args.root / _audit_config.CONFIG_FILENAME
-    args.json = args.json.resolve()
-    args.markdown = args.markdown.resolve()
+    effective_state_dir.mkdir(parents=True, exist_ok=True)
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.markdown.parent.mkdir(parents=True, exist_ok=True)
 
@@ -728,6 +806,7 @@ def main(argv: list[str] | None = None) -> int:
     scanner_files = [
         Path(_audit_config.__file__),
         Path(_scanner_common.__file__),
+        Path(issue_fusion.__file__),
         Path(report_formatter.__file__),
         Path(scan_capabilities.__file__),
         Path(scan_deadcode.__file__),
@@ -746,16 +825,19 @@ def main(argv: list[str] | None = None) -> int:
         "duplicate_threshold": duplicate_threshold,
         "duplicate_min_chars": duplicate_min_chars,
         "all_py": bool(args.all_py),
+        "subdirs": effective_subdirs,
         "ignore_file": str(args.ignore.resolve()) if args.ignore else None,
         "config_file": str(config_path) if config_path.is_file() else None,
         "cli_smoke": bool(args.cli_smoke),
         "exhaustive": bool(args.exhaustive),
+        "read_only": bool(args.read_only),
+        "state_dir": str(effective_state_dir),
     }
     config_hash = audit_config_hash(configuration)
     bundle_sha_map = {path.name: _sha256(path) for path in scanner_files}
     bundle_hash = scanner_bundle_hash(bundle_sha_map, __version__)
     source_tree_hash = _scanner_common.source_tree_sha256(
-        args.root, args.package, bool(args.all_py)
+        args.root, args.package, bool(args.all_py), effective_subdirs
     )
     # Effective audit-input settings: the scanners read these from
     # audit.config.json, which the report stores only as a path — so the
@@ -785,7 +867,16 @@ def main(argv: list[str] | None = None) -> int:
         doc_exclude,
         tex_dir_name,
         tex_exclude,
+        effective_subdirs,
     )
+    keep = (
+        None
+        if args.exhaustive
+        else lambda scanner, detail: value_cohort(scanner, detail) != "low"
+    )
+    issue_bundles = issue_fusion.cluster_issue_bundles(payloads, keep=keep)
+    issues = issue_fusion.issue_summary(issue_bundles)
+    issues["scope"] = "all" if args.exhaustive else "review_cohort"
     summary = {
         "scanner": "self-audit-run-all",
         "schema_version": SCHEMA_VERSION,
@@ -795,12 +886,13 @@ def main(argv: list[str] | None = None) -> int:
         "configuration": configuration,
         "state": {
             "project_root": str(args.root),
-            "state_dir": str(args.json.parent),
+            "state_dir": str(effective_state_dir),
+            "read_only": bool(args.read_only),
             "report_json": str(args.json),
             "report_markdown": str(args.markdown),
             "ignore_file": str(args.ignore),
-            "lessons_file": str(args.root / "LESSONS.md"),
-            "verdicts_file": str(args.json.parent / "verdicts.json"),
+            "lessons_file": str(lessons_path),
+            "verdicts_file": str(verdicts_path),
         },
         "provenance": {
             "git": _git_provenance(args.root, args.package),
@@ -811,6 +903,7 @@ def main(argv: list[str] | None = None) -> int:
                 "doc_exclude": doc_exclude,
                 "tex_dir": tex_dir_name,
                 "tex_exclude": tex_exclude,
+                "subdirs": effective_subdirs,
             },
             "audit_config_hash": config_hash,
             "scanner_bundle_hash": bundle_hash,
@@ -824,15 +917,11 @@ def main(argv: list[str] | None = None) -> int:
             config_hash,
             bundle_hash,
         ),
+        "issues": issues,
         "scanners": payloads,
     }
     args.json.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-    keep = (
-        None
-        if args.exhaustive
-        else lambda scanner, detail: value_cohort(scanner, detail) != "low"
     )
     args.markdown.write_text(
         report_formatter.markdown(payloads, summary, keep=keep), encoding="utf-8"

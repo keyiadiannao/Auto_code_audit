@@ -511,6 +511,7 @@ def main(argv: list[str] | None = None) -> int:
             args.root.resolve(),
             report.get("package"),
             bool(configuration.get("all_py")),
+            configuration.get("subdirs"),
         )
         if live_tree != report_tree:
             mismatches.append(
@@ -536,6 +537,7 @@ def main(argv: list[str] | None = None) -> int:
             inputs_meta.get("doc_exclude"),
             inputs_meta.get("tex_dir"),
             inputs_meta.get("tex_exclude"),
+            inputs_meta.get("subdirs", configuration.get("subdirs")),
         )
         if live_inputs != report_inputs:
             mismatches.append(
@@ -563,6 +565,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.root.resolve(),
                     report.get("package"),
                     bool(configuration.get("all_py")),
+                    configuration.get("subdirs"),
                 )
                 if post_test_tree != report_tree:
                     mismatches.append(
@@ -584,6 +587,7 @@ def main(argv: list[str] | None = None) -> int:
                     inputs_meta.get("doc_exclude"),
                     inputs_meta.get("tex_dir"),
                     inputs_meta.get("tex_exclude"),
+                    inputs_meta.get("subdirs", configuration.get("subdirs")),
                 )
                 if post_test_inputs != report_inputs:
                     mismatches.append(

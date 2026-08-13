@@ -12,7 +12,7 @@ Supported schema (all keys optional):
 
 {
   "schema_version": 1,
-  "subdirs": ["lib", "experiments", "mechanism", "audit", "verify", "figures", "tests"],
+  "subdirs": ["src", "tests"],
   "deadcode": {"exclude": [...], "doc_dirs": ["{pkg}", "docs", ".github"]},
   "duplicates": {"threshold": 0.82, "min_chars": 120, "skip_names": [...]},
   "forks": {"threshold": 0.75, "min_lines": 40, "small_floor": 8,
