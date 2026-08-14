@@ -1,0 +1,27 @@
+---
+name: Bug report
+about: Report a defect in the tool or a scanner finding you disagree with
+title: ''
+labels: ''
+assignees: ''
+---
+
+## What happened
+
+<!-- Concise description. -->
+
+## Repro / evidence
+
+<!-- Steps, commands, and the smallest code snippet or report excerpt that shows it. -->
+
+## What I expected
+
+## Environment
+
+- OS:
+- Python version:
+- Auto Code Audit version (`python run_all.py --version`):
+
+<!-- If this is a scanner finding you believe is a false positive, attach the
+     report excerpt (the candidate's path / target_id / detail) and the reason
+     you think it is not a real issue. -->
