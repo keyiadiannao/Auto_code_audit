@@ -136,6 +136,7 @@ def _normalized_body(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
 
 def _extract_source(source: str, rel: str) -> list[Symbol]:
     """Extract callables from *source* text, tagged with repo-relative *rel*."""
+    source = source.lstrip("\ufeff")  # tolerate a UTF-8 BOM (git show / Windows files)
     try:
         tree = ast.parse(source)
     except (UnicodeError, SyntaxError):
@@ -189,7 +190,11 @@ def _base_index(root: Path, base: str) -> list[Symbol]:
 
     def _git(args: list[str]) -> str:
         proc = subprocess.run(
-            ["git", "-C", str(root), *args], capture_output=True, text=True
+            ["git", "-C", str(root), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         if proc.returncode != 0:
             raise RuntimeError(f"git failed: {proc.stderr.strip()}")
@@ -377,7 +382,9 @@ def _changed_py_files(root: Path, base: str) -> list[str]:
     import subprocess
 
     def _run(cmd: list[str]) -> str:
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
         if proc.returncode != 0:
             raise RuntimeError(f"git failed: {proc.stderr.strip()}")
         return proc.stdout
