@@ -87,13 +87,11 @@ def _run_baseline(cases: list[dict], doc_threshold: float) -> dict[str, int | No
 def _run_retrieval(cases: list[dict]) -> dict[str, int | None]:
     index = capability_retrieval.build_index(LIB, rel_root=PKG)
     new_syms = {s.key: s for s in capability_retrieval.build_index(EXP, rel_root=PKG)}
+    results = capability_retrieval.retrieve_with_closure(new_syms, index, k=10)
     rank_of: dict[str, int | None] = {}
     for case in cases:
-        query = new_syms.get(case["new"])
         rank_of[case["id"]] = None
-        if query is None:
-            continue
-        for i, (_, sym) in enumerate(capability_retrieval.retrieve(query, index, k=10), start=1):
+        for i, (_, sym) in enumerate(results.get(case["new"], []), start=1):
             if sym.key == case["existing"]:
                 rank_of[case["id"]] = i
                 break

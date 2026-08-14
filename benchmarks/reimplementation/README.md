@@ -76,14 +76,14 @@ python benchmarks/reimplementation/run.py
 rewrite, different algorithm, inlined helper, service→manager reinvention,
 repository bypass).
 
-| metric | `scan_capabilities` (name+docstring) | `capability_retrieval` (structural+call+string+lexical) |
+| metric | `scan_capabilities` (name+docstring) | `capability_retrieval` (structural+call+string+lexical+closure) |
 |---|---:|---:|
-| Candidate Recall@1 | 0.083 | **0.667** |
-| Candidate Recall@5 | 0.083 | **0.833** |
-| Candidate Recall@10 | 0.083 | **0.917** |
-| MRR | 0.083 | **0.758** |
+| Candidate Recall@1 | 0.083 | **0.750** |
+| Candidate Recall@5 | 0.083 | **0.917** |
+| Candidate Recall@10 | 0.083 | **1.000** |
+| MRR | 0.083 | **0.842** |
 
-The old channel catches only a same-name case; the new layer gets 11 of 12 into
+The old channel catches only a same-name case; the new layer gets all 12 into
 the top-10. Which channel wins is visible per case:
 
 - **structural** handles the rename family and the composed/decomposed email
@@ -91,18 +91,13 @@ the top-10. Which channel wins is visible per case:
 - **call overlap** catches the inlined helper (`clean_title` vs `slugify`: both
   call `strip`/`lower`/`replace`);
 - **string overlap** catches the repository bypass (`load_active_user` vs
-  `find_active`: the identical SQL literal).
+  `find_active`: the identical SQL literal);
+- **one-hop closure** catches the composite (`save_avatar_variant` calls its
+  own duplicate `upload_avatar`, so it transitively surfaces
+  `StorageService.upload`).
 
-The honest boundary is the last ~8%:
-
-- `check_palindrome` (two pointers) vs `is_palindrome` (slice-reverse) ranks
-  10 — same I/O contract but a genuinely different algorithm, where the
-  deterministic signals barely hold. This is where semantic/embedding recall
-  is eventually needed.
-- `save_avatar_variant` (a composite that calls its own duplicate) misses — a
-  partial overlap that needs transitive call-graph or semantic reasoning.
-
-Two caveats: the corpus is small (12 hand-written cases), and the retrieval is
-recall-first (aggressive normalization over-surfaces; the `KEEP_SEPARATE`
-cases rank 1 *on purpose*, because the reviewer must see the candidate to
-reject it — precision / false-consolidation rate is a separate future metric).
+What remains is a *ranking* gap, not a recall gap: three cases surface outside
+the top-1 (`sum-even-control-flow` rank 2, `repository-bypass` rank 2,
+`palindrome-different-algorithm` rank 10). The last is the honest boundary —
+same I/O contract, genuinely different algorithm — where deterministic signals
+run out and semantic/embedding recall is eventually needed.

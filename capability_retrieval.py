@@ -216,6 +216,40 @@ def retrieve(
     return scored[:k]
 
 
+def retrieve_with_closure(
+    queries: dict[str, Symbol],
+    index: list[Symbol],
+    k: int = 10,
+) -> dict[str, list[tuple[float, Symbol]]]:
+    """Retrieve for each new symbol, then propagate one hop along intra-set calls.
+
+    A composite function that calls another NEW function inherits the latter's
+    overlaps: ``save_avatar_variant`` calls ``upload_avatar``, and
+    ``upload_avatar`` duplicates ``StorageService.upload``, so the composite
+    transitively duplicates it too.  This is the deterministic stand-in for a
+    transitive call graph — it needs only the new-symbol set, not a full graph.
+    """
+    by_name: dict[str, list[Symbol]] = {}
+    for sym in queries.values():
+        by_name.setdefault(sym.name, []).append(sym)
+
+    results: dict[str, list[tuple[float, Symbol]]] = {}
+    for query in queries.values():
+        merged: list[tuple[float, Symbol]] = list(retrieve(query, index, k))
+        seen = {sym.key for _, sym in merged}
+        for called_name in query.call_names:
+            for callee in by_name.get(called_name, ()):
+                if callee.key == query.key:
+                    continue
+                for score, sym in retrieve(callee, index, k):
+                    if sym.key not in seen:
+                        seen.add(sym.key)
+                        merged.append((score, sym))
+        merged.sort(key=lambda pair: (-pair[0], pair[1].key))
+        results[query.key] = merged[:k]
+    return results
+
+
 def _evidence(query: Symbol, sym: Symbol) -> list[str]:
     """Return the channel labels that fired for this (query, symbol) pair."""
     fired: list[str] = []

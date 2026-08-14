@@ -69,3 +69,43 @@ def test_string_literal_channel_surfaces_repository_bypass(tmp_path) -> None:
     ranked = cr.retrieve(query, index, k=10)
     keys = [sym.key for _, sym in ranked]
     assert "lib/repo.py:UserRepository.find_active" in keys
+
+
+def test_one_hop_closure_recovers_composite(tmp_path) -> None:
+    _write(
+        tmp_path,
+        "lib/storage.py",
+        "class StorageService:\n"
+        "    def upload(self, payload, namespace, metadata=None):\n"
+        '        """Write a blob to object storage."""\n'
+        "        key = self._make_key(namespace, payload.name)\n"
+        "        self.client.put_object(key, payload.bytes, metadata=metadata)\n"
+        '        return {"key": key, "namespace": namespace}\n',
+    )
+    _write(
+        tmp_path,
+        "experiments/media.py",
+        "def upload_avatar(file, scope, meta=None):\n"
+        '    """Push an avatar image into storage."""\n'
+        "    key = build_key(scope, file.filename)\n"
+        "    object_store.put(key, file.content, metadata=meta)\n"
+        '    return {"locator": key, "scope": scope}\n'
+        "\n"
+        "def save_avatar_variant(img, scope, dims):\n"
+        '    """Validate, then store a resized variant."""\n'
+        "    if not valid_image(img):\n"
+        '        raise ValueError("invalid avatar image")\n'
+        '    return upload_avatar(normalize(img, dims), scope, meta={"variant": dims})\n',
+    )
+
+    index = cr.build_index(tmp_path / "lib", rel_root=tmp_path)
+    new_syms = {
+        s.key: s for s in cr.build_index(tmp_path / "experiments", rel_root=tmp_path)
+    }
+    results = cr.retrieve_with_closure(new_syms, index, k=10)
+    keys = [
+        sym.key for _, sym in results["experiments/media.py:save_avatar_variant"]
+    ]
+    # The composite calls upload_avatar (its own duplicate), so it must
+    # transitively surface the canonical StorageService.upload.
+    assert "lib/storage.py:StorageService.upload" in keys
