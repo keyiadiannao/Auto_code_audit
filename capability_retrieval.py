@@ -19,6 +19,7 @@ from __future__ import annotations
 import ast
 import copy
 import difflib
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -93,7 +94,25 @@ def _called_names(node: ast.AST) -> frozenset[str]:
     return frozenset(names)
 
 
-def _string_literals(node: ast.AST) -> frozenset[str]:
+def _strip_docstring(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    """Deep-copy *node* with its docstring removed (it has its own channel)."""
+    node = copy.deepcopy(node)
+    if (
+        node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+    ):
+        node.body = node.body[1:]
+    return node
+
+
+def _string_literals(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> frozenset[str]:
+    node = _strip_docstring(node)
     return frozenset(
         child.value
         for child in ast.walk(node)
@@ -108,9 +127,10 @@ def _returns_value(node: ast.AST) -> bool:
     )
 
 
-def _normalized_body(node: ast.AST) -> str:
+def _normalized_body(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    node = _strip_docstring(node)
     norm = _ReuseNormalize()
-    normalized = norm.visit(copy.deepcopy(node))
+    normalized = norm.visit(node)
     return ast.unparse(normalized)
 
 
@@ -187,28 +207,58 @@ def _jaccard(left: frozenset[str], right: frozenset[str]) -> float:
     return len(left & right) / len(union) if union else 0.0
 
 
+def _idf_map(values_per_symbol: list[frozenset[str]]) -> dict[str, float]:
+    """Inverse document frequency of each token across the index.
+
+    A token shared by many symbols (``get``, ``utf-8``) is weak reuse evidence;
+    a token shared by few (a full SQL query) is strong.  ``+1`` smoothing keeps
+    a token present in every symbol at idf 1.
+    """
+    n = len(values_per_symbol)
+    df: dict[str, int] = {}
+    for values in values_per_symbol:
+        for value in values:
+            df[value] = df.get(value, 0) + 1
+    return {value: math.log((n + 1) / (count + 1)) + 1 for value, count in df.items()}
+
+
+def _weighted_jaccard(
+    query: frozenset[str], sym: frozenset[str], idf: dict[str, float]
+) -> float:
+    shared = query & sym
+    if not shared:
+        return 0.0
+    union = query | sym
+    shared_w = sum(idf.get(t, 1.0) for t in shared)
+    union_w = sum(idf.get(t, 1.0) for t in union)
+    return shared_w / union_w if union_w else 0.0
+
+
 def retrieve(
     query: Symbol, index: list[Symbol], k: int = 10
 ) -> list[tuple[float, Symbol]]:
     """Rank the index against *query* by four deterministic evidence channels.
 
     - structural : normalized-body similarity (rename/rewrite-proof);
-    - call       : overlap of called method/function names;
-    - string     : overlap of string literals (SQL, config keys, prefixes);
+    - call       : IDF-weighted overlap of called method/function names;
+    - string     : IDF-weighted overlap of string literals;
     - lexical    : docstring-first-line tag similarity.
 
     Recall is the goal, so the score is the max across channels; a later
     adjudication step reads the top candidates and is responsible for
     precision.
     """
+    call_idf = _idf_map([s.call_names for s in index])
+    str_idf = _idf_map([s.string_literals for s in index])
+
     scored: list[tuple[float, Symbol]] = []
     for sym in index:
         if sym.key == query.key:
             continue
         structural = body_similarity(query.norm_body, sym.norm_body)
         lexical = _tag_similarity(query.tag, sym.tag)
-        call = _jaccard(query.call_names, sym.call_names)
-        strings = _jaccard(query.string_literals, sym.string_literals)
+        call = _weighted_jaccard(query.call_names, sym.call_names, call_idf)
+        strings = _weighted_jaccard(query.string_literals, sym.string_literals, str_idf)
         score = max(structural, call, strings, lexical * 0.8)
         if score > 0.0:
             scored.append((score, sym))
@@ -235,18 +285,23 @@ def retrieve_with_closure(
 
     results: dict[str, list[tuple[float, Symbol]]] = {}
     for query in queries.values():
-        merged: list[tuple[float, Symbol]] = list(retrieve(query, index, k))
-        seen = {sym.key for _, sym in merged}
+        merged: dict[str, tuple[float, Symbol]] = {}
+
+        def _absorb(cands: list[tuple[float, Symbol]]) -> None:
+            for score, sym in cands:
+                if sym.key not in merged or score > merged[sym.key][0]:
+                    merged[sym.key] = (score, sym)
+
+        _absorb(retrieve(query, index, k))
         for called_name in query.call_names:
             for callee in by_name.get(called_name, ()):
                 if callee.key == query.key:
                     continue
-                for score, sym in retrieve(callee, index, k):
-                    if sym.key not in seen:
-                        seen.add(sym.key)
-                        merged.append((score, sym))
-        merged.sort(key=lambda pair: (-pair[0], pair[1].key))
-        results[query.key] = merged[:k]
+                _absorb(retrieve(callee, index, k))
+        ranked = sorted(
+            merged.values(), key=lambda pair: (-pair[0], pair[1].key)
+        )
+        results[query.key] = ranked[:k]
     return results
 
 
@@ -349,25 +404,26 @@ def main(argv: list[str] | None = None) -> int:
         changed = _changed_py_files(root, args.base)
 
     index = [s for s in build_index(root) if s.path not in set(changed)]
-    queries: list[Symbol] = []
+    query_list: list[Symbol] = []
     for rel in changed:
         path = root / rel
         if path.is_file():
-            queries.extend(_extract(path, root))
+            query_list.extend(_extract(path, root))
     if args.symbol:
-        queries = [q for q in queries if q.key == args.symbol]
+        query_list = [q for q in query_list if q.key == args.symbol]
 
-    if not queries:
+    if not query_list:
         print(
             f"no callables found in {len(changed)} changed .py file(s)",
             file=sys.stderr,
         )
         return 1
 
-    for query in queries:
+    results = retrieve_with_closure({q.key: q for q in query_list}, index, args.k)
+    for query in query_list:
         ranked = [
             (score, sym)
-            for score, sym in retrieve(query, index, args.k)
+            for score, sym in results[query.key]
             if score >= args.min_score
         ]
         print(f"\n## {query.key}")
