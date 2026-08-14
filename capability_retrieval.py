@@ -193,31 +193,37 @@ def _extract(path: Path, rel_root: Path) -> list[Symbol]:
 def _base_index(root: Path, base: str) -> list[Symbol]:
     """Index the ``.py`` files at git ref *base* — the pre-change codebase.
 
-    Reading from the base tree (not the live working tree) is what makes the
-    diff-mode comparison honest: a helper the patch removed, or a canonical it
-    modified, must still be a candidate.
+    Uses ``git archive`` (one subprocess) instead of ``git show`` per file, so
+    a 1000-file repository is indexed in seconds rather than a minute.
     """
     import subprocess
+    import tarfile
+    import tempfile
 
-    def _git(args: list[str]) -> str:
+    with tempfile.TemporaryDirectory() as td:
+        tar_path = Path(td) / "tree.tar"
         proc = subprocess.run(
-            ["git", "-C", str(root), *args],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+            ["git", "-C", str(root), "archive", "--format=tar",
+             f"--output={tar_path}", base],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
         if proc.returncode != 0:
-            raise RuntimeError(f"git failed: {proc.stderr.strip()}")
-        return proc.stdout
-
-    index: list[Symbol] = []
-    for rel in _git(["ls-tree", "-r", "--name-only", base]).splitlines():
-        rel = rel.strip()
-        if not rel.endswith(".py"):
-            continue
-        index.extend(_extract_source(_git(["show", f"{base}:{rel}"]), rel))
-    return index
+            raise RuntimeError(f"git archive failed: {proc.stderr.strip()}")
+        index: list[Symbol] = []
+        with tarfile.open(tar_path) as tar:
+            for member in tar.getmembers():
+                if not member.isfile() or not member.name.endswith(".py"):
+                    continue
+                handle = tar.extractfile(member)
+                if handle is None:
+                    continue
+                index.extend(
+                    _extract_source(
+                        handle.read().decode("utf-8", errors="replace"),
+                        member.name,
+                    )
+                )
+        return index
 
 
 def build_index(root: Path, rel_root: Path | None = None) -> list[Symbol]:
@@ -298,16 +304,23 @@ def _score_components(
 
 
 def retrieve_detailed(
-    query: Symbol, index: list[Symbol], k: int = 10
+    query: Symbol,
+    index: list[Symbol],
+    k: int = 10,
+    call_idf: dict[str, float] | None = None,
+    str_idf: dict[str, float] | None = None,
 ) -> list[dict]:
     """Rank the index against *query*, returning score + per-channel evidence.
 
     Each entry is ``{"score", "symbol", "channels"}`` where ``channels`` keeps
     the individual component scores so the caller can show *why* a candidate
-    ranked where it did.
+    ranked where it did.  ``call_idf``/``str_idf`` depend only on the index, so
+    callers that run many queries should precompute them once and pass them in.
     """
-    call_idf = _idf_map([s.call_names for s in index])
-    str_idf = _idf_map([s.string_literals for s in index])
+    if call_idf is None:
+        call_idf = _idf_map([s.call_names for s in index])
+    if str_idf is None:
+        str_idf = _idf_map([s.string_literals for s in index])
 
     scored: list[dict] = []
     for sym in index:
@@ -357,6 +370,10 @@ def retrieve_with_closure_detailed(
     for sym in queries.values():
         by_name.setdefault(sym.name, []).append(sym)
 
+    # Precompute IDF once: it depends only on the index, not on the query.
+    call_idf = _idf_map([s.call_names for s in index])
+    str_idf = _idf_map([s.string_literals for s in index])
+
     results: dict[str, list[dict]] = {}
     for query in queries.values():
         merged: dict[str, dict] = {}
@@ -367,12 +384,21 @@ def retrieve_with_closure_detailed(
                 if key not in merged or d["score"] > merged[key]["score"]:
                     merged[key] = d
 
-        _absorb(retrieve_detailed(query, index, k))
+        _absorb(retrieve_detailed(query, index, k, call_idf, str_idf))
+        # One-hop closure with a budget: name-based callee matching can hit a
+        # huge bucket (dozens of new `run`/`main` symbols), so cap the number
+        # of transitive retrievals per query to stay linear on real repos.
+        closure_budget = 5
         for called_name in query.call_names:
             for callee in by_name.get(called_name, ()):
                 if callee.key == query.key:
                     continue
-                _absorb(retrieve_detailed(callee, index, k))
+                _absorb(retrieve_detailed(callee, index, k, call_idf, str_idf))
+                closure_budget -= 1
+                if closure_budget <= 0:
+                    break
+            if closure_budget <= 0:
+                break
         ranked = sorted(
             merged.values(), key=lambda d: (-d["score"], d["symbol"].key)
         )
