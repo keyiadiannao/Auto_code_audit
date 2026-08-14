@@ -76,6 +76,18 @@ capability overlaps, same-name contracts, region clusters, and callers. Return:
 {"capability":"...","existing_candidates":[{"symbol":"path::qualname","confidence":0.0,"callers":[]}],"recommendation":"reuse|extract_shared_component|new_implementation"}
 ```
 
+For a cross-name reuse check (different names/docstrings, same
+responsibility), run the reuse retrieval before recommending reuse:
+
+```text
+python -m capability_retrieval --root <repo> --base HEAD --json <state>/reuse.json
+```
+
+It surfaces existing implementations a new/changed callable overlaps with,
+ranked by structural/call/string evidence — read the top candidates, then
+decide `reuse` / `extract_shared_component` / `new_implementation` against
+real code, never against the score alone.
+
 Recommend extraction only when callers can share one explicit contract and
 ownership boundary.
 

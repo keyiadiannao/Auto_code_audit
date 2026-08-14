@@ -134,13 +134,12 @@ def _normalized_body(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     return ast.unparse(normalized)
 
 
-def _extract(path: Path, rel_root: Path) -> list[Symbol]:
+def _extract_source(source: str, rel: str) -> list[Symbol]:
+    """Extract callables from *source* text, tagged with repo-relative *rel*."""
     try:
-        text = path.read_text(encoding="utf-8-sig", errors="replace")
-        tree = ast.parse(text)
-    except (OSError, UnicodeError, SyntaxError):
+        tree = ast.parse(source)
+    except (UnicodeError, SyntaxError):
         return []
-    rel = path.relative_to(rel_root).as_posix()
     out: list[Symbol] = []
 
     def add(node: ast.FunctionDef | ast.AsyncFunctionDef, qualname: str) -> None:
@@ -168,6 +167,41 @@ def _extract(path: Path, rel_root: Path) -> list[Symbol]:
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     add(child, f"{node.name}.{child.name}")
     return out
+
+
+def _extract(path: Path, rel_root: Path) -> list[Symbol]:
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except (OSError, UnicodeError):
+        return []
+    rel = path.relative_to(rel_root).as_posix()
+    return _extract_source(text, rel)
+
+
+def _base_index(root: Path, base: str) -> list[Symbol]:
+    """Index the ``.py`` files at git ref *base* — the pre-change codebase.
+
+    Reading from the base tree (not the live working tree) is what makes the
+    diff-mode comparison honest: a helper the patch removed, or a canonical it
+    modified, must still be a candidate.
+    """
+    import subprocess
+
+    def _git(args: list[str]) -> str:
+        proc = subprocess.run(
+            ["git", "-C", str(root), *args], capture_output=True, text=True
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"git failed: {proc.stderr.strip()}")
+        return proc.stdout
+
+    index: list[Symbol] = []
+    for rel in _git(["ls-tree", "-r", "--name-only", base]).splitlines():
+        rel = rel.strip()
+        if not rel.endswith(".py"):
+            continue
+        index.extend(_extract_source(_git(["show", f"{base}:{rel}"]), rel))
+    return index
 
 
 def build_index(root: Path, rel_root: Path | None = None) -> list[Symbol]:
@@ -200,13 +234,6 @@ def _tag_similarity(left: str, right: str) -> float:
     return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
 
 
-def _jaccard(left: frozenset[str], right: frozenset[str]) -> float:
-    if not left and not right:
-        return 0.0
-    union = left | right
-    return len(left & right) / len(union) if union else 0.0
-
-
 def _idf_map(values_per_symbol: list[frozenset[str]]) -> dict[str, float]:
     """Inverse document frequency of each token across the index.
 
@@ -234,43 +261,65 @@ def _weighted_jaccard(
     return shared_w / union_w if union_w else 0.0
 
 
-def retrieve(
+def _score_components(
+    query: Symbol, sym: Symbol, call_idf: dict[str, float], str_idf: dict[str, float]
+) -> dict[str, float]:
+    return {
+        "structural": body_similarity(query.norm_body, sym.norm_body),
+        "call": _weighted_jaccard(query.call_names, sym.call_names, call_idf),
+        "string": _weighted_jaccard(query.string_literals, sym.string_literals, str_idf),
+        "lexical": _tag_similarity(query.tag, sym.tag),
+    }
+
+
+def retrieve_detailed(
     query: Symbol, index: list[Symbol], k: int = 10
-) -> list[tuple[float, Symbol]]:
-    """Rank the index against *query* by four deterministic evidence channels.
+) -> list[dict]:
+    """Rank the index against *query*, returning score + per-channel evidence.
 
-    - structural : normalized-body similarity (rename/rewrite-proof);
-    - call       : IDF-weighted overlap of called method/function names;
-    - string     : IDF-weighted overlap of string literals;
-    - lexical    : docstring-first-line tag similarity.
-
-    Recall is the goal, so the score is the max across channels; a later
-    adjudication step reads the top candidates and is responsible for
-    precision.
+    Each entry is ``{"score", "symbol", "channels"}`` where ``channels`` keeps
+    the individual component scores so the caller can show *why* a candidate
+    ranked where it did.
     """
     call_idf = _idf_map([s.call_names for s in index])
     str_idf = _idf_map([s.string_literals for s in index])
 
-    scored: list[tuple[float, Symbol]] = []
+    scored: list[dict] = []
     for sym in index:
         if sym.key == query.key:
             continue
-        structural = body_similarity(query.norm_body, sym.norm_body)
-        lexical = _tag_similarity(query.tag, sym.tag)
-        call = _weighted_jaccard(query.call_names, sym.call_names, call_idf)
-        strings = _weighted_jaccard(query.string_literals, sym.string_literals, str_idf)
-        score = max(structural, call, strings, lexical * 0.8)
+        components = _score_components(query, sym, call_idf, str_idf)
+        score = max(
+            components["structural"],
+            components["call"],
+            components["string"],
+            components["lexical"] * 0.8,
+        )
         if score > 0.0:
-            scored.append((score, sym))
-    scored.sort(key=lambda pair: (-pair[0], pair[1].key))
+            scored.append(
+                {
+                    "score": score,
+                    "symbol": sym,
+                    "channels": {c: round(v, 4) for c, v in components.items()},
+                }
+            )
+    scored.sort(key=lambda d: (-d["score"], d["symbol"].key))
     return scored[:k]
 
 
-def retrieve_with_closure(
+def retrieve(
+    query: Symbol, index: list[Symbol], k: int = 10
+) -> list[tuple[float, Symbol]]:
+    """Rank the index against *query*; see ``retrieve_detailed`` for the
+    per-channel breakdown."""
+    return [(d["score"], d["symbol"]) for d in retrieve_detailed(query, index, k)]
+
+
+def retrieve_with_closure_detailed(
     queries: dict[str, Symbol],
     index: list[Symbol],
     k: int = 10,
-) -> dict[str, list[tuple[float, Symbol]]]:
+) -> dict[str, list[dict]]:
     """Retrieve for each new symbol, then propagate one hop along intra-set calls.
 
     A composite function that calls another NEW function inherits the latter's
@@ -283,40 +332,39 @@ def retrieve_with_closure(
     for sym in queries.values():
         by_name.setdefault(sym.name, []).append(sym)
 
-    results: dict[str, list[tuple[float, Symbol]]] = {}
+    results: dict[str, list[dict]] = {}
     for query in queries.values():
-        merged: dict[str, tuple[float, Symbol]] = {}
+        merged: dict[str, dict] = {}
 
-        def _absorb(cands: list[tuple[float, Symbol]]) -> None:
-            for score, sym in cands:
-                if sym.key not in merged or score > merged[sym.key][0]:
-                    merged[sym.key] = (score, sym)
+        def _absorb(cands: list[dict]) -> None:
+            for d in cands:
+                key = d["symbol"].key
+                if key not in merged or d["score"] > merged[key]["score"]:
+                    merged[key] = d
 
-        _absorb(retrieve(query, index, k))
+        _absorb(retrieve_detailed(query, index, k))
         for called_name in query.call_names:
             for callee in by_name.get(called_name, ()):
                 if callee.key == query.key:
                     continue
-                _absorb(retrieve(callee, index, k))
+                _absorb(retrieve_detailed(callee, index, k))
         ranked = sorted(
-            merged.values(), key=lambda pair: (-pair[0], pair[1].key)
+            merged.values(), key=lambda d: (-d["score"], d["symbol"].key)
         )
         results[query.key] = ranked[:k]
     return results
 
 
-def _evidence(query: Symbol, sym: Symbol) -> list[str]:
-    """Return the channel labels that fired for this (query, symbol) pair."""
-    fired: list[str] = []
-    if body_similarity(query.norm_body, sym.norm_body) >= 0.5:
-        fired.append("structural")
-    if _jaccard(query.call_names, sym.call_names) >= 0.5:
-        fired.append("call")
-    if _jaccard(query.string_literals, sym.string_literals) >= 0.5:
-        fired.append("string")
-    if _tag_similarity(query.tag, sym.tag) >= 0.5:
-        fired.append("lexical")
-    return fired
+def retrieve_with_closure(
+    queries: dict[str, Symbol],
+    index: list[Symbol],
+    k: int = 10,
+) -> dict[str, list[tuple[float, Symbol]]]:
+    """``retrieve_with_closure_detailed`` reduced to ``(score, symbol)`` pairs."""
+    return {
+        key: [(d["score"], d["symbol"]) for d in cands]
+        for key, cands in retrieve_with_closure_detailed(queries, index, k).items()
+    }
 
 
 def _changed_py_files(root: Path, base: str) -> list[str]:
@@ -385,6 +433,10 @@ def main(argv: list[str] | None = None) -> int:
         "--min-score", type=float, default=0.3,
         help="only print candidates above this score",
     )
+    ap.add_argument(
+        "--json", type=Path, default=None,
+        help="write machine-readable results as JSON",
+    )
     args = ap.parse_args(argv)
 
     if (args.file is None) == (args.base is None):
@@ -400,10 +452,11 @@ def main(argv: list[str] | None = None) -> int:
             if file_path.is_relative_to(root)
             else file_path.as_posix()
         ]
+        index = [s for s in build_index(root) if s.path not in set(changed)]
     else:
         changed = _changed_py_files(root, args.base)
+        index = _base_index(root, args.base)
 
-    index = [s for s in build_index(root) if s.path not in set(changed)]
     query_list: list[Symbol] = []
     for rel in changed:
         path = root / rel
@@ -419,20 +472,51 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    results = retrieve_with_closure({q.key: q for q in query_list}, index, args.k)
+    results = retrieve_with_closure_detailed(
+        {q.key: q for q in query_list}, index, args.k
+    )
     for query in query_list:
-        ranked = [
-            (score, sym)
-            for score, sym in results[query.key]
-            if score >= args.min_score
-        ]
+        ranked = [d for d in results[query.key] if d["score"] >= args.min_score]
         print(f"\n## {query.key}")
         if not ranked:
             print("  (no existing implementations above threshold)")
             continue
-        for i, (score, sym) in enumerate(ranked, start=1):
-            channels = "+".join(_evidence(query, sym)) or "?"
-            print(f"  {i}. {sym.key:<44} score={score:.3f}  [{channels}]")
+        for i, d in enumerate(ranked, start=1):
+            top = max(d["channels"], key=d["channels"].get)
+            print(
+                f"  {i}. {d['symbol'].key:<44} score={d['score']:.3f}  "
+                f"[{top}={d['channels'][top]:.3f}]"
+            )
+
+    if args.json is not None:
+        import json as _json
+
+        from _scanner_common import atomic_write_text
+
+        payload = {
+            "schema_version": 1,
+            "root": str(root),
+            "base": args.base,
+            "changed_files": changed,
+            "results": [
+                {
+                    "new_symbol": q.key,
+                    "candidates": [
+                        {
+                            "existing_symbol": d["symbol"].key,
+                            "score": round(d["score"], 4),
+                            "channels": d["channels"],
+                        }
+                        for d in results[q.key]
+                        if d["score"] >= args.min_score
+                    ],
+                }
+                for q in query_list
+            ],
+        }
+        atomic_write_text(
+            args.json, _json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        )
     return 0
 
 
