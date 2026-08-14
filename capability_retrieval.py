@@ -264,26 +264,62 @@ def _evidence(query: Symbol, sym: Symbol) -> list[str]:
     return fired
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI: surface existing implementations that a new/changed file overlaps.
+def _changed_py_files(root: Path, base: str) -> list[str]:
+    """Return the ``.py`` paths (repo-relative) changed since ``base``.
 
-    The post-write landing path for the reuse firewall: index the existing
-    codebase under ``--root`` (excluding ``--file``) and report, per callable
-    in ``--file``, the top existing implementations it overlaps with.
+    Union of tracked modifications (``git diff <base>``) and untracked files
+    (``git ls-files --others``) — the latter is the common case: the agent just
+    wrote a new file and hasn't committed it.
+    """
+    import subprocess
+
+    def _run(cmd: list[str]) -> str:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(f"git failed: {proc.stderr.strip()}")
+        return proc.stdout
+
+    tracked = _run(["git", "-C", str(root), "diff", "--name-only", base])
+    untracked = _run(
+        ["git", "-C", str(root), "ls-files", "--others", "--exclude-standard"]
+    )
+    files = {
+        line.strip()
+        for line in tracked.splitlines() + untracked.splitlines()
+        if line.strip().endswith(".py")
+    }
+    return sorted(files)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI: surface existing implementations that new/changed code overlaps.
+
+    Two modes:
+      - ``--file <path>`` — check one new/changed file;
+      - ``--base <ref>``   — ``git diff`` the working tree against ``<ref>`` and
+        check every changed ``.py`` file against the pre-change index.
+
+    In both cases the index is the existing codebase (the working tree minus
+    the changed files), and the report lists, per new callable, the top
+    existing implementations it overlaps with plus the channels that fired.
     """
     import argparse
     import sys
 
     ap = argparse.ArgumentParser(
-        description="Reuse-check: find existing implementations a new file overlaps with."
+        description="Reuse-check: find existing implementations new/changed code overlaps with."
     )
     ap.add_argument(
         "--root", type=Path, required=True,
         help="repository root to index (the existing codebase)",
     )
     ap.add_argument(
-        "--file", type=Path, required=True,
+        "--file", type=Path, default=None,
         help="new/changed Python file to check",
+    )
+    ap.add_argument(
+        "--base", default=None,
+        help="git ref; diff the working tree against it and check the changed .py files",
     )
     ap.add_argument(
         "--symbol", default=None,
@@ -296,21 +332,36 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    root = args.root.resolve()
-    file_path = args.file.resolve()
-    rel_file = (
-        file_path.relative_to(root).as_posix()
-        if file_path.is_relative_to(root)
-        else file_path.as_posix()
-    )
+    if (args.file is None) == (args.base is None):
+        print("error: provide exactly one of --file or --base", file=sys.stderr)
+        return 2
 
-    index = [s for s in build_index(root) if s.path != rel_file]
-    queries = _extract(file_path, root)
+    root = args.root.resolve()
+
+    if args.file is not None:
+        file_path = args.file.resolve()
+        changed = [
+            file_path.relative_to(root).as_posix()
+            if file_path.is_relative_to(root)
+            else file_path.as_posix()
+        ]
+    else:
+        changed = _changed_py_files(root, args.base)
+
+    index = [s for s in build_index(root) if s.path not in set(changed)]
+    queries: list[Symbol] = []
+    for rel in changed:
+        path = root / rel
+        if path.is_file():
+            queries.extend(_extract(path, root))
     if args.symbol:
         queries = [q for q in queries if q.key == args.symbol]
 
     if not queries:
-        print(f"no callables found in {rel_file}", file=sys.stderr)
+        print(
+            f"no callables found in {len(changed)} changed .py file(s)",
+            file=sys.stderr,
+        )
         return 1
 
     for query in queries:
