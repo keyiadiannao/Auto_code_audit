@@ -67,7 +67,7 @@ class Symbol:
     lineno: int
     signature: str
     sig_shape: str
-    tag: str
+    tag_tokens: tuple[str, ...]
     norm_body: tuple[str, ...]
     call_names: frozenset[str]
     returns_value: bool
@@ -141,8 +141,11 @@ def _normalized_body(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str,
     # Token-level, not string-level: comparing token tuples is 5-10x shorter
     # than the unparse string and lets the quick-ratio gate actually filter.
     # Punctuation is kept as its own tokens so ``a.b(c)`` and ``a[b]c`` and
-    # ``a + b`` stay distinguishable.
-    return tuple(re.findall(r"[A-Za-z_]\w*|\d+|[^\sA-Za-z_0-9]", ast.unparse(normalized)))
+    # ``a + b`` stay distinguishable.  Truncated so the O(n^2) full ratio stays
+    # bounded on long functions (the head captures the pipeline/shape).
+    return tuple(
+        re.findall(r"[A-Za-z_]\w*|\d+|[^\sA-Za-z_0-9]", ast.unparse(normalized))
+    )[:200]
 
 
 def _extract_source(source: str, rel: str) -> list[Symbol]:
@@ -163,7 +166,7 @@ def _extract_source(source: str, rel: str) -> list[Symbol]:
                 lineno=node.lineno,
                 signature=f"({ast.unparse(node.args)})",
                 sig_shape=signature_shape(node),
-                tag=_doc_first_line(node),
+                tag_tokens=_tag_tokens(_doc_first_line(node)),
                 norm_body=_normalized_body(node),
                 call_names=_called_names(node),
                 returns_value=_returns_value(node),
@@ -200,10 +203,11 @@ def _base_index(root: Path, base: str) -> list[Symbol]:
     import tarfile
     import tempfile
 
+    toplevel, prefix = _scope(root)
     with tempfile.TemporaryDirectory() as td:
         tar_path = Path(td) / "tree.tar"
         proc = subprocess.run(
-            ["git", "-C", str(root), "archive", "--format=tar",
+            ["git", "-C", str(toplevel), "archive", "--format=tar",
              f"--output={tar_path}", base],
             capture_output=True, text=True, encoding="utf-8", errors="replace",
         )
@@ -212,7 +216,12 @@ def _base_index(root: Path, base: str) -> list[Symbol]:
         index: list[Symbol] = []
         with tarfile.open(tar_path) as tar:
             for member in tar.getmembers():
-                if not member.isfile() or not member.name.endswith(".py"):
+                name = member.name
+                if prefix:
+                    if not name.startswith(prefix + "/"):
+                        continue
+                    name = name[len(prefix) + 1:]
+                if not member.isfile() or not name.endswith(".py"):
                     continue
                 handle = tar.extractfile(member)
                 if handle is None:
@@ -220,7 +229,7 @@ def _base_index(root: Path, base: str) -> list[Symbol]:
                 index.extend(
                     _extract_source(
                         handle.read().decode("utf-8", errors="replace"),
-                        member.name,
+                        name,
                     )
                 )
         return index
@@ -254,15 +263,16 @@ def body_similarity(left: tuple[str, ...], right: tuple[str, ...]) -> float:
     return matcher.ratio()
 
 
-def _tag_similarity(left: str, right: str) -> float:
-    def tokens(text: str) -> tuple[str, ...]:
-        normalized = re.sub(r"[_\-.,;:()\[\]{}/]", " ", text.lower())
-        return tuple(re.sub(r"\s+", " ", normalized).strip().split())
+def _tag_tokens(text: str) -> tuple[str, ...]:
+    normalized = re.sub(r"[_\-.,;:()\[\]{}/]", " ", text.lower())
+    return tuple(re.sub(r"\s+", " ", normalized).strip().split())
 
-    a, b = tokens(left), tokens(right)
-    if not a or not b:
+
+def _tag_similarity(left: tuple[str, ...], right: tuple[str, ...]) -> float:
+    if not left or not right:
         return 0.0
-    return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
+    a, b = set(left), set(right)
+    return len(a & b) / len(a | b)
 
 
 def _idf_map(values_per_symbol: list[frozenset[str]]) -> dict[str, float]:
@@ -299,7 +309,7 @@ def _score_components(
         "structural": body_similarity(query.norm_body, sym.norm_body),
         "call": _weighted_jaccard(query.call_names, sym.call_names, call_idf),
         "string": _weighted_jaccard(query.string_literals, sym.string_literals, str_idf),
-        "lexical": _tag_similarity(query.tag, sym.tag),
+        "lexical": _tag_similarity(query.tag_tokens, sym.tag_tokens),
     }
 
 
@@ -418,12 +428,39 @@ def retrieve_with_closure(
     }
 
 
+def _git_toplevel(root: Path) -> Path:
+    import subprocess
+
+    proc = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"git failed: {proc.stderr.strip()}")
+    return Path(proc.stdout.strip())
+
+
+def _scope(root: Path) -> tuple[Path, str]:
+    """Return ``(git toplevel, root's path relative to it)``.
+
+    The prefix is ``""`` when ``root`` IS the toplevel.  Git reports paths
+    relative to the toplevel, so commands run from there and are then filtered
+    to (and stripped of) this prefix.
+    """
+    toplevel = _git_toplevel(root).resolve()
+    root = root.resolve()
+    if root == toplevel:
+        return toplevel, ""
+    return toplevel, root.relative_to(toplevel).as_posix()
+
+
 def _changed_py_files(root: Path, base: str) -> list[str]:
-    """Return the ``.py`` paths (repo-relative) changed since ``base``.
+    """Return the ``.py`` paths (``--root``-relative) changed since ``base``.
 
     Union of tracked modifications (``git diff <base>``) and untracked files
     (``git ls-files --others``) — the latter is the common case: the agent just
-    wrote a new file and hasn't committed it.
+    wrote a new file and hasn't committed it.  Scoped to ``--root``, not the
+    whole repository.
     """
     import subprocess
 
@@ -435,15 +472,20 @@ def _changed_py_files(root: Path, base: str) -> list[str]:
             raise RuntimeError(f"git failed: {proc.stderr.strip()}")
         return proc.stdout
 
-    tracked = _run(["git", "-C", str(root), "diff", "--name-only", base])
+    toplevel, prefix = _scope(root)
+    tracked = _run(["git", "-C", str(toplevel), "diff", "--name-only", base])
     untracked = _run(
-        ["git", "-C", str(root), "ls-files", "--others", "--exclude-standard"]
+        ["git", "-C", str(toplevel), "ls-files", "--others", "--exclude-standard"]
     )
-    files = {
-        line.strip()
-        for line in tracked.splitlines() + untracked.splitlines()
-        if line.strip().endswith(".py")
-    }
+    files: set[str] = set()
+    for line in tracked.splitlines() + untracked.splitlines():
+        name = line.strip()
+        if prefix:
+            if not name.startswith(prefix + "/"):
+                continue
+            name = name[len(prefix) + 1:]
+        if name.endswith(".py"):
+            files.add(name)
     return sorted(files)
 
 
