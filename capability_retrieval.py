@@ -214,3 +214,88 @@ def retrieve(
             scored.append((score, sym))
     scored.sort(key=lambda pair: (-pair[0], pair[1].key))
     return scored[:k]
+
+
+def _evidence(query: Symbol, sym: Symbol) -> list[str]:
+    """Return the channel labels that fired for this (query, symbol) pair."""
+    fired: list[str] = []
+    if body_similarity(query.norm_body, sym.norm_body) >= 0.5:
+        fired.append("structural")
+    if _jaccard(query.call_names, sym.call_names) >= 0.5:
+        fired.append("call")
+    if _jaccard(query.string_literals, sym.string_literals) >= 0.5:
+        fired.append("string")
+    if _tag_similarity(query.tag, sym.tag) >= 0.5:
+        fired.append("lexical")
+    return fired
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI: surface existing implementations that a new/changed file overlaps.
+
+    The post-write landing path for the reuse firewall: index the existing
+    codebase under ``--root`` (excluding ``--file``) and report, per callable
+    in ``--file``, the top existing implementations it overlaps with.
+    """
+    import argparse
+    import sys
+
+    ap = argparse.ArgumentParser(
+        description="Reuse-check: find existing implementations a new file overlaps with."
+    )
+    ap.add_argument(
+        "--root", type=Path, required=True,
+        help="repository root to index (the existing codebase)",
+    )
+    ap.add_argument(
+        "--file", type=Path, required=True,
+        help="new/changed Python file to check",
+    )
+    ap.add_argument(
+        "--symbol", default=None,
+        help="optional path:qualname to restrict the query to one callable",
+    )
+    ap.add_argument("--k", type=int, default=10, help="top-K candidates per symbol")
+    ap.add_argument(
+        "--min-score", type=float, default=0.3,
+        help="only print candidates above this score",
+    )
+    args = ap.parse_args(argv)
+
+    root = args.root.resolve()
+    file_path = args.file.resolve()
+    rel_file = (
+        file_path.relative_to(root).as_posix()
+        if file_path.is_relative_to(root)
+        else file_path.as_posix()
+    )
+
+    index = [s for s in build_index(root) if s.path != rel_file]
+    queries = _extract(file_path, root)
+    if args.symbol:
+        queries = [q for q in queries if q.key == args.symbol]
+
+    if not queries:
+        print(f"no callables found in {rel_file}", file=sys.stderr)
+        return 1
+
+    for query in queries:
+        ranked = [
+            (score, sym)
+            for score, sym in retrieve(query, index, args.k)
+            if score >= args.min_score
+        ]
+        print(f"\n## {query.key}")
+        if not ranked:
+            print("  (no existing implementations above threshold)")
+            continue
+        for i, (score, sym) in enumerate(ranked, start=1):
+            channels = "+".join(_evidence(query, sym)) or "?"
+            print(f"  {i}. {sym.key:<44} score={score:.3f}  [{channels}]")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    raise SystemExit(main())
