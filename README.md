@@ -1,6 +1,8 @@
 # Auto Code Audit
 
 [![CI](https://github.com/keyiadiannao/Auto_code_audit/actions/workflows/ci.yml/badge.svg)](https://github.com/keyiadiannao/Auto_code_audit/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 
 Your AI assistant refactored a large Python codebase and the tests pass.
 Then the subtle bugs start: a hash-locked runner silently broken by a
@@ -35,6 +37,19 @@ Nothing is deleted automatically. Every candidate gets a verdict (`false
 positive` writes a suppression entry; everything else requires a code
 action), and the toolkit ships with an empty suppression registry: each
 project builds its own `ignore.json` from its own semantic reviews.
+
+## Contents
+
+- [The three layers](#the-three-layers)
+- [Requirements](#requirements) · [Installation](#installation-optional) · [Quick start](#quick-start)
+- [Benchmark corpus](#benchmark-corpus)
+- [Scanners](#scanners)
+- [Semantic review (Layer 2)](#semantic-review-layer-2)
+- [Verification gates (Layer 3)](#verification-gates-layer-3)
+- [Continuous integration](#continuous-integration)
+- [Project layout](#project-layout)
+- [Honest limitations](#honest-limitations)
+- [License](#license)
 
 ## The three layers
 
@@ -579,6 +594,33 @@ LESSONS.md              false-positive lesson archive (read before Layer 2)
 ignore.json             approved suppression registry (ships empty)
 tests/                  fixture tests for every scanner
 ```
+
+## Honest limitations
+
+Auto Code Audit is a candidate generator, not a verdict engine. Its own design
+demands the same honesty it applies to your codebase:
+
+- **Most candidates are false positives, by design.** On the pinned public
+  corpus, only 16 of 594 adjudicated candidates resolve to a confirmed defect
+  (~2.7%) — a review burden of ~37 candidates per confirmed finding. It
+  deliberately over-signals so nothing is silently missed; the cost is that
+  every candidate still needs a human (or LLM) semantic review.
+- **Layer 2 is where the real work happens.** A static hit is never proof of a
+  bug — the tool forces you to write a contract card and adjudicate. Skip
+  Layer 2 and the tool only produces noise.
+- **It sees only what is statically visible.** Dynamic dispatch, runtime
+  configuration, and behavior that emerges only at execution time are blind
+  spots; the contracts scanner has channels for some of these, but they remain
+  review candidates, not verdicts.
+- **It never decides for you.** Nothing is deleted automatically; every
+  code-changing disposition is a human decision the tool records and later
+  verifies — not one it makes.
+- **Benchmark numbers are corpus-bound.** The precision/recall figures come
+  from six small pinned public projects plus a synthetic mutation fixture;
+  they describe those corpora, not your codebase.
+- **This tool is itself AI-maintained.** It is a dogfooding project: its own
+  CI runs the scanners against itself. Treat its claims with the same
+  skepticism it applies to yours.
 
 ## License
 
