@@ -17,6 +17,7 @@ regardless of what they are called.
 from __future__ import annotations
 
 import ast
+import builtins
 import copy
 import difflib
 import math
@@ -67,7 +68,7 @@ class Symbol:
     signature: str
     sig_shape: str
     tag: str
-    norm_body: str
+    norm_body: tuple[str, ...]
     call_names: frozenset[str]
     returns_value: bool
     string_literals: frozenset[str]
@@ -82,13 +83,19 @@ def _doc_first_line(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     return doc.strip().splitlines()[0].strip() if doc else ""
 
 
+_BUILTIN_NAMES = frozenset(dir(builtins))
+
+
 def _called_names(node: ast.AST) -> frozenset[str]:
     names: set[str] = set()
     for child in ast.walk(node):
         if isinstance(child, ast.Call):
             func = child.func
             if isinstance(func, ast.Name):
-                names.add(func.id)
+                # builtins (len, sum, range, ...) are language primitives,
+                # not reuse evidence; method names are kept.
+                if func.id not in _BUILTIN_NAMES:
+                    names.add(func.id)
             elif isinstance(func, ast.Attribute):
                 names.add(func.attr)
     return frozenset(names)
@@ -127,11 +134,15 @@ def _returns_value(node: ast.AST) -> bool:
     )
 
 
-def _normalized_body(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+def _normalized_body(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, ...]:
     node = _strip_docstring(node)
     norm = _ReuseNormalize()
     normalized = norm.visit(node)
-    return ast.unparse(normalized)
+    # Token-level, not string-level: comparing token tuples is 5-10x shorter
+    # than the unparse string and lets the quick-ratio gate actually filter.
+    # Punctuation is kept as its own tokens so ``a.b(c)`` and ``a[b]c`` and
+    # ``a + b`` stay distinguishable.
+    return tuple(re.findall(r"[A-Za-z_]\w*|\d+|[^\sA-Za-z_0-9]", ast.unparse(normalized)))
 
 
 def _extract_source(source: str, rel: str) -> list[Symbol]:
@@ -222,10 +233,19 @@ def build_index(root: Path, rel_root: Path | None = None) -> list[Symbol]:
     return index
 
 
-def body_similarity(left: str, right: str) -> float:
+def body_similarity(left: tuple[str, ...], right: tuple[str, ...]) -> float:
     if not left or not right:
         return 0.0
-    return difflib.SequenceMatcher(None, left, right, autojunk=False).ratio()
+    shorter, longer = sorted((len(left), len(right)))
+    if longer == 0 or shorter / longer < 0.35:
+        return 0.0
+    matcher = difflib.SequenceMatcher(None, left, right, autojunk=False)
+    # cheap upper-bound gates before the O(n^2) full ratio
+    if matcher.real_quick_ratio() < 0.35:
+        return 0.0
+    if matcher.quick_ratio() < 0.35:
+        return 0.0
+    return matcher.ratio()
 
 
 def _tag_similarity(left: str, right: str) -> float:

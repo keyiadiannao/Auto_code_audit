@@ -78,13 +78,13 @@ repository bypass).
 
 | metric | `scan_capabilities` (name+docstring) | `capability_retrieval` (structural+call+string+lexical+closure) |
 |---|---:|---:|
-| Candidate Recall@1 | 0.083 | **0.750** |
+| Candidate Recall@1 | 0.083 | **0.833** |
 | Candidate Recall@5 | 0.083 | **0.917** |
-| Candidate Recall@10 | 0.083 | **1.000** |
-| MRR | 0.083 | **0.842** |
+| Candidate Recall@10 | 0.083 | **0.917** |
+| MRR | 0.083 | **0.875** |
 
-The old channel catches only a same-name case; the new layer gets all 12 into
-the top-10. Which channel wins is visible per case:
+The old channel catches only a same-name case; the new layer surfaces 11 of 12
+cases. Which channel wins is visible per case:
 
 - **structural** handles the rename family and the composed/decomposed email
   pair (names normalized away);
@@ -96,8 +96,8 @@ the top-10. Which channel wins is visible per case:
   own duplicate `upload_avatar`, so it transitively surfaces
   `StorageService.upload`).
 
-What remains is a *ranking* gap, not a recall gap: three cases surface outside
-the top-1 (`sum-even-control-flow` rank 2, `repository-bypass` rank 2,
-`palindrome-different-algorithm` rank 10). The last is the honest boundary —
-same I/O contract, genuinely different algorithm — where deterministic signals
-run out and semantic/embedding recall is eventually needed.
+The one miss is the deterministic ceiling: `check_palindrome` (two pointers) vs
+`is_palindrome` (slice-reverse) — same I/O contract, genuinely different
+algorithm, no shared calls/literals/structure. It needs semantic/embedding
+recall. (The structural channel compares normalized *token sequences*, not raw
+strings, so the retrieval stays fast on real repositories.)
