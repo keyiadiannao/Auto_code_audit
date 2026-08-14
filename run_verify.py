@@ -575,7 +575,12 @@ def main(argv: list[str] | None = None) -> int:
 
     artifact_reason = ""
     if args.test_command:
-        result = subprocess.run(args.test_command, shell=True)
+        # Run the test command INSIDE the audited repository (--root), so a
+        # no-op or wrong-directory command cannot stand in for the target's
+        # test suite.
+        result = subprocess.run(
+            args.test_command, shell=True, cwd=args.root.resolve()
+        )
         test_gate = "passed" if result.returncode == 0 else "failed"
         if test_gate == "passed" and (report_tree or report_inputs):
             # TOCTOU guard: the test command may rewrite source or scanned

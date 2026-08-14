@@ -220,6 +220,16 @@ self-approves. `fully_verified` is true only when the gate passed, the test
 evidence was machine-checked, **and** a comparable pre-patch report (`--previous`)
 was given; an incompatible baseline rejects rather than trusting a garbage one.
 
+> **Trust-model note.** `fully_verified` means the supplied report, verdicts,
+> and test evidence satisfy this deterministic gate — it is *not* a
+> cryptographic or independently-reproduced attestation that the target
+> repository was completely rescanned and tested. The gate validates that the
+> artifacts are internally consistent and bound to the audited source tree; it
+> does not re-run the scanners itself, and it trusts the operator-supplied
+> `--scope` and `--test-command`. For an unattended merge gate, run a fresh
+> scan as part of the same pipeline and authenticate test evidence at your CI
+> layer.
+
 ## Benchmark results
 
 The pilot corpus is six small, popular Python projects — click, httpx, pytest,

@@ -195,6 +195,12 @@ python run_verify.py --report <new> --verdicts <verdicts.json> --previous <old>
 证据被机检、**且**提供了可比较的改前报告(`--previous`)时才为真;不兼容的基线直接拒绝,
 而不是信任一份垃圾基线。
 
+> **信任模型说明。** `fully_verified` 只表示所提供的报告、裁决与测试证据满足了这个确定性
+> 门禁——它**不是**对目标仓库"已被完整重扫并测试"的密码学证明或独立复现证明。门禁验证的是
+> 这些工件内部一致、且绑定到被审计的源码树;它本身不会重跑扫描器,并且信任操作者提供的
+> `--scope` 与 `--test-command`。用于无人值守的 merge gate 时,请在同一个流水线里跑一次
+> fresh scan,并在 CI 层对测试证据做真实性认证。
+
 ## 基准结果
 
 试点语料是六个小而流行的 Python 项目——click、httpx、pytest、requests、starlette、
