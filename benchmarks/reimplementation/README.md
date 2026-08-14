@@ -70,18 +70,29 @@ The corpus is built to defeat structural scanners:
 python benchmarks/reimplementation/run.py
 ```
 
-## Current baseline
+## Baseline vs structural retrieval
 
-Measured against the current `scan_capabilities` retrieval:
+| metric | `scan_capabilities` (name+docstring) | `capability_retrieval` (structural+lexical) |
+|---|---:|---:|
+| Candidate Recall@1 | 0.000 | **0.857** |
+| Candidate Recall@5 | 0.000 | **0.857** |
+| Candidate Recall@10 | 0.000 | **1.000** |
+| MRR | 0.000 | **0.873** |
 
-```text
-Candidate Recall@10 : 0.000
-MRR                  : 0.000
-```
+The old channel returns the `none` channel for every must-surface case (zero
+candidates): `rotate_credentials` cannot find `refresh_session` because the
+names and docstrings differ. The new layer normalizes the function body —
+variable, method, keyword, and function names plus constants — so
+`store.mint(id); store.write(id, secret, expiry=3600)` and
+`token_store.issue(id); token_store.put(id, token, ttl=3600)` collapse to the
+same normalized pipeline and rank first.
 
-Every must-surface case returns the `none` channel (zero candidates). Notably,
-the two lexically-similar `KEEP_SEPARATE` cases **are** surfaced by the
-docstring matcher — the current signal finds only *word-level* similarity and
-misses the *responsibility-level* similarity it should find. That asymmetry is
-exactly the gap the pivot exists to close: the recall number should rise while
-the `KEEP_SEPARATE` cases stay suppressed.
+Two honest caveats:
+
+1. **Small corpus.** Ten hand-written cases is a direction, not a result. The
+   number will move as harder cases (control-flow rewrites, inlined helpers,
+   partial overlaps) are added.
+2. **Recall-first by design.** Aggressive normalization over-surfaces; the
+   `KEEP_SEPARATE` cases rank 1 *on purpose* (the reviewer must see the
+   candidate to reject it). Precision / false-consolidation rate is a separate
+   metric that needs the adjudication layer and is not yet measured.
