@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "description": "Ground truth for semantic reimplementation detection. Each case declares a NEW symbol and the EXISTING canonical symbol it overlaps with, plus the correct action. Ground truth is authored independently of any scanner output: a case that no scanner surfaces still exercises the metric.",
+  "doc_threshold": 0.55,
+  "cases": [
+    {
+      "id": "credential-rotation",
+      "new": "experiments/credentials.py:rotate_credentials",
+      "existing": "lib/session.py:refresh_session",
+      "verdict": "REUSE_EXISTING",
+      "trick": "renamed function, different identifiers, different docstring wording",
+      "rationale": "Both mint a fresh token/secret and persist it with a TTL; same responsibility, different vocabulary."
+    },
+    {
+      "id": "session-persistence",
+      "new": "experiments/credentials.py:persist_user_session",
+      "existing": "lib/session.py:SessionRepository.save",
+      "verdict": "REUSE_EXISTING",
+      "trick": "different name, key-construction rewritten, field names differ",
+      "rationale": "Both write a session object to a store under a namespaced key with a TTL."
+    },
+    {
+      "id": "avatar-upload",
+      "new": "experiments/media.py:upload_avatar",
+      "existing": "lib/services.py:StorageService.upload",
+      "verdict": "REUSE_EXISTING",
+      "trick": "method vs function, 'handle' vs 'locator', 'put_object' vs 'put'",
+      "rationale": "Both build an object key and write a blob to storage with optional metadata."
+    },
+    {
+      "id": "image-normalize",
+      "new": "experiments/media.py:normalize_image",
+      "existing": "lib/services.py:ImageProcessor.prepare",
+      "verdict": "REUSE_EXISTING",
+      "trick": "resize->convert->strip vs scale->transcode->clear_exif",
+      "rationale": "Same three-step image normalization pipeline, renamed verbs."
+    },
+    {
+      "id": "export-archive",
+      "new": "experiments/output.py:build_export_archive",
+      "existing": "lib/services.py:ExportService.create_bundle",
+      "verdict": "REUSE_EXISTING",
+      "trick": "zip + digest vs _zip + _digest, different return field names",
+      "rationale": "Both bundle a directory into a zip and compute a checksum."
+    },
+    {
+      "id": "remote-config",
+      "new": "experiments/output.py:fetch_remote_config",
+      "existing": "lib/services.py:ConfigLoader.load_from_url",
+      "verdict": "REUSE_EXISTING",
+      "trick": "http_get vs http.get, json_parse vs parser.parse",
+      "rationale": "Both fetch, parse, and cache a remote JSON document."
+    },
+    {
+      "id": "avatar-variant",
+      "new": "experiments/media.py:save_avatar_variant",
+      "existing": "lib/services.py:StorageService.upload",
+      "verdict": "EXTEND_EXISTING",
+      "trick": "partial overlap: validation + resize are new; upload already exists",
+      "rationale": "Should reuse StorageService.upload and keep only image validation/resize as new code."
+    },
+    {
+      "id": "report-vs-audit-encryption",
+      "new": "experiments/separate.py:encrypt_report",
+      "existing": "lib/security.py:encrypt_audit_log",
+      "verdict": "KEEP_SEPARATE",
+      "trick": "near-identical AEAD shape but different domain and AAD context",
+      "rationale": "Reporting and auditing are different trust/compliance boundaries; forcing a shared helper would couple them."
+    },
+    {
+      "id": "invoice-vs-purchase-order",
+      "new": "experiments/separate.py:serialize_invoice",
+      "existing": "lib/billing.py:serialize_purchase_order",
+      "verdict": "KEEP_SEPARATE",
+      "trick": "identical encode+validate shape, different schema/consumer",
+      "rationale": "Different protocols and consumers; similarity is structural, not ownership."
+    },
+    {
+      "id": "admin-vs-web-sanitize",
+      "new": "experiments/separate.py:sanitize_user_input",
+      "existing": "lib/security.py:sanitize_input",
+      "verdict": "KEEP_SEPARATE",
+      "trick": "deliberate duplicate across a trust boundary",
+      "rationale": "Admin and web input cross different trust boundaries; the duplication is intentional."
+    }
+  ]
+}
