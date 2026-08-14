@@ -159,7 +159,7 @@ def tag_similarity(left: str, right: str) -> float:
         return 0.0
     if a == b:
         return 1.0
-    shorter, longer = sorted((a, b))
+    shorter, longer = sorted((a, b), key=len)
     if len(shorter) / len(longer) < 0.4:
         return 0.0
     return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
@@ -439,7 +439,10 @@ def main(argv: list[str] | None = None) -> int:
         if channel == "none":
             continue
         match_modes[channel] += 1
-        best_sim, best = max(candidates, key=lambda pair: pair[0])
+        best_sim, best = max(
+            candidates,
+            key=lambda pair: (local.sig_shape == pair[1].sig_shape, pair[0]),
+        )
         overlap.append(
             {
                 "local": _local_dict(local),

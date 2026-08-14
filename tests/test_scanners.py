@@ -718,6 +718,20 @@ def test_contract_scan_does_not_flag_explicit_runtime_configuration(
     assert payload["dynamic_module_runtime_coupling"] == []
 
 
+def test_return_contract_ignores_nested_function_scope() -> None:
+    import ast
+
+    tree = ast.parse(
+        "def outer():\n"
+        "    def helper():\n"
+        "        return {'x': 1}\n"
+        "    return 42\n"
+    )
+    outer = next(n for n in tree.body if isinstance(n, ast.FunctionDef))
+    # `helper`'s dict return belongs to a nested scope, not `outer`'s contract.
+    assert scan_contracts._return_contract(outer) == ["int"]
+
+
 def test_contract_scan_flags_defensive_param_loosening(
     mini_repo: Path, tmp_path: Path
 ) -> None:

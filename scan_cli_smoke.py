@@ -31,6 +31,7 @@ SCANNERS = (
     "scan_duplicates",
     "scan_forks",
     "scan_hardcoded",
+    "scan_regions",
     "scan_style",
 )
 

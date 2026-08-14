@@ -183,8 +183,14 @@ def markdown(
             ]
         )
     parse_errors = dead.get("parse_failures", {})
-    duplicate_parse_errors = duplicates.get("parse_failures", [])
-    if parse_errors or duplicate_parse_errors:
+    parse_failures = [
+        duplicates.get("parse_failures", []),
+        contracts.get("parse_failures", []),
+        capabilities.get("parse_failures", []),
+        forks.get("parse_failures", []),
+        regions.get("parse_failures", []),
+    ]
+    if parse_errors or any(parse_failures):
         lines.extend(
             [
                 "> Parse warning: one or more Python files could not be analyzed.",

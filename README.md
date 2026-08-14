@@ -82,7 +82,7 @@ python adjudicate.py --report /work/foo/reports/latest.json
 python -m pytest /work/foo/tests -q
 python run_verify.py --report /work/foo/reports/latest.json \
   --verdicts /work/foo/reports/verdicts.json --previous /work/foo/reports/pre.json \
-  --scope src/lib --test-result /work/foo/reports/ci-result.json
+  --scope lib --test-result /work/foo/reports/ci-result.json
 ```
 
 Runs all scanners against the package under the current directory (override

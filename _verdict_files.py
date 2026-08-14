@@ -143,10 +143,21 @@ def load_protocol_verdict(path: Path) -> dict[str, Any]:
     if not isinstance(verdict_payload, dict):
         raise ValueError("verdict file missing the 'verdict' object")
     validated = validate_verdict(verdict_payload)
+    finding_hash = payload.get("finding_evidence_hash")
+    if not (
+        isinstance(finding_hash, str)
+        and len(finding_hash) == 64
+        and all(c in "0123456789abcdef" for c in finding_hash)
+    ):
+        raise ValueError(
+            "verdict file missing a valid finding_evidence_hash (64-char "
+            "lowercase hex); a verdict without its stale-evidence binding must "
+            "not reach the acceptance gate"
+        )
     return {
         "scanner": payload["scanner"],
         "target_id": payload["target_id"],
-        "finding_evidence_hash": payload.get("finding_evidence_hash"),
+        "finding_evidence_hash": finding_hash,
         "disposition": validated["disposition"],
         "recommended_action": validated["recommended_action"],
         "case_hash": case_hash or digest,

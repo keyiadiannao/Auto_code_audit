@@ -285,8 +285,12 @@ def _load_verdicts(path: Path) -> dict | None:
         return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+    except OSError as exc:
+        raise OSError(f"cannot read verdict file {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"verdict file {path} is corrupt JSON: {exc}"
+        ) from exc
 
 
 def _save_verdicts(path: Path, verdicts: dict) -> None:
@@ -620,13 +624,13 @@ def main(argv: list[str] | None = None) -> int:
                         for section, entry in entries
                     ]
                     added = _merge_ignore(registry, entries)
+                    if added:
+                        _append_lesson(args.lessons, item["scanner"], item["display"], note)
                     args.ignore.parent.mkdir(parents=True, exist_ok=True)
                     args.ignore.write_text(
                         json.dumps(registry, indent=2, ensure_ascii=False) + "\n",
                         encoding="utf-8",
                     )
-                    if added:
-                        _append_lesson(args.lessons, item["scanner"], item["display"], note)
                     record["note"] = note
                     record["suppressed"] = True
                 else:

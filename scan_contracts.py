@@ -93,27 +93,54 @@ def _env_name(arg: ast.AST | None) -> str | None:
     return None
 
 
-def _return_contract(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
-    kinds = set()
-    for child in ast.walk(node):
-        if not isinstance(child, ast.Return):
-            continue
-        value = child.value
+class _ScopeReturns(ast.NodeVisitor):
+    """Collect ``return`` kinds from a function WITHOUT crossing nested scopes.
+
+    A ``return`` inside a nested ``def`` / ``lambda`` / ``class`` body is not
+    part of THIS function's contract, so those scopes are not descended into.
+    """
+
+    def __init__(self) -> None:
+        self.kinds: set[str] = set()
+
+    def visit_Return(self, node: ast.Return) -> None:
+        value = node.value
         if value is None:
-            kinds.add("None")
+            self.kinds.add("None")
         elif isinstance(value, ast.Call):
-            kinds.add(f"call:{_dotted(value.func) or type(value.func).__name__}")
+            self.kinds.add(f"call:{_dotted(value.func) or type(value.func).__name__}")
         elif isinstance(value, ast.Tuple):
-            kinds.add(f"tuple[{len(value.elts)}]")
+            self.kinds.add(f"tuple[{len(value.elts)}]")
         elif isinstance(value, ast.Dict):
-            kinds.add("dict")
+            self.kinds.add("dict")
         elif isinstance(value, ast.List):
-            kinds.add("list")
+            self.kinds.add("list")
         elif isinstance(value, ast.Constant):
-            kinds.add(type(value.value).__name__)
+            self.kinds.add(type(value.value).__name__)
         else:
-            kinds.add(type(value).__name__)
-    return sorted(kinds) or ["implicit-None"]
+            self.kinds.add(type(value).__name__)
+
+    # Nested scopes: do not descend.
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        return
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        return
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> None:
+        return
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        return
+
+
+def _return_contract(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    visitor = _ScopeReturns()
+    # Descend the top-level function's statements directly; nested scopes are
+    # skipped by the visitor above.
+    for stmt in node.body:
+        visitor.visit(stmt)
+    return sorted(visitor.kinds) or ["implicit-None"]
 
 
 def _iter_python(pkg: Path, subdirs: list[str]):

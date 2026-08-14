@@ -73,7 +73,7 @@ python adjudicate.py --report /work/foo/reports/latest.json
 python -m pytest /work/foo/tests -q
 python run_verify.py --report /work/foo/reports/latest.json \
   --verdicts /work/foo/reports/verdicts.json --previous /work/foo/reports/pre.json \
-  --scope src/lib --test-result /work/foo/reports/ci-result.json
+  --scope lib --test-result /work/foo/reports/ci-result.json
 ```
 
 对当前目录下的包运行全部扫描器(用 `--root <repo>` / `--package <name>` 覆盖)。所有

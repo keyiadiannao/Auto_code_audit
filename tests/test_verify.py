@@ -6,6 +6,7 @@ import json
 from run_all import finding_evidence_hash
 from run_verify import (
     _check_report,
+    _in_scope,
     _is_code_action,
     _load_verdicts,
     _risk_level,
@@ -105,6 +106,18 @@ def test_verify_scope_filters_new_candidates() -> None:
         report, _verdicts([]), previous, "experiments/", previous_comparable=True
     )
     assert failures == []
+
+
+def test_in_scope_matches_path_prefix_not_substring() -> None:
+    # Regression: scope was a raw substring match, so `--scope lib` matched
+    # `liberal/x.py` (a candidate the patch never touched), and `--scope src/lib`
+    # matched nothing because candidate paths are package-relative.
+    assert _in_scope({"path": "lib/a.py"}, "lib") is True
+    assert _in_scope({"path": "lib/a.py"}, "lib/") is True
+    assert _in_scope({"path": "liberal/x.py"}, "lib") is False
+    assert _in_scope({"path": "experiments/e01.py"}, "lib") is False
+    assert _in_scope({"path": "lib/a.py"}, None) is True  # no scope = in scope
+    assert _in_scope({}, "lib") is True  # path-less candidates stay in scope
 
 
 def test_verify_ignores_new_low_candidate() -> None:

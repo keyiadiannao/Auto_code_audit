@@ -285,9 +285,15 @@ def _candidate_paths(detail: dict) -> set[str]:
 def _in_scope(detail: dict, scope: str | None) -> bool:
     if not scope:
         return True
-    return any(scope in path for path in _candidate_paths(detail)) or not _candidate_paths(
-        detail
-    )
+    scope_parts = tuple(p for p in scope.replace("\\", "/").split("/") if p)
+    paths = _candidate_paths(detail)
+    if not paths:
+        return True  # path-less candidates cannot be scoped out
+    for path in paths:
+        parts = tuple(p for p in path.replace("\\", "/").split("/") if p)
+        if parts[: len(scope_parts)] == scope_parts:
+            return True
+    return False
 
 
 def _risk_level(scanner: str, detail: dict) -> str | None:
@@ -425,8 +431,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--scope",
         default=None,
-        help="path substring the patch touched; new high/medium candidates "
-        "outside it are not rejected",
+        help="package-relative path prefix the patch touched; new high/medium "
+        "candidates outside it are not rejected (matched by path prefix, "
+        "not substring)",
     )
     ap.add_argument(
         "--test-command",
