@@ -3298,3 +3298,47 @@ def test_region_external_effects_parameter_mutation() -> None:
     fn_locals = {arg.arg for arg in fn.args.args}
     effects = scan_regions._external_effects(fn.body, fn_locals)
     assert not any(effect.startswith("method_on_input") for effect in effects)
+
+
+def test_audit_config_rejects_malformed_hardcoded_pattern(tmp_path: Path) -> None:
+    # A bare `{}` pattern would make scan_hardcoded raise KeyError/re.error
+    # inside the scanner; config validation must reject it and fall back to
+    # module defaults instead.
+    config = tmp_path / "audit.config.json"
+    config.write_text(
+        json.dumps({"schema_version": 1, "hardcoded": {"patterns": [{}]}}),
+        encoding="utf-8",
+    )
+    assert _audit_config.load_config(tmp_path) == {}
+
+
+def test_audit_config_rejects_invalid_hardcoded_regex(tmp_path: Path) -> None:
+    config = tmp_path / "audit.config.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "hardcoded": {
+                    "patterns": [
+                        {
+                            "name": "x",
+                            "regex": "(",
+                            "suggestion": "s",
+                            "severity": "high",
+                        }
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert _audit_config.load_config(tmp_path) == {}
+
+
+def test_atomic_write_text_leaves_no_temp(tmp_path: Path) -> None:
+    import _scanner_common
+
+    target = tmp_path / "report.json"
+    _scanner_common.atomic_write_text(target, "hello")
+    assert target.read_text(encoding="utf-8") == "hello"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["report.json"]

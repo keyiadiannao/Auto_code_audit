@@ -1211,3 +1211,47 @@ def test_verify_post_test_rehash_rejects_modified_inputs(tmp_path) -> None:
     # The Python tree is byte-identical after the run: only the inputs gate
     # caught the rewrite.
     assert source_tree_sha256(tmp_path, "pkg") == tree
+
+
+def test_verify_rejects_incomplete_analysis_by_default(tmp_path) -> None:
+    import subprocess
+    import sys
+
+    report_path = tmp_path / "report.json"
+    verdicts_path = tmp_path / "verdicts.json"
+    report_path.write_text(
+        json.dumps(
+            {
+                "package": "pkg",
+                "analysis": {
+                    "complete": False,
+                    "parse_failures": {
+                        "duplicates": [{"path": "x.py", "error": "SyntaxError"}]
+                    },
+                },
+                "scanners": {},
+                "provenance": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    verdicts_path.write_text(json.dumps({"verdicts": []}), encoding="utf-8")
+
+    rejected = subprocess.run(
+        [sys.executable, "-m", "run_verify",
+         "--report", str(report_path),
+         "--verdicts", str(verdicts_path),
+         "--no-tests"],
+        capture_output=True, text=True, check=False,
+    )
+    assert rejected.returncode == 2
+    assert "incomplete" in rejected.stderr + rejected.stdout
+
+    allowed = subprocess.run(
+        [sys.executable, "-m", "run_verify",
+         "--report", str(report_path),
+         "--verdicts", str(verdicts_path),
+         "--no-tests", "--allow-incomplete-analysis"],
+        capture_output=True, text=True, check=False,
+    )
+    assert allowed.returncode == 0

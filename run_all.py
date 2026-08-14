@@ -889,6 +889,12 @@ def main(argv: list[str] | None = None) -> int:
     issue_bundles = issue_fusion.cluster_issue_bundles(payloads, keep=keep)
     issues = issue_fusion.issue_summary(issue_bundles)
     issues["scope"] = "all" if args.exhaustive else "review_cohort"
+    parse_failures = {
+        scanner: payload.get("parse_failures")
+        for scanner, payload in payloads.items()
+        if payload.get("parse_failures")
+    }
+    analysis_complete = not parse_failures
     summary = {
         "scanner": "self-audit-run-all",
         "schema_version": SCHEMA_VERSION,
@@ -930,13 +936,17 @@ def main(argv: list[str] | None = None) -> int:
             bundle_hash,
         ),
         "issues": issues,
+        "analysis": {
+            "complete": analysis_complete,
+            "parse_failures": parse_failures,
+        },
         "scanners": payloads,
     }
-    args.json.write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+    _scanner_common.atomic_write_text(
+        args.json, json.dumps(summary, indent=2, ensure_ascii=False)
     )
-    args.markdown.write_text(
-        report_formatter.markdown(payloads, summary, keep=keep), encoding="utf-8"
+    _scanner_common.atomic_write_text(
+        args.markdown, report_formatter.markdown(payloads, summary, keep=keep)
     )
 
     dead_count = sum(

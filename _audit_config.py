@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -56,6 +57,48 @@ def _is_number(value) -> bool:
         and not isinstance(value, bool)
         and math.isfinite(float(value))
     )
+
+
+_HARDCODED_PATTERN_KEYS = {"name", "regex", "suggestion", "severity", "exclude_paths"}
+_SEVERITIES = {"high", "medium", "low"}
+
+
+def _validate_hardcoded_patterns(patterns: list, issues: list[str]) -> None:
+    """Validate each hardcoded pattern so a bad config warns, never crashes.
+
+    ``scan_hardcoded`` indexes ``item["name"]``/``item["regex"]``/
+    ``item["severity"]``/``item["suggestion"]`` directly and compiles
+    ``item["regex"]`` — a config that passes a bare ``{}`` would otherwise
+    raise ``KeyError`` / ``re.error`` inside the scanner instead of a clean
+    warning.
+    """
+    for index, item in enumerate(patterns):
+        prefix = f"hardcoded.patterns[{index}]"
+        for key in sorted(set(item) - _HARDCODED_PATTERN_KEYS):
+            issues.append(f"unknown key {prefix}.{key}")
+        name = item.get("name")
+        if not isinstance(name, str) or not name:
+            issues.append(f"{prefix}.name must be a non-empty string")
+        regex = item.get("regex")
+        if not isinstance(regex, str) or not regex:
+            issues.append(f"{prefix}.regex must be a non-empty string")
+        else:
+            try:
+                re.compile(regex)
+            except re.error as exc:
+                issues.append(f"{prefix}.regex is not a valid regex: {exc}")
+        if not isinstance(item.get("suggestion"), str):
+            issues.append(f"{prefix}.suggestion must be a string")
+        if item.get("severity") not in _SEVERITIES:
+            issues.append(
+                f"{prefix}.severity must be one of high|medium|low, "
+                f"got {item.get('severity')!r}"
+            )
+        if "exclude_paths" in item and not (
+            isinstance(item["exclude_paths"], list)
+            and all(isinstance(p, str) for p in item["exclude_paths"])
+        ):
+            issues.append(f"{prefix}.exclude_paths must be a list of strings")
 
 
 def _validate_config(data: dict) -> list[str]:
@@ -182,10 +225,13 @@ def _validate_config(data: dict) -> list[str]:
 
     hardcoded = section("hardcoded", {"patterns", "exclude_parts"})
     if "patterns" in hardcoded:
-        if not isinstance(hardcoded["patterns"], list) or not all(
-            isinstance(item, dict) for item in hardcoded["patterns"]
+        patterns = hardcoded["patterns"]
+        if not isinstance(patterns, list) or not all(
+            isinstance(item, dict) for item in patterns
         ):
             issues.append("hardcoded.patterns must be a list of objects")
+        else:
+            _validate_hardcoded_patterns(patterns, issues)
     if "exclude_parts" in hardcoded:
         string_list(hardcoded["exclude_parts"], "hardcoded.exclude_parts")
 

@@ -26,6 +26,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import run_all
+from _scanner_common import atomic_write_text
 
 SKILL_DIR = Path(__file__).resolve().parent
 
@@ -294,10 +295,8 @@ def _load_verdicts(path: Path) -> dict | None:
 
 
 def _save_verdicts(path: Path, verdicts: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(verdicts, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
+    atomic_write_text(
+        path, json.dumps(verdicts, indent=2, ensure_ascii=False) + "\n"
     )
 
 
@@ -539,9 +538,9 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 1
         args.export_ignore.parent.mkdir(parents=True, exist_ok=True)
-        args.export_ignore.write_text(
+        atomic_write_text(
+            args.export_ignore,
             json.dumps(export_registry, indent=2, ensure_ascii=False) + "\n",
-            encoding="utf-8",
         )
         print(
             f"EXPORT_IGNORE written={exported} stale={stale} "
@@ -626,10 +625,9 @@ def main(argv: list[str] | None = None) -> int:
                     added = _merge_ignore(registry, entries)
                     if added:
                         _append_lesson(args.lessons, item["scanner"], item["display"], note)
-                    args.ignore.parent.mkdir(parents=True, exist_ok=True)
-                    args.ignore.write_text(
+                    atomic_write_text(
+                        args.ignore,
                         json.dumps(registry, indent=2, ensure_ascii=False) + "\n",
-                        encoding="utf-8",
                     )
                     record["note"] = note
                     record["suppressed"] = True

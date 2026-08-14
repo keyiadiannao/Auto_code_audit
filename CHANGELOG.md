@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.1
+
+- Make the acceptance gate fail-closed on incomplete analysis: `run_all`
+  aggregates scanner parse failures into `report.analysis.complete`, and
+  `run_verify` rejects a PASS when analysis is incomplete unless
+  `--allow-incomplete-analysis` is passed.
+- Write reports, verdicts, and suppression registries atomically (unique temp
+  file + `os.replace`) so a crash cannot leave a torn evidence artifact.
+- Validate `hardcoded.patterns` config entries (name/regex/severity/suggestion/
+  exclude_paths) so a malformed pattern warns instead of raising inside the
+  scanner.
+- Fix `--scope` to path-prefix semantics (was substring, so `--scope lib`
+  matched `liberal/...` and the README example `src/lib` matched nothing).
+- Fix `scan_capabilities.tag_similarity` length gate (`sorted` without
+  `key=len`), best-candidate tie-break, and `scan_contracts._return_contract`
+  nested-scope traversal.
+- Require a valid 64-char `finding_evidence_hash` in protocol verdicts; treat a
+  corrupt `verdicts.json` as an error rather than "no verdicts".
+- Add `scan_regions` to the CLI `--help` smoke gate; aggregate parse warnings
+  across all scanners in the markdown report.
+
 ## 0.3.0
 
 - Detect runtime-created modules and distinguish review-worthy dynamic loads

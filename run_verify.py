@@ -73,6 +73,7 @@ from pathlib import Path
 from typing import Any
 
 from run_all import __version__, finding_evidence_hash
+from _scanner_common import atomic_write_text
 
 #: Legacy adjudicate.py dispositions that require a code change.
 LEGACY_CODE_ACTIONS = {"true duplicate", "compatibility debt"}
@@ -456,6 +457,13 @@ def main(argv: list[str] | None = None) -> int:
         help="declare that behavioral verification is delegated outside this "
         "gate (test_gate 'external_unverified'; never fully_verified)",
     )
+    ap.add_argument(
+        "--allow-incomplete-analysis",
+        action="store_true",
+        help="permit the gate to pass even when the report marks its analysis "
+        "incomplete (scanner parse failures); off by default — an audit that "
+        "could not parse some files must not silently PASS",
+    )
     ap.add_argument("--json", type=Path, default=None, help="write result JSON")
     args = ap.parse_args(argv)
 
@@ -478,6 +486,16 @@ def main(argv: list[str] | None = None) -> int:
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"error: cannot read inputs: {exc}", file=sys.stderr)
+        return 2
+    analysis = report.get("analysis") or {}
+    if not analysis.get("complete", True) and not args.allow_incomplete_analysis:
+        print(
+            "error: report analysis is incomplete (scanner parse failures); "
+            "the audit could not analyze every file, so a PASS would be "
+            "unverifiable. Fix the parse failures and re-run, or pass "
+            "--allow-incomplete-analysis to accept the gap explicitly.",
+            file=sys.stderr,
+        )
         return 2
     verdict_entries, invalid_verdicts = verdicts
     for message in invalid_verdicts:
@@ -628,8 +646,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"test artifact: {artifact_reason}", file=sys.stderr)
     passed = not failures
     if args.json is not None:
-        args.json.parent.mkdir(parents=True, exist_ok=True)
-        args.json.write_text(
+        atomic_write_text(
+            args.json,
             json.dumps(
                 {
                     "schema_version": 5,
@@ -640,7 +658,6 @@ def main(argv: list[str] | None = None) -> int:
                 indent=2,
             )
             + "\n",
-            encoding="utf-8",
         )
     for failure in failures:
         print(f"VERIFY FAIL {failure}", file=sys.stderr)

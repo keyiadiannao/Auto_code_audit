@@ -15,6 +15,8 @@ import copy
 import difflib
 import hashlib
 import json
+import os
+import uuid
 from pathlib import Path
 from typing import Any, Iterator, cast
 
@@ -89,18 +91,36 @@ def sequence_similarity(
 # JSON I / O  (was duplicated 7 times)
 # ---------------------------------------------------------------------------
 
+def atomic_write_text(path: Path, text: str) -> None:
+    """Atomically replace *path* with *text* (unique temp file + os.replace).
+
+    Evidence artifacts — reports, verdicts, suppression registries — must never
+    be left half-written: a crash mid-write would otherwise leave a torn file
+    that the next run silently reads as absent or corrupt.  The temp file lives
+    in the same directory so ``os.replace`` is an atomic rename, not a copy.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 def write_json(path: Path | None, payload: dict) -> None:
     """Write *payload* to *path* as pretty-printed JSON (no trailing newline).
 
     ``path`` may be ``None`` (no-op), which lets callers pass ``--json``
-    without a value.
+    without a value.  Atomic: a crash mid-write cannot corrupt the file.
     """
     if path is None:
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    atomic_write_text(path, json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------------------
