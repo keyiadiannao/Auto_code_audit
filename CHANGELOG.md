@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+- Add the implementation-reuse firewall: a repository-wide, deterministic
+  multi-channel retrieval (`capability_retrieval.py`) that surfaces the
+  existing implementations a new symbol overlaps with (structural
+  normalization, called-name overlap, string-literal overlap, one-hop call
+  closure; stdlib-only, no LLM on the query path).
+- Add the reimplementation benchmark (`benchmarks/reimplementation/`):
+  hand-authored `(new, existing, verdict)` ground truth independent of scanner
+  output, measuring Candidate Recall@K and MRR. Baseline Recall@10 0.000 →
+  1.000.
+- Add the reuse-check CLI: `python -m capability_retrieval --root --file`.
+- Add `VISION.md` documenting the pivot and its design decisions.
+
 ## 0.3.1
 
 - Make the acceptance gate fail-closed on incomplete analysis: `run_all`
