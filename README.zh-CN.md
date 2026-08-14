@@ -6,6 +6,10 @@
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 
+> **方向(2026):** 从通用静态审计器转向面向 AI 编程的 **implementation-reuse
+> firewall** —— 在写新代码之前,先找出它与仓库中已有实现的职责重叠。见
+> [VISION.md](VISION.md);下方的审计扫描器保留为证据提供者。
+
 你的 AI 助手重构了一个大型 Python 代码库,测试也全通过了。然后细微的 bug 开始浮现:
 一个靠哈希锁定调用的 runner 被一次重命名悄悄破坏;一个归档根路径被写死,而不是遵循
 环境变量的交接;同一份函数的两处拷贝各自漂移。静态检查器找不出这些——因为表面上看

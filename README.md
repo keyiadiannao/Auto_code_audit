@@ -6,6 +6,11 @@
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 
+> **Direction (2026):** pivoting from a general static auditor into an
+> **implementation-reuse firewall** for AI coding — surface the existing code a
+> new helper / service / manager overlaps with, *before* it is written. See
+> [VISION.md](VISION.md); the audit scanners below remain as evidence providers.
+
 Your AI assistant refactored a large Python codebase and the tests pass. Then
 the subtle bugs start: a hash-locked runner silently broken by a rename, an
 archive root hardcoded instead of honoring an env handoff, two copies of the
