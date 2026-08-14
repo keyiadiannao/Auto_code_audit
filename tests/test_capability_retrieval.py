@@ -39,3 +39,33 @@ def test_structural_retrieval_surfaces_renamed_duplicate(tmp_path) -> None:
     ranked = cr.retrieve(query, index, k=10)
     assert ranked, "retrieval returned no candidates"
     assert ranked[0][1].key == "lib/session.py:refresh_session"
+
+
+def test_string_literal_channel_surfaces_repository_bypass(tmp_path) -> None:
+    _write(
+        tmp_path,
+        "lib/repo.py",
+        "class UserRepository:\n"
+        "    def find_active(self, user_id):\n"
+        '        """Return the active user row."""\n'
+        '        rows = self.db.query("SELECT * FROM users WHERE id=? AND active=1", user_id)\n'
+        "        return rows[0] if rows else None\n",
+    )
+    _write(
+        tmp_path,
+        "experiments/new.py",
+        "def load_active_user(uid):\n"
+        '    """Fetch the active user record directly."""\n'
+        '    row = db.execute("SELECT * FROM users WHERE id=? AND active=1", uid).fetchone()\n'
+        "    return row\n",
+    )
+
+    index = cr.build_index(tmp_path / "lib", rel_root=tmp_path)
+    new_syms = {
+        s.key: s for s in cr.build_index(tmp_path / "experiments", rel_root=tmp_path)
+    }
+    query = new_syms["experiments/new.py:load_active_user"]
+
+    ranked = cr.retrieve(query, index, k=10)
+    keys = [sym.key for _, sym in ranked]
+    assert "lib/repo.py:UserRepository.find_active" in keys

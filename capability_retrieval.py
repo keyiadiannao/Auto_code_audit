@@ -180,19 +180,36 @@ def _tag_similarity(left: str, right: str) -> float:
     return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
 
 
+def _jaccard(left: frozenset[str], right: frozenset[str]) -> float:
+    if not left and not right:
+        return 0.0
+    union = left | right
+    return len(left & right) / len(union) if union else 0.0
+
+
 def retrieve(
     query: Symbol, index: list[Symbol], k: int = 10
 ) -> list[tuple[float, Symbol]]:
-    """Rank the index against *query* by structural + lexical evidence."""
+    """Rank the index against *query* by four deterministic evidence channels.
+
+    - structural : normalized-body similarity (rename/rewrite-proof);
+    - call       : overlap of called method/function names;
+    - string     : overlap of string literals (SQL, config keys, prefixes);
+    - lexical    : docstring-first-line tag similarity.
+
+    Recall is the goal, so the score is the max across channels; a later
+    adjudication step reads the top candidates and is responsible for
+    precision.
+    """
     scored: list[tuple[float, Symbol]] = []
     for sym in index:
         if sym.key == query.key:
             continue
         structural = body_similarity(query.norm_body, sym.norm_body)
         lexical = _tag_similarity(query.tag, sym.tag)
-        # Structural dominates; lexical is a fallback for renames that also
-        # rewrite the control flow (where the normalized body diverges).
-        score = max(structural, lexical * 0.8)
+        call = _jaccard(query.call_names, sym.call_names)
+        strings = _jaccard(query.string_literals, sym.string_literals)
+        score = max(structural, call, strings, lexical * 0.8)
         if score > 0.0:
             scored.append((score, sym))
     scored.sort(key=lambda pair: (-pair[0], pair[1].key))

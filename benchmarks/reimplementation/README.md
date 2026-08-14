@@ -70,29 +70,39 @@ The corpus is built to defeat structural scanners:
 python benchmarks/reimplementation/run.py
 ```
 
-## Baseline vs structural retrieval
+## Baseline vs multi-channel retrieval
 
-| metric | `scan_capabilities` (name+docstring) | `capability_retrieval` (structural+lexical) |
+12 must-surface cases: the 7 rename family plus 5 harder ones (control-flow
+rewrite, different algorithm, inlined helper, service→manager reinvention,
+repository bypass).
+
+| metric | `scan_capabilities` (name+docstring) | `capability_retrieval` (structural+call+string+lexical) |
 |---|---:|---:|
-| Candidate Recall@1 | 0.000 | **0.857** |
-| Candidate Recall@5 | 0.000 | **0.857** |
-| Candidate Recall@10 | 0.000 | **1.000** |
-| MRR | 0.000 | **0.873** |
+| Candidate Recall@1 | 0.083 | **0.667** |
+| Candidate Recall@5 | 0.083 | **0.833** |
+| Candidate Recall@10 | 0.083 | **0.917** |
+| MRR | 0.083 | **0.758** |
 
-The old channel returns the `none` channel for every must-surface case (zero
-candidates): `rotate_credentials` cannot find `refresh_session` because the
-names and docstrings differ. The new layer normalizes the function body —
-variable, method, keyword, and function names plus constants — so
-`store.mint(id); store.write(id, secret, expiry=3600)` and
-`token_store.issue(id); token_store.put(id, token, ttl=3600)` collapse to the
-same normalized pipeline and rank first.
+The old channel catches only a same-name case; the new layer gets 11 of 12 into
+the top-10. Which channel wins is visible per case:
 
-Two honest caveats:
+- **structural** handles the rename family and the composed/decomposed email
+  pair (names normalized away);
+- **call overlap** catches the inlined helper (`clean_title` vs `slugify`: both
+  call `strip`/`lower`/`replace`);
+- **string overlap** catches the repository bypass (`load_active_user` vs
+  `find_active`: the identical SQL literal).
 
-1. **Small corpus.** Ten hand-written cases is a direction, not a result. The
-   number will move as harder cases (control-flow rewrites, inlined helpers,
-   partial overlaps) are added.
-2. **Recall-first by design.** Aggressive normalization over-surfaces; the
-   `KEEP_SEPARATE` cases rank 1 *on purpose* (the reviewer must see the
-   candidate to reject it). Precision / false-consolidation rate is a separate
-   metric that needs the adjudication layer and is not yet measured.
+The honest boundary is the last ~8%:
+
+- `check_palindrome` (two pointers) vs `is_palindrome` (slice-reverse) ranks
+  10 — same I/O contract but a genuinely different algorithm, where the
+  deterministic signals barely hold. This is where semantic/embedding recall
+  is eventually needed.
+- `save_avatar_variant` (a composite that calls its own duplicate) misses — a
+  partial overlap that needs transitive call-graph or semantic reasoning.
+
+Two caveats: the corpus is small (12 hand-written cases), and the retrieval is
+recall-first (aggressive normalization over-surfaces; the `KEEP_SEPARATE`
+cases rank 1 *on purpose*, because the reviewer must see the candidate to
+reject it — precision / false-consolidation rate is a separate future metric).

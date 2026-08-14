@@ -82,6 +82,46 @@
       "verdict": "KEEP_SEPARATE",
       "trick": "deliberate duplicate across a trust boundary",
       "rationale": "Admin and web input cross different trust boundaries; the duplication is intentional."
+    },
+    {
+      "id": "sum-even-control-flow",
+      "new": "experiments/hard.py:total_evens",
+      "existing": "lib/math.py:sum_even_numbers",
+      "verdict": "REUSE_EXISTING",
+      "trick": "control-flow rewrite: comprehension vs explicit loop",
+      "rationale": "Both sum the even integers of an input; same responsibility, different control flow."
+    },
+    {
+      "id": "palindrome-different-algorithm",
+      "new": "experiments/hard.py:check_palindrome",
+      "existing": "lib/math.py:is_palindrome",
+      "verdict": "REUSE_EXISTING",
+      "trick": "different algorithm: slice-reverse vs two pointers",
+      "rationale": "Same string->bool contract, different algorithm."
+    },
+    {
+      "id": "slugify-inlined",
+      "new": "experiments/hard.py:clean_title",
+      "existing": "lib/math.py:slugify",
+      "verdict": "REUSE_EXISTING",
+      "trick": "chained one-liner vs sequential statements, same method calls",
+      "rationale": "Both strip + lower + replace with a dash separator."
+    },
+    {
+      "id": "email-service-to-manager",
+      "new": "experiments/hard.py:NotificationManager.deliver",
+      "existing": "lib/email.py:EmailService.send",
+      "verdict": "REUSE_EXISTING",
+      "trick": "service -> manager reinvention, composed vs decomposed",
+      "rationale": "Both build and transmit an email message and return its id."
+    },
+    {
+      "id": "repository-bypass",
+      "new": "experiments/hard.py:load_active_user",
+      "existing": "lib/repository.py:UserRepository.find_active",
+      "verdict": "REUSE_EXISTING",
+      "trick": "repository method bypassed by a direct DB query",
+      "rationale": "Same active-user query, but the new code skips the repository abstraction."
     }
   ]
 }
