@@ -313,6 +313,121 @@ def _score_components(
     }
 
 
+# ---------------------------------------------------------------------------
+# Pre-write channel: describe what you are about to implement, and surface the
+# existing implementations that already cover that intent.
+# ---------------------------------------------------------------------------
+
+def _describe_tokens(text: str) -> tuple[str, ...]:
+    """Tokenize a natural-language task description like the experience KB.
+
+    Latin words become lowercased tokens (incl. ``snake_case``/paths);
+    CJK text becomes bigrams (plus a single char when alone), so a Chinese
+    description can still match English docstrings through any Latin terms it
+    embeds (``checkpoint``, ``json``, identifiers) and match CJK docstrings
+    through bigram overlap.
+    """
+    t = str(text or "").lower()
+    out: set[str] = set()
+    for w in re.findall(r"[a-z0-9_./-]{2,}", t):
+        out.add(w)
+    cjk = re.sub(r"[^\u4e00-\u9fff]", "", t)
+    for i in range(len(cjk) - 1):
+        out.add(cjk[i : i + 2])
+    if len(cjk) == 1:
+        out.add(cjk)
+    return tuple(out)
+
+
+def _name_tokens(name: str) -> frozenset[str]:
+    """``load_json`` / ``loadJson`` -> ``{"load", "json"}``."""
+    split = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).lower()
+    return frozenset(w for w in re.findall(r"[a-z]+|\d+", split) if len(w) >= 2)
+
+
+def _query_coverage(
+    query: frozenset[str], sym: frozenset[str], idf: dict[str, float]
+) -> float:
+    """Fraction of the QUERY's weight that *sym* covers (recall-biased).
+
+    Unlike ``_weighted_jaccard`` (symmetric, penalizes extra tokens on both
+    sides), this only asks "how much of what I described does this existing
+    implementation cover?".  A Chinese description carries many CJK bigrams
+    that no English docstring matches; penalizing the symbol for those would
+    bury true hits below the pre-filter threshold.
+    """
+    shared = query & sym
+    if not shared:
+        return 0.0
+    query_w = sum(idf.get(t, 1.0) for t in query)
+    if query_w <= 0:
+        return 0.0
+    shared_w = sum(idf.get(t, 1.0) for t in shared)
+    return shared_w / query_w
+
+
+def _literal_words(literals: frozenset[str]) -> frozenset[str]:
+    """Tokenize string literals into lowercased words (len >= 3).
+
+    The whole-literal-as-token view makes IDF useless: a long template string
+    contains every common English word, so any query token "matches" it.  Split
+    literals into words so IDF can downweight ubiquitous ones (``file``,
+    ``config``) and reward distinctive ones (``checkpoint``, ``mean``).
+    """
+    words: set[str] = set()
+    for lit in literals:
+        for w in re.findall(r"[a-z][a-z0-9_]{2,}", lit.lower()):
+            words.add(w)
+    return frozenset(words)
+
+
+def retrieve_by_description(
+    description: str,
+    index: list[Symbol],
+    k: int = 10,
+) -> list[dict]:
+    """Rank the index against a natural-language task description.
+
+    The pre-write channel: the agent describes what it is about to implement
+    and this surfaces existing implementations that already cover that intent,
+    BEFORE any new code is written.  Channels (all deterministic, IDF-weighted
+    query coverage — see ``_query_coverage``):
+      - ``name``    — description tokens appearing in the callable name;
+      - ``lexical`` — description tokens overlapping the docstring first line;
+      - ``string``  — description tokens found inside string literals (paths,
+                      formats, messages).
+    The combined score is the max over channels (name evidence is strongest),
+    matching the multi-channel philosophy of ``retrieve_detailed``.
+    """
+    qt = frozenset(_describe_tokens(description))
+    if not qt:
+        return []
+    name_idf = _idf_map([_name_tokens(s.name) for s in index])
+    tag_idf = _idf_map([frozenset(s.tag_tokens) for s in index])
+    lit_idf = _idf_map([_literal_words(s.string_literals) for s in index])
+
+    scored: list[dict] = []
+    for sym in index:
+        name_hit = _query_coverage(qt, _name_tokens(sym.name), name_idf)
+        lex_hit = _query_coverage(qt, frozenset(sym.tag_tokens), tag_idf)
+        str_hit = _query_coverage(qt, _literal_words(sym.string_literals), lit_idf)
+        score = max(name_hit, lex_hit * 0.8, str_hit * 0.6)
+        if score > 0.0:
+            scored.append(
+                {
+                    "score": score,
+                    "symbol": sym,
+                    "channels": {
+                        "name": round(name_hit, 4),
+                        "lexical": round(lex_hit, 4),
+                        "string": round(str_hit, 4),
+                    },
+                }
+            )
+    scored.sort(key=lambda d: (-d["score"], d["symbol"].key))
+    return scored[:k]
+
+
 def retrieve_detailed(
     query: Symbol,
     index: list[Symbol],
@@ -523,6 +638,11 @@ def main(argv: list[str] | None = None) -> int:
         "--symbol", default=None,
         help="optional path:qualname to restrict the query to one callable",
     )
+    ap.add_argument(
+        "--describe", default=None,
+        help="natural-language task description; surface existing implementations "
+        "that already cover this intent (pre-write check, no code needed)",
+    )
     ap.add_argument("--k", type=int, default=10, help="top-K candidates per symbol")
     ap.add_argument(
         "--min-score", type=float, default=0.3,
@@ -530,15 +650,66 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument(
         "--json", type=Path, default=None,
-        help="write machine-readable results as JSON",
+        help="write machine-readable results as JSON ('-' writes to stdout)",
     )
     args = ap.parse_args(argv)
 
-    if (args.file is None) == (args.base is None):
-        print("error: provide exactly one of --file or --base", file=sys.stderr)
+    if sum(x is not None for x in (args.file, args.base, args.describe)) != 1:
+        print(
+            "error: provide exactly one of --file, --base, or --describe",
+            file=sys.stderr,
+        )
         return 2
 
     root = args.root.resolve()
+    json_stdout = args.json is not None and str(args.json) == "-"
+
+    if args.describe is not None:
+        index = build_index(root)
+        ranked = [
+            d
+            for d in retrieve_by_description(args.describe, index, args.k)
+            if d["score"] >= args.min_score
+        ]
+        if not json_stdout:
+            print(f"\n## 描述: {args.describe}")
+            if not ranked:
+                print("  (no existing implementations above threshold)")
+            for i, d in enumerate(ranked, start=1):
+                top = max(d["channels"], key=d["channels"].get)
+                print(
+                    f"  {i}. {d['symbol'].key:<44} score={d['score']:.3f}  "
+                    f"[{top}={d['channels'][top]:.3f}]"
+                )
+        if args.json is not None:
+            import json as _json
+
+            from _scanner_common import atomic_write_text
+
+            payload = {
+                "schema_version": 1,
+                "mode": "describe",
+                "root": str(root),
+                "description": args.describe,
+                "results": [
+                    {
+                        "existing_symbol": d["symbol"].key,
+                        "name": d["symbol"].name,
+                        "qualname": d["symbol"].qualname,
+                        "path": d["symbol"].path,
+                        "score": round(d["score"], 4),
+                        "channels": d["channels"],
+                        "doc_first": " ".join(d["symbol"].tag_tokens),
+                    }
+                    for d in ranked
+                ],
+            }
+            text = _json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+            if json_stdout:
+                sys.stdout.write(text)
+            else:
+                atomic_write_text(args.json, text)
+        return 0
 
     if args.file is not None:
         file_path = args.file.resolve()
@@ -572,6 +743,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     for query in query_list:
         ranked = [d for d in results[query.key] if d["score"] >= args.min_score]
+        if json_stdout:
+            continue
         print(f"\n## {query.key}")
         if not ranked:
             print("  (no existing implementations above threshold)")
@@ -609,9 +782,11 @@ def main(argv: list[str] | None = None) -> int:
                 for q in query_list
             ],
         }
-        atomic_write_text(
-            args.json, _json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-        )
+        text = _json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        if json_stdout:
+            sys.stdout.write(text)
+        else:
+            atomic_write_text(args.json, text)
     return 0
 
 

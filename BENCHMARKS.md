@@ -132,3 +132,24 @@ per channel (dead module, duplicated function, env write without a read,
 matching. Current corpus: 25 injected targets, 25 matched, recall 1.000. The
 runner exits nonzero on any miss, so the regression gate covers scanner recall
 as well as corpus precision.
+
+## External probe: arrow (not part of the labelled corpus)
+
+One-off validation against an unlabelled, mid-size pure-Python project to
+check the tool on unfamiliar code (no prior expectations):
+
+| project | scan time | dead | hardcoded | style | dup clusters | regions | forks |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| arrow (arrow-py, pinned HEAD 2224255) | 1.08s | 0 | 0 | 0 | 8 | 6 | 0 (+4 small) |
+
+Notable candidates (all map to real smells in that codebase): 9 locale
+`_format_timeframe` methods at 0.84-1.00 edge similarity, 4 `describe`
+twins, `api.get` vs `ArrowFactory.get` near-duplicates, and internal
+repetition inside `DateTimeParser.parse` (L14/L15/L16). Full worksheet in
+the external state directory; command was the standard read-only code profile:
+
+``powershell
+python run_all.py --root <arrow-checkout> --package arrow --profile code 
+  --no-doc-channel --all-py --state-dir <external-state> --read-only 
+  --json <state>\latest.json --markdown <state>\latest.md
+``

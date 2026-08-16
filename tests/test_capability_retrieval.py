@@ -109,3 +109,84 @@ def test_one_hop_closure_recovers_composite(tmp_path) -> None:
     # The composite calls upload_avatar (its own duplicate), so it must
     # transitively surface the canonical StorageService.upload.
     assert "lib/storage.py:StorageService.upload" in keys
+
+
+# ---------------------------------------------------------------------------
+# Pre-write channel: describe what you are about to implement, and surface the
+# existing implementations that already cover that intent.
+# ---------------------------------------------------------------------------
+
+def test_describe_name_channel_surfaces_load_json(tmp_path) -> None:
+    _write(
+        tmp_path,
+        "lib/io_utils.py",
+        "def load_json(path):\n"
+        '    """Load a JSON config file."""\n'
+        "    return json.loads(path.read_text())\n"
+        "\n"
+        "def store_csv(rows, out):\n"
+        '    """Persist rows as CSV."""\n'
+        "    out.write_text(csv.dumps(rows))\n",
+    )
+    index = cr.build_index(tmp_path / "lib", rel_root=tmp_path)
+    ranked = cr.retrieve_by_description("写一个从 JSON 文件加载配置的函数", index, k=5)
+    assert ranked, "describe retrieval returned no candidates"
+    # "json" is the discriminating token: load_json matches by name.
+    assert ranked[0]["symbol"].key == "lib/io_utils.py:load_json"
+
+
+def test_describe_lexical_channel_uses_docstring(tmp_path) -> None:
+    _write(
+        tmp_path,
+        "lib/metrics.py",
+        "def _mean_std(values):\n"
+        '    """Compute mean and std of a list of floats."""\n'
+        "    return (sum(values) / len(values), stdev(values))\n",
+    )
+    index = cr.build_index(tmp_path / "lib", rel_root=tmp_path)
+    ranked = cr.retrieve_by_description("mean and std of floats", index, k=5)
+    assert ranked
+    assert ranked[0]["symbol"].key == "lib/metrics.py:_mean_std"
+
+
+def test_describe_string_channel_matches_path_literal(tmp_path) -> None:
+    _write(
+        tmp_path,
+        "lib/paths.py",
+        "def load_checkpoint(ckpt):\n"
+        '    """Load a checkpoint from disk."""\n'
+        '    path = ckpt or "checkpoints/latest.pt"\n'
+        "    return torch.load(path)\n",
+    )
+    index = cr.build_index(tmp_path / "lib", rel_root=tmp_path)
+    ranked = cr.retrieve_by_description("加载 checkpoints 目录下的模型", index, k=5)
+    assert ranked
+    # "checkpoints" appears inside the string literal, firing the string channel.
+    assert ranked[0]["symbol"].key == "lib/paths.py:load_checkpoint"
+
+
+def test_describe_cli_json_stdout(tmp_path, capsys) -> None:
+    _write(
+        tmp_path,
+        "lib/token.py",
+        "def mint_token(uid):\n"
+        '    """Mint a fresh session token."""\n'
+        "    return secrets.token_hex(16)\n",
+    )
+    rc = cr.main(
+        [
+            "--root", str(tmp_path),
+            "--describe", "生成一个 session token",
+            "--k", "3",
+            "--json", "-",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert rc == 0
+    import json
+
+    payload = json.loads(out)
+    assert payload["mode"] == "describe"
+    assert payload["description"] == "生成一个 session token"
+    assert payload["results"][0]["existing_symbol"] == "lib/token.py:mint_token"
+    assert "channels" in payload["results"][0]

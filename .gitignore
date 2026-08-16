@@ -8,3 +8,5 @@ benchmarks/results/
 benchmarks/adjudication/cases.jsonl
 benchmarks/adjudication/latest.json
 benchmarks/adjudication/verdicts/
+
+.claude/

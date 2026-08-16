@@ -31,7 +31,7 @@ import scan_style
 
 SKILL_DIR = Path(__file__).resolve().parent
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 SCHEMA_VERSION = 8
 

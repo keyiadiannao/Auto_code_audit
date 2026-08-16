@@ -53,3 +53,17 @@ functions, imports, or entry points.
 After a fix, require the finding to disappear, reject new high-risk candidates
 in scope, bind the report to the live source and audit inputs, and require test
 evidence. Agent confidence alone cannot mark a remediation complete.
+
+## 5. External probes validate on unfamiliar code
+
+Pinning benchmarks to known corpora can hide overfitting. Run the tool once
+against an unrelated, mid-size pure-Python project and read the output without
+prior expectations. Probe: arrow (arrow-py/arrow, pinned HEAD, read-only code
+profile). Result: 1.08s scan, zero noise in the dead-code / hardcoded / style /
+env-contract categories, and credible duplicate-implementation findings ¡ª
+9 `_format_timeframe` locale methods at 0.84-1.00 edge similarity, 4
+`describe` twins, `api.get` vs `ArrowFactory.get` near-duplicates, and
+internal L14/L15/L16 repetition inside `DateTimeParser.parse`. All findings
+map to real, independently recognizable code smells in that project. A
+pre-write reuse firewall that surfaces these before the 10th locale method is
+written is the value proposition this probe confirms.

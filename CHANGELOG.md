@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1
+
+- Add the pre-write channel: `capability_retrieval --describe "<task>"`
+  retrieves existing implementations from a natural-language task description
+  (callable-name, docstring-lexical, and string-literal channels, IDF-weighted
+  query coverage; deterministic, stdlib-only, zero LLM). This is the
+  "check before you write" half of the reuse firewall — no new code needed.
+- Support `--json -` to emit machine-readable results on stdout for MCP
+  integration (previously file-only).
+
 ## 0.4.0
 
 - Add the implementation-reuse firewall: a repository-wide, deterministic
