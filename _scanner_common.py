@@ -123,7 +123,7 @@ def _looks_like_source_path(key: str) -> bool:
 
 def _collect_lock_paths(
     node: Any,
-    root: Path,
+    manifest: str,
     out: dict[str, set[str]],
 ) -> None:
     """Recursively collect ``path -> sha256`` mappings from a frozen manifest.
@@ -144,13 +144,13 @@ def _collect_lock_paths(
                 and isinstance(value, str)
                 and _SHA256_RE.match(value)
             ):
-                out.setdefault(key, set()).add(root)
+                out.setdefault(key, set()).add(manifest)
             elif isinstance(value, (dict, list)):
-                _collect_lock_paths(value, root, out)
+                _collect_lock_paths(value, manifest, out)
     elif isinstance(node, list):
         for item in node:
             if isinstance(item, (dict, list)):
-                _collect_lock_paths(item, root, out)
+                _collect_lock_paths(item, manifest, out)
 
 
 def discover_locked_files(root: Path) -> dict[str, list[str]]:
