@@ -25,7 +25,12 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from _scanner_common import NormalizeAST, collect_py_files, signature_shape
+from _scanner_common import (
+    NormalizeAST,
+    collect_py_files,
+    discover_locked_files,
+    signature_shape,
+)
 
 
 class _ReuseNormalize(NormalizeAST):
@@ -666,6 +671,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.describe is not None:
         index = build_index(root)
+        locked = discover_locked_files(root)
         ranked = [
             d
             for d in retrieve_by_description(args.describe, index, args.k)
@@ -677,9 +683,14 @@ def main(argv: list[str] | None = None) -> int:
                 print("  (no existing implementations above threshold)")
             for i, d in enumerate(ranked, start=1):
                 top = max(d["channels"], key=d["channels"].get)
+                lock = (
+                    "  [LOCKED: " + ", ".join(locked[d["symbol"].path]) + "]"
+                    if d["symbol"].path in locked
+                    else ""
+                )
                 print(
                     f"  {i}. {d['symbol'].key:<44} score={d['score']:.3f}  "
-                    f"[{top}={d['channels'][top]:.3f}]"
+                    f"[{top}={d['channels'][top]:.3f}]{lock}"
                 )
         if args.json is not None:
             import json as _json
@@ -700,6 +711,14 @@ def main(argv: list[str] | None = None) -> int:
                         "score": round(d["score"], 4),
                         "channels": d["channels"],
                         "doc_first": " ".join(d["symbol"].tag_tokens),
+                        **(
+                            {
+                                "locked": True,
+                                "locked_by": locked[d["symbol"].path],
+                            }
+                            if d["symbol"].path in locked
+                            else {"locked": False}
+                        ),
                     }
                     for d in ranked
                 ],
