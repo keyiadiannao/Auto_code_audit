@@ -303,6 +303,16 @@ def markdown(
 
     lines.extend(["", "## Duplicate-implementation candidates", ""])
     if dup_clusters:
+        locked_files = duplicates.get("locked_files", {})
+        if locked_files.get("count"):
+            lines.extend(
+                [
+                    f"> {locked_files['count']} files are hash-locked by frozen "
+                    "JSON provenance manifests; members marked `LOCKED` cannot "
+                    "be consolidated without regenerating the pinned results.",
+                    "",
+                ]
+            )
         for cluster in dup_clusters:
             shared = ""
             if cluster.get("lib_shared"):
@@ -310,18 +320,25 @@ def markdown(
                     f"`{item['path']}:{item.get('qualname', item['name'])}`"
                     for item in cluster["lib_shared"]
                 )
+            lock = (
+                f"; LOCKED: {len(cluster.get('locked_members', []))} member(s)"
+                if cluster.get("locked_members")
+                else ""
+            )
             lines.append(
                 f"### [{cluster['priority']}] `{cluster['id']}`: {cluster['size']} members "
-                f"(edge similarity {cluster['min_edge_sim']:.3f}-{cluster['max_sim']:.3f}){shared}"
+                f"(edge similarity {cluster['min_edge_sim']:.3f}-{cluster['max_sim']:.3f})"
+                f"{shared}{lock}"
             )
             lines.append("")
             lines.append(f"Reason: {cluster['priority_reason']}.")
             lines.append("")
             for member in cluster["members"]:
+                lock_mark = " `LOCKED`" if member.get("locked") else ""
                 lines.append(
                     f"- `{member['path']}:{member.get('qualname', member['name'])}:"
                     f"{member['start_line']}-{member['end_line']}` "
-                    f"({member['nlines']} lines)"
+                    f"({member['nlines']} lines){lock_mark}"
                 )
             lines.extend(["- Verdict:", ""])
         if dup_hidden:
@@ -412,6 +429,16 @@ def markdown(
 
     lines.extend(["", "## Script-to-script fork candidates", ""])
     if fork_pairs:
+        locked_files = forks.get("locked_files", {})
+        if locked_files.get("count"):
+            lines.extend(
+                [
+                    f"> {locked_files['count']} files are hash-locked by frozen "
+                    "JSON provenance manifests; sides marked `LOCKED` cannot be "
+                    "consolidated without regenerating the pinned results.",
+                    "",
+                ]
+            )
         lines.extend(
             [
                 "Cross-file callables sharing a large common skeleton with diverged ",
@@ -430,12 +457,14 @@ def markdown(
                 if item.get("a_imports_b")
                 else ("right->left" if item.get("b_imports_a") else "-")
             )
+            left_lock = " 🔒" if left.get("locked") else ""
+            right_lock = " 🔒" if right.get("locked") else ""
             lines.append(
                 f"| {item['similarity']:.3f} | {item['kind']} | "
                 f"`{left['path']}:{left['qualname']}` "
-                f"(L{left['lineno']}, {left['nlines']} lines) | "
+                f"(L{left['lineno']}, {left['nlines']} lines){left_lock} | "
                 f"`{right['path']}:{right['qualname']}` "
-                f"(L{right['lineno']}, {right['nlines']} lines) | {sig} | {imp} | |"
+                f"(L{right['lineno']}, {right['nlines']} lines){right_lock} | {sig} | {imp} | |"
             )
     elif fork_hidden:
         lines.extend([_hidden_note(fork_hidden, "pairs"), ""])
@@ -462,12 +491,14 @@ def markdown(
                 if item.get("a_imports_b")
                 else ("right->left" if item.get("b_imports_a") else "-")
             )
+            left_lock = " 🔒" if left.get("locked") else ""
+            right_lock = " 🔒" if right.get("locked") else ""
             lines.append(
                 f"| {item['similarity']:.3f} | {item['kind']} | "
                 f"`{left['path']}:{left['qualname']}` "
-                f"(L{left['lineno']}, {left['nlines']} lines) | "
+                f"(L{left['lineno']}, {left['nlines']} lines){left_lock} | "
                 f"`{right['path']}:{right['qualname']}` "
-                f"(L{right['lineno']}, {right['nlines']} lines) | {sig} | {imp} | |"
+                f"(L{right['lineno']}, {right['nlines']} lines){right_lock} | {sig} | {imp} | |"
             )
     elif small_hidden:
         lines.extend([_hidden_note(small_hidden, "pairs"), ""])

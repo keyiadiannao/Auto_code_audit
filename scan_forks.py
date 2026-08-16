@@ -48,9 +48,11 @@ from _scanner_common import (
     EXCLUDE_PARTS,
     PY_SUBDIRS,
     NormalizeAST as _Normalize,
+    discover_locked_files as _discover_locked_files,
     extract_imports,
     iter_functions as _iter_functions,
     load_ignore,
+    locked_for_package as _locked_for_package,
     matches_module as _matches_module,
     module_name as _module_name,
     signature_shape as _signature_shape,
@@ -226,8 +228,11 @@ def _unique_identifiers(record: CallableRecord) -> list[str]:
     return sorted(ids)
 
 
-def _record_dict(record: CallableRecord) -> dict:
-    return {
+def _record_dict(
+    record: CallableRecord,
+    locked_by_path: dict[str, list[str]] | None = None,
+) -> dict:
+    out = {
         "path": record.path,
         "qualname": record.qualname,
         "lineno": record.lineno,
@@ -235,6 +240,12 @@ def _record_dict(record: CallableRecord) -> dict:
         "tag": record.tag,
         "sig_shape": record.sig_shape,
     }
+    if locked_by_path:
+        sources = locked_by_path.get(record.path, [])
+        if sources:
+            out["locked"] = True
+            out["locked_by"] = sources
+    return out
 
 
 def _import_evidence(
@@ -400,6 +411,12 @@ def main(argv: list[str] | None = None) -> int:
         if entry.get("key")
     }
 
+    #: Frozen-JSON provenance locks, repo-relative source path -> locking JSON
+    #: files.  A fork side in a hash-locked file cannot be consolidated without
+    #: regenerating the frozen results that pin it.
+    locked_files = _discover_locked_files(repo)
+    locked_by_path = _locked_for_package(locked_files, args.package)
+
     pairs: list[dict] = []
     ignored_pairs: list[dict] = []
     for left, right in sorted(candidate_pairs):
@@ -427,8 +444,8 @@ def main(argv: list[str] | None = None) -> int:
             "divergence": analysis["divergence"],
             "left_only_identifiers": left_only,
             "right_only_identifiers": right_only,
-            "left": _record_dict(a),
-            "right": _record_dict(b),
+            "left": _record_dict(a, locked_by_path),
+            "right": _record_dict(b, locked_by_path),
             **_import_evidence(a.path, b.path, imports_by_file, module_by_file),
         }
         if rel is not None and a.path != rel and b.path != rel:
@@ -465,8 +482,8 @@ def main(argv: list[str] | None = None) -> int:
             "divergence": analysis["divergence"],
             "left_only_identifiers": sorted(set(left_ids) - set(right_ids))[:12],
             "right_only_identifiers": sorted(set(right_ids) - set(left_ids))[:12],
-            "left": _record_dict(a),
-            "right": _record_dict(b),
+            "left": _record_dict(a, locked_by_path),
+            "right": _record_dict(b, locked_by_path),
             **_import_evidence(a.path, b.path, imports_by_file, module_by_file),
         }
         if rel is not None and a.path != rel and b.path != rel:
@@ -499,6 +516,12 @@ def main(argv: list[str] | None = None) -> int:
         "candidate_pairs": len(candidate_pairs),
         "fork_pairs": len(pairs),
         "kind_counts": kind_counts,
+        "locked_files": {
+            "count": len(locked_files),
+            "sources": sorted(
+                {source for sources in locked_files.values() for source in sources}
+            ),
+        },
         "parse_failures": parse_failures,
         "ignored_pairs": ignored_pairs,
         "pairs": pairs,
@@ -531,13 +554,18 @@ def main(argv: list[str] | None = None) -> int:
             return " imports->left"
         return " no-imports"
 
+    def _lock_mark(record: dict) -> str:
+        return " [LOCKED]" if record.get("locked") else ""
+
     for item in pairs[: args.top]:
         a, b = item["left"], item["right"]
         sig = "sig=yes" if item["signature_match"] else "sig=no"
         print(
             f"=== [{item['similarity']:.3f} {item['kind']}{_import_mark(item)}] "
-            f"{a['path']}:{a['qualname']} ({a['nlines']} lines, L{a['lineno']}) <-> "
-            f"{b['path']}:{b['qualname']} ({b['nlines']} lines, L{b['lineno']}) {sig}"
+            f"{a['path']}:{a['qualname']} ({a['nlines']} lines, L{a['lineno']})"
+            f"{_lock_mark(a)} <-> "
+            f"{b['path']}:{b['qualname']} ({b['nlines']} lines, L{b['lineno']})"
+            f"{_lock_mark(b)} {sig}"
         )
         hints = []
         if item["left_only_identifiers"]:
@@ -551,8 +579,16 @@ def main(argv: list[str] | None = None) -> int:
         sig = "sig=yes" if item["signature_match"] else "sig=no"
         print(
             f"=== [SMALL {item['similarity']:.3f} {item['kind']}{_import_mark(item)}] "
-            f"{a['path']}:{a['qualname']} ({a['nlines']} lines, L{a['lineno']}) <-> "
-            f"{b['path']}:{b['qualname']} ({b['nlines']} lines, L{b['lineno']}) {sig}"
+            f"{a['path']}:{a['qualname']} ({a['nlines']} lines, L{a['lineno']})"
+            f"{_lock_mark(a)} <-> "
+            f"{b['path']}:{b['qualname']} ({b['nlines']} lines, L{b['lineno']})"
+            f"{_lock_mark(b)} {sig}"
+        )
+    if locked_files:
+        print(
+            f"NOTE: {len(locked_files)} files are hash-locked by frozen JSON "
+            "manifests; candidates touching them need a provenance check "
+            "before consolidation"
         )
     if not pairs and not small_pairs:
         print("No fork pairs.")

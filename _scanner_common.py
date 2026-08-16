@@ -16,6 +16,7 @@ import difflib
 import hashlib
 import json
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Iterator, cast
@@ -85,6 +86,134 @@ def sequence_similarity(
     if matcher.quick_ratio() < threshold:
         return 0.0
     return matcher.ratio()
+
+
+# ---------------------------------------------------------------------------
+# Frozen-JSON provenance locks  (hash-pinned dependency manifests)
+# ---------------------------------------------------------------------------
+
+#: Values that look like a sha256 digest: 64 lowercase hex chars.
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+#: Keys that look like a repository-relative source path (e.g.
+#: ``mechanism/_ring_utils.py``, ``lib/protocol.py``, ``configs/protocol_v1.json``).
+#: Distinguishes dependency-path keys from provenance metadata keys such as
+#: ``reference_checkpoint_sha256`` / ``split_hash`` / ``audit_id``, whose
+#: values are also 64-hex digests but which must never be treated as locked
+#: source files.
+_PATH_KEY_RE = re.compile(r"^[A-Za-z0-9_./-]+\.[A-Za-z0-9]+$")
+
+#: Path components of derived/run-output trees whose JSON manifests are
+#: *snapshots*, not edit constraints.  A run-metadata JSON records the hashes
+#: of every file present at run time; treating it as a lock would falsely pin
+#: scripts that are safe to edit (e.g. probe runners the frozen summaries
+#: never reference).  Only frozen-result and config manifests (``frozen_results/``,
+#: ``configs/``) plus any other user-written manifest are lock sources.
+_LOCK_EXCLUDE_PARTS = {"outputs", "reports", "logs", "runs", "cache"}
+
+
+def _looks_like_source_path(key: str) -> bool:
+    """True when *key* is a repo-relative path (``dir/file.ext``), not metadata."""
+    if not _PATH_KEY_RE.match(key):
+        return False
+    if key.endswith("_sha256") or key.endswith("_hash"):
+        return False
+    return True
+
+
+def _collect_lock_paths(
+    node: Any,
+    root: Path,
+    out: dict[str, set[str]],
+) -> None:
+    """Recursively collect ``path -> sha256`` mappings from a frozen manifest.
+
+    *out* maps a repository-relative source path to the set of JSON files
+    (repo-relative) that hash-lock it.  The scan is deliberately tolerant:
+    any dict whose key looks like a source path and whose value is a 64-hex
+    digest is treated as a lock entry, so a new project that names its
+    manifest field differently still gets provenance-aware candidates without
+    a code change.  Dicts whose values are plain strings (e.g. a metadata
+    blob) do not recurse; lists recurse element-wise.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if (
+                isinstance(key, str)
+                and _looks_like_source_path(key)
+                and isinstance(value, str)
+                and _SHA256_RE.match(value)
+            ):
+                out.setdefault(key, set()).add(root)
+            elif isinstance(value, (dict, list)):
+                _collect_lock_paths(value, root, out)
+    elif isinstance(node, list):
+        for item in node:
+            if isinstance(item, (dict, list)):
+                _collect_lock_paths(item, root, out)
+
+
+def discover_locked_files(root: Path) -> dict[str, list[str]]:
+    """Return ``{repo-relative source path: [locking JSON files]}``.
+
+    Scans every ``*.json`` under *root* (honouring :data:`EXCLUDE_PARTS` plus
+    :data:`_LOCK_EXCLUDE_PARTS` — derived run-output trees are snapshots, not
+    edit constraints) for hash-locked provenance manifests and collects the
+    union of source paths pinned by any of them.  A file listed here must not
+    be edited without regenerating the frozen results that reference it —
+    duplicate / fork candidates touching a locked file need a provenance
+    check before consolidation.  Files not present in the repo are dropped.
+    Returns an empty dict when no locked manifests exist (the common case for
+    projects without frozen-results provenance).
+    """
+    locked: dict[str, set[str]] = {}
+    for path in sorted(root.rglob("*.json")):
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            continue
+        if any(part in EXCLUDE_PARTS for part in rel.parts):
+            continue
+        if any(part in _LOCK_EXCLUDE_PARTS for part in rel.parts):
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, (dict, list)):
+            continue
+        _collect_lock_paths(data, rel.as_posix(), locked)
+    return {
+        path: sorted(sources)
+        for path, sources in sorted(locked.items())
+        if (root / path).is_file()
+    }
+
+
+def locked_for_package(
+    locked: dict[str, list[str]], package: str
+) -> dict[str, list[str]]:
+    """Rebase repo-relative lock keys to package-relative scanner paths.
+
+    Scanner member paths are relative to ``--package`` (e.g. ``lib/shared.py``
+    when scanning ``pkg``), while frozen manifests pin repo-relative paths
+    (``pkg/lib/shared.py``).  When the package is a repo subdirectory, strip
+    its prefix so a member lookup matches; a lock key outside the package
+    (e.g. ``configs/frozen.json`` itself) is dropped since no scanned member
+    can reference it as a package path.  A bare ``.`` package (repo-root
+    scope) maps keys unchanged.
+    """
+    prefix = f"{package}/"
+    rebased: dict[str, set[str]] = {}
+    for path, sources in locked.items():
+        if package in ("", "."):
+            key = path
+        elif path.startswith(prefix):
+            key = path[len(prefix):]
+        else:
+            continue
+        rebased.setdefault(key, set()).update(sources)
+    return {key: sorted(sources) for key, sources in sorted(rebased.items())}
 
 
 # ---------------------------------------------------------------------------

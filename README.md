@@ -174,6 +174,15 @@ Worth knowing before you read a report:
   (near-identical whole functions with API calls) clusters.
 - `scan_style.py` strips TeX to prose span-preservingly so reported line numbers
   match source; it scans `--tex-dir` (default `docs`), skipping archived trees.
+- `scan_duplicates.py` and `scan_forks.py` are **provenance-aware**: they scan
+  the repo's JSON manifests for frozen-result hash locks (any `path -> sha256`
+  mapping, e.g. `current_dependency_files` / `files_sha256`) and mark members or
+  fork sides living in a hash-locked file as `LOCKED` / 🔒. Editing such a file
+  invalidates the frozen results that pin it, so consolidation candidates
+  touching one need a regeneration check first. Run-output trees (`outputs/`,
+  `reports/`, `logs/`, `runs/`, `cache/`) are treated as snapshots, not edit
+  constraints, so probe scripts that merely appear in run metadata are not
+  falsely flagged.
 
 ## Semantic review (Layer 2)
 

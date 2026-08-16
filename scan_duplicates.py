@@ -25,8 +25,10 @@ from _scanner_common import (
     PY_SUBDIRS,
     NormalizeAST as _Normalize,
     UnionFind as _UnionFind,
+    discover_locked_files as _discover_locked_files,
     iter_functions as _iter_functions,
     load_ignore,
+    locked_for_package as _locked_for_package,
     sequence_similarity as _similarity,
     short_hash as _short_hash,
     without_docstring as _without_docstring,
@@ -270,6 +272,16 @@ def main(argv: list[str] | None = None) -> int:
         if entry.get("path")
     ]
 
+    #: Frozen-JSON provenance locks: repo-relative source path -> locking JSON
+    #: files.  Members of a duplicate cluster that live in a hash-locked file
+    #: cannot be edited without regenerating the frozen results, so the cluster
+    #: is annotated for the reviewer before any consolidation is attempted.
+    locked_files = _discover_locked_files(repo)
+    locked_by_path = _locked_for_package(locked_files, args.package)
+
+    def _lock_sources(member_path: str) -> list[str]:
+        return locked_by_path.get(member_path, [])
+
     reports: list[dict[str, Any]] = []
     ignored: list[dict[str, Any]] = []
     boilerplate_skipped = 0
@@ -335,6 +347,32 @@ def main(argv: list[str] | None = None) -> int:
         else:
             priority = "low"
             priority_reason = "short, same-file, or test-adjacent structural similarity"
+
+        def _member_dict(member: FunctionRecord) -> dict:
+            sources = _lock_sources(member.path)
+            record = {
+                "path": member.path,
+                "name": member.name,
+                "qualname": member.qualname,
+                "is_top_level": member.is_top_level,
+                "start_line": member.start_line,
+                "end_line": member.end_line,
+                "nlines": member.nlines,
+            }
+            if member.definition_ordinal:
+                record["definition_ordinal"] = member.definition_ordinal
+            if sources:
+                record["locked"] = True
+                record["locked_by"] = sources
+            return record
+
+        locked_members = sorted(
+            {
+                member.key
+                for member in members
+                if _lock_sources(member.path)
+            }
+        )
         reports.append(
             {
                 "id": cluster_id,
@@ -347,22 +385,10 @@ def main(argv: list[str] | None = None) -> int:
                 "min_edge_sim": round(min(component_edges, default=1.0), 4),
                 "names": sorted({member.name for member in members}),
                 "members": [
-                    {
-                        "path": member.path,
-                        "name": member.name,
-                        "qualname": member.qualname,
-                        "is_top_level": member.is_top_level,
-                        "start_line": member.start_line,
-                        "end_line": member.end_line,
-                        "nlines": member.nlines,
-                        **(
-                            {"definition_ordinal": member.definition_ordinal}
-                            if member.definition_ordinal
-                            else {}
-                        ),
-                    }
+                    _member_dict(member)
                     for member in sorted(members, key=lambda item: item.key)
                 ],
+                "locked_members": locked_members,
                 "lib_shared": [
                     {
                         "path": member.path,
@@ -400,6 +426,12 @@ def main(argv: list[str] | None = None) -> int:
             for level in ("high", "medium", "low")
         },
         "boilerplate_skipped": boilerplate_skipped,
+        "locked_files": {
+            "count": len(locked_files),
+            "sources": sorted(
+                {source for sources in locked_files.values() for source in sources}
+            ),
+        },
         "parse_failures": parse_failures,
         "ignored": ignored,
         "clusters": reports,
@@ -417,14 +449,19 @@ def main(argv: list[str] | None = None) -> int:
             tag = " [lib-shared: " + ", ".join(
                 f"{item['name']}@{item['path']}" for item in report["lib_shared"]
             ) + "]"
+        lock_tag = ""
+        if report["locked_members"]:
+            lock_tag = " [LOCKED: " + ", ".join(report["locked_members"]) + "]"
         print(
             f"=== [{report['priority']}] {report['id']} {report['size']} members, "
-            f"edge_sim={report['min_edge_sim']:.3f}-{report['max_sim']:.3f}{tag}"
+            f"edge_sim={report['min_edge_sim']:.3f}-{report['max_sim']:.3f}"
+            f"{tag}{lock_tag}"
         )
         for member in report["members"]:
+            lock = " [LOCKED]" if member.get("locked") else ""
             print(
                 f"    {member['path']}:{member['qualname']} "
-                f"({member['nlines']} lines)"
+                f"({member['nlines']} lines){lock}"
             )
     return 0
 
